@@ -32,7 +32,7 @@ create table if not exists sun_scores (
   place_id uuid references places(id) on delete cascade,
   month integer not null check (month between 1 and 12),
   time_slot text not null, -- "14:00", "14:30"
-  score integer not null check (score between 1 and 5),
+  score integer not null check (score between 0 and 5), -- 0 = nuit
   raw_data jsonb,
   updated_at timestamptz default now(),
   unique (place_id, month, time_slot)
