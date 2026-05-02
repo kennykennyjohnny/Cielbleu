@@ -41,3 +41,43 @@ body {
 .mapboxgl-marker {
   cursor: pointer;
 }
+
+/* Halo pulsant des pins haut-score */
+@keyframes pin-halo {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50%      { transform: scale(1.18); opacity: 1; }
+}
+
+/* Mapbox UI — discrétion + harmonisation palette */
+.mapboxgl-ctrl-attrib {
+  background: rgba(255, 253, 247, 0.7) !important;
+  font-family: var(--font-outfit), sans-serif !important;
+  font-size: 10px !important;
+}
+
+.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl {
+  margin-bottom: 8px !important;
+}
+
+.mapboxgl-ctrl-group {
+  border-radius: 14px !important;
+  box-shadow: 0 4px 12px rgba(27, 40, 56, 0.12) !important;
+  overflow: hidden;
+  border: none !important;
+}
+
+.mapboxgl-ctrl-group button {
+  width: 36px !important;
+  height: 36px !important;
+}
+
+/* Reveal animation pour la BottomSheet */
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Désactive le tap-highlight bleu mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}

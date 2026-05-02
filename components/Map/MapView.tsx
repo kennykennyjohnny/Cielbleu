@@ -7,7 +7,80 @@ import { createSunPinElement } from './SunPin'
 import type { Place } from '@/types'
 
 const PARIS_CENTER: [number, number] = [2.3522, 48.8566]
-const DEFAULT_ZOOM = 13.5
+const DEFAULT_ZOOM = 12.6
+const MIN_ZOOM = 11
+const MAX_ZOOM = 18.5
+
+// Surcharge couleurs Mapbox light-v11 → palette CielBleu
+function applyCielBleuStyle(map: mapboxgl.Map) {
+  const setIfExists = (
+    layerId: string,
+    prop: string,
+    value: string | number | unknown[]
+  ) => {
+    if (map.getLayer(layerId)) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        map.setPaintProperty(layerId, prop as any, value as any)
+      } catch {
+        // ignore — propriété pas applicable à ce type de layer
+      }
+    }
+  }
+
+  // Fond + terre
+  setIfExists('background', 'background-color', '#FFFDF7')
+  setIfExists('land', 'background-color', '#FFFDF7')
+
+  // Eau (Seine + canaux + bassins)
+  setIfExists('water', 'fill-color', '#BFDBFE')
+  setIfExists('waterway', 'line-color', '#BFDBFE')
+
+  // Bâtiments
+  setIfExists('building', 'fill-color', '#F0EAD8')
+  setIfExists('building', 'fill-opacity', 0.85)
+  setIfExists('building-outline', 'line-color', '#E2D9C0')
+
+  // Espaces verts
+  setIfExists('landuse', 'fill-color', '#DDEBC8')
+  setIfExists('national-park', 'fill-color', '#DDEBC8')
+  setIfExists('park', 'fill-color', '#DDEBC8')
+  setIfExists('pitch', 'fill-color', '#DDEBC8')
+
+  // Routes — atténuées pour laisser place aux pins
+  setIfExists('road-primary', 'line-color', '#FFFFFF')
+  setIfExists('road-secondary-tertiary', 'line-color', '#FFFFFF')
+  setIfExists('road-street', 'line-color', '#FFFFFF')
+  setIfExists('road-minor', 'line-color', '#FAF7EE')
+  setIfExists('road-trunk', 'line-color', '#FFFFFF')
+  setIfExists('road-motorway', 'line-color', '#FFFFFF')
+
+  // Cacher tous les POI / labels parasites Mapbox (on a nos pins)
+  const layers = map.getStyle().layers ?? []
+  for (const layer of layers) {
+    const id = layer.id
+    if (
+      id.includes('poi') ||
+      id.includes('transit-label') ||
+      id.includes('airport-label') ||
+      id.startsWith('road-label') ||
+      id.startsWith('road-number')
+    ) {
+      try {
+        map.setLayoutProperty(id, 'visibility', 'none')
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Labels de quartiers / arrondissements : typo + couleur
+  setIfExists('settlement-major-label', 'text-color', '#1B2838')
+  setIfExists('settlement-minor-label', 'text-color', '#5A6B82')
+  setIfExists('settlement-subdivision-label', 'text-color', '#5A6B82')
+  setIfExists('settlement-major-label', 'text-halo-color', '#FFFDF7')
+  setIfExists('settlement-minor-label', 'text-halo-color', '#FFFDF7')
+}
 
 interface MapViewProps {
   places: Place[]
@@ -33,8 +106,17 @@ export default function MapView({ places, selectedPlace, onPlaceSelect }: MapVie
       style: 'mapbox://styles/mapbox/light-v11',
       center: PARIS_CENTER,
       zoom: DEFAULT_ZOOM,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM,
       attributionControl: false,
+      pitch: 0,
+      maxBounds: [
+        [2.10, 48.74], // SW
+        [2.55, 49.00], // NE
+      ],
     })
+
+    map.on('style.load', () => applyCielBleuStyle(map))
 
     map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-left')
 
@@ -47,7 +129,6 @@ export default function MapView({ places, selectedPlace, onPlaceSelect }: MapVie
       'bottom-right'
     )
 
-    // Clic fond carte → désélectionner
     map.on('click', () => onPlaceSelectRef.current(null))
 
     mapRef.current = map
@@ -68,7 +149,6 @@ export default function MapView({ places, selectedPlace, onPlaceSelect }: MapVie
     const currentIds = new Set(markersRef.current.keys())
     const newIds = new Set(places.map((p) => p.id))
 
-    // Supprimer les markers absents du nouveau set
     currentIds.forEach((id) => {
       if (!newIds.has(id)) {
         markersRef.current.get(id)?.remove()
@@ -76,7 +156,6 @@ export default function MapView({ places, selectedPlace, onPlaceSelect }: MapVie
       }
     })
 
-    // Ajouter les nouveaux markers
     places.forEach((place) => {
       if (markersRef.current.has(place.id)) return
 
@@ -99,8 +178,8 @@ export default function MapView({ places, selectedPlace, onPlaceSelect }: MapVie
     mapRef.current.easeTo({
       center: [selectedPlace.lng, selectedPlace.lat],
       zoom: Math.max(mapRef.current.getZoom(), 15),
-      duration: 400,
-      offset: [0, -120], // décaler vers le haut pour laisser place à la preview
+      duration: 500,
+      offset: [0, -140],
     })
   }, [selectedPlace])
 
