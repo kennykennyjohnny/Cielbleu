@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Playfair_Display, Outfit } from 'next/font/google'
 import '../styles/globals.css'
 
@@ -37,7 +37,12 @@ export const metadata: Metadata = {
     description: 'Terrasses au soleil à Paris — en temps réel',
     images: ['/og-image.png'],
   },
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
   themeColor: '#FFBE0B',
 }
 
