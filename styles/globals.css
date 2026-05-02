@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  /* Palette CielBleu */
+  --color-soleil: #FFBE0B;
+  --color-ciel: #3A86FF;
+  --color-nuit: #1B2838;
+  --color-creme: #FFFDF7;
+  --color-corail: #FF6B6B;
+  --color-gris: #8D99AE;
+
+  /* Typos — variables injectées par next/font dans layout.tsx */
+  --font-playfair: var(--font-playfair-var), "Playfair Display", serif;
+  --font-outfit: var(--font-outfit-var), "Outfit", sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #FFFDF7;
+  color: #1B2838;
+  font-family: var(--font-outfit), sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Masquer la scrollbar des filtres */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Pins Mapbox — reset z-index pour les markers custom */
+.mapboxgl-marker {
+  cursor: pointer;
+}
