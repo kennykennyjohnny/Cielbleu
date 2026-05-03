@@ -1,16 +1,15 @@
-﻿'use client'
+'use client'
 
 /**
- * Terrace3DView v4 — vue Mapbox 3D face à la façade du bar.
+ * Terrace3DView v5 — "Vous êtes dans la rue, face au bar."
  *
- * Fixes v4 :
- *  - CAMERA SUR LA RUE : offset négatif (-14m) positionne la caméra côté rue,
- *    pas dans le bâtiment
- *  - BEARING = React state → SunOverlay se re-render quand bearing est calculé
- *  - INTERACTIF PAN : dragPan activé, zoom/rotation bloqués → légèrement déplaçable
- *  - queryRenderedFeatures sur bbox autour du bar (pas tout le viewport)
- *  - Éclairage très directionnel : intensité 1.0, ombres dramatiques
- *  - Soleil : disque 80px + halo 200px + rayons CSS rotatifs (cb-sun-spin)
+ * v5 :
+ *  - Pitch 78° + zoom 20 = vue rue, on lève les yeux vers la façade
+ *  - Fond de ciel CSS dynamique (bleu jour / orange coucher / nuit étoilée)
+ *  - SunShadowBanner : grande bande lisible (éclairée = dorée, ombre = bleue nuit)
+ *  - buildingColor : doré-vif si score élevé, foncé pour voisins → contraste fort
+ *  - Terrasse : dorée si ensoleillée, bleu-acier si à l'ombre
+ *  - SunDisc dans le ciel à la bonne position
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -24,8 +23,7 @@ interface Props {
   date?: Date
 }
 
-// Distance de recul côté rue (positif = la caméra recule dans la direction OPPOSÉE au bâtiment)
-const STREET_OFFSET_M = 20
+const STREET_OFFSET_M = 22
 
 interface NearestBuilding {
   bearing: number
@@ -33,18 +31,18 @@ interface NearestBuilding {
   feature: mapboxgl.MapboxGeoJSONFeature
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 export default function Terrace3DView({ lat, lng, score, date }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef       = useRef<mapboxgl.Map | null>(null)
   const dateRef      = useRef<Date>(date ?? new Date())
   const scoreRef     = useRef<number>(score)
-  // State (pas ref) → SunOverlay se re-render quand le bearing est calculé
-  const [bearing, setBearing] = useState<number>(180)
+  const [bearing, setBearing]             = useState<number>(180)
+  const [resolvedScore, setResolvedScore] = useState<number>(score)
 
-  dateRef.current = date ?? new Date()
+  dateRef.current  = date ?? new Date()
   scoreRef.current = score
 
-  // ── Création de la carte ───────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
@@ -53,60 +51,43 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
       container: containerRef.current,
       style: 'mapbox://styles/mapbox/light-v11',
       center: [lng, lat],
-      zoom: 19.0,
-      pitch: 65,        // 65° = façade bien visible + terrasse au premier plan
+      zoom: 20,
+      pitch: 78,
       bearing: 180,
-      // Pan activé, tout le reste désactivé = légèrement déplaçable
-      scrollZoom: false,
-      boxZoom: false,
-      doubleClickZoom: false,
-      dragRotate: false,
-      keyboard: false,
-      touchZoomRotate: false,
-      touchPitch: false,
-      attributionControl: false,
-      fadeDuration: 0,
+      scrollZoom: false, boxZoom: false, doubleClickZoom: false,
+      dragRotate: false, keyboard: false,
+      touchZoomRotate: false, touchPitch: false,
+      attributionControl: false, fadeDuration: 0,
     })
 
     map.on('style.load', () => {
       styleMap(map)
       applySunLighting(map, lat, lng, dateRef.current, scoreRef.current)
+      map.once('idle', () => triggerBearing(1))
 
-      map.once('idle', () => {
-        tryBearing(1)
-      })
-
-      function tryBearing(attempt: number) {
+      function triggerBearing(attempt: number) {
         const result = findNearestBuilding(map, lat, lng)
         if (result) {
-          // Caméra sur la rue : recule dans la direction OPPOSÉE au bâtiment
-          const [streetLng, streetLat] = offsetCenter(lat, lng, result.bearing, -STREET_OFFSET_M)
-          map.jumpTo({ center: [streetLng, streetLat], bearing: result.bearing })
-          setBearing(result.bearing)   // → SunOverlay re-render
+          const [cLng, cLat] = offsetCenter(lat, lng, result.bearing, -STREET_OFFSET_M)
+          map.jumpTo({ center: [cLng, cLat], bearing: result.bearing })
+          setBearing(result.bearing)
           highlightBuilding(map, result.feature, scoreRef.current)
-          addTerraceZone(map, lat, lng, result.bearing)
-          // Dolly-in doux
-          map.easeTo({ zoom: map.getZoom() + 0.15, duration: 1400, easing: (t) => t * (2 - t) })
-        } else if (attempt < 4) {
-          setTimeout(() => tryBearing(attempt + 1), 500 * attempt)
-        } else {
-          // Fallback : animation sans correction (bearing reste 180°)
-          map.easeTo({ zoom: map.getZoom() + 0.1, duration: 1200, easing: (t) => t * (2 - t) })
+          addTerraceZone(map, lat, lng, result.bearing, scoreRef.current)
+          setResolvedScore(scoreRef.current)
+          map.easeTo({ zoom: map.getZoom() + 0.2, duration: 1600, easing: t => t * (2 - t) })
+        } else if (attempt < 5) {
+          setTimeout(() => triggerBearing(attempt + 1), 600 * attempt)
         }
       }
     })
 
-    // Pin visible — grand marqueur avec emoji
-    const pinEl = createPinEl(score)
-    new mapboxgl.Marker({ element: pinEl, anchor: 'bottom' })
-      .setLngLat([lng, lat])
-      .addTo(map)
+    const pinEl = buildPin(score)
+    new mapboxgl.Marker({ element: pinEl, anchor: 'bottom' }).setLngLat([lng, lat]).addTo(map)
 
     mapRef.current = map
     return () => { map.remove(); mapRef.current = null }
   }, [lat, lng]) // eslint-disable-line
 
-  // ── Mise à jour éclairage quand le slider change ──────────────────────
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -115,217 +96,386 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
     else map.once('style.load', apply)
   }, [date, score, lat, lng])
 
+  const d        = date ?? new Date()
+  const sun      = getSunPosition(d, lat, lng)
+  const altDeg   = (sun.altitude * 180) / Math.PI
+  const azDeg    = ((sun.azimuth  * 180) / Math.PI + 180) % 360
+  const isDay    = altDeg > -3
+  const relAngle = (((azDeg - bearing + 540) % 360) - 180)
+  const isFrontLit = isDay && Math.abs(relAngle) < 90
+
   return (
     <div className="relative w-full h-full overflow-hidden">
-      <div ref={containerRef} className="w-full h-full" />
-      <SunOverlay lat={lat} lng={lng} score={score} date={date} bearing={bearing} />
+      <div className="absolute inset-0" style={{ zIndex: 0 }}>
+        <SkyGradient altDeg={altDeg} isDay={isDay} />
+      </div>
+      <div ref={containerRef} className="absolute inset-0" style={{ zIndex: 1 }} />
+      {!isDay && (
+        <div className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: 3, background: 'rgba(8,14,22,0.65)' }} />
+      )}
+      {isDay && <SunDisc altDeg={altDeg} relAngle={relAngle} score={resolvedScore} />}
+      <SunShadowBanner isFrontLit={isFrontLit} isDay={isDay} score={resolvedScore} altDeg={altDeg} />
+      <SunBadge altDeg={altDeg} azDeg={azDeg} isDay={isDay} />
     </div>
   )
 }
 
-// ── Pin marqueur ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// UI Overlay Components
+// ─────────────────────────────────────────────────────────────────────────────
 
-const SCORE_EMOJI_PIN = ['🌙', '🌥', '⛅', '🌤', '☀️', '🌞']
+function SkyGradient({ altDeg, isDay }: { altDeg: number; isDay: boolean }) {
+  let bg = 'linear-gradient(to bottom, #0D1820 0%, #1B2838 100%)'
+  if (isDay) {
+    if (altDeg > 30)
+      bg = 'linear-gradient(to bottom, #2D7DD2 0%, #73B9FF 35%, #B8D8F8 70%, #E8F4FF 100%)'
+    else if (altDeg > 10)
+      bg = 'linear-gradient(to bottom, #1A5FA8 0%, #4A9FE0 30%, #92CFF0 65%, #D4EEF8 100%)'
+    else if (altDeg > 0)
+      bg = 'linear-gradient(to bottom, #1B2E52 0%, #2A5090 25%, #F5924A 60%, #FFC080 85%, #FFE4C0 100%)'
+    else
+      bg = 'linear-gradient(to bottom, #0A1830 0%, #1A3060 50%, #4A2030 80%, #7A3820 100%)'
+  }
+  return <div className="absolute inset-0" style={{ background: bg, transition: 'background 1.5s ease' }} />
+}
 
-function createPinEl(score: number): HTMLElement {
-  const emoji = SCORE_EMOJI_PIN[Math.max(0, Math.min(5, score))]
+function SunDisc({ altDeg, relAngle, score }: { altDeg: number; relAngle: number; score: number }) {
+  const inFov   = Math.abs(relAngle) < 130
+  const sunX    = 50 + (relAngle / 130) * 44
+  const sunY    = Math.max(4, 38 - altDeg * 0.55)
+  const isSunny = score >= 4
+  const sunSize = isSunny ? 72 : 48
+  const haloSz  = isSunny ? 180 : 110
+  if (!inFov) return null
+  return (
+    <div className="absolute pointer-events-none"
+      style={{
+        left: `${sunX}%`, top: `${sunY}%`,
+        transform: 'translate(-50%,-50%)',
+        zIndex: 2,
+        transition: 'left 800ms cubic-bezier(0.34,1.1,0.64,1), top 800ms ease',
+      }}>
+      {isSunny && (
+        <div style={{
+          position: 'absolute', width: haloSz + 40, height: haloSz + 40,
+          top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+          borderRadius: '50%',
+          background: `conic-gradient(
+            transparent 0deg,rgba(255,220,40,0.22) 8deg,transparent 16deg,
+            transparent 43deg,rgba(255,220,40,0.22) 51deg,transparent 59deg,
+            transparent 88deg,rgba(255,220,40,0.22) 96deg,transparent 104deg,
+            transparent 133deg,rgba(255,220,40,0.22) 141deg,transparent 149deg,
+            transparent 178deg,rgba(255,220,40,0.22) 186deg,transparent 194deg,
+            transparent 223deg,rgba(255,220,40,0.22) 231deg,transparent 239deg,
+            transparent 268deg,rgba(255,220,40,0.22) 276deg,transparent 284deg,
+            transparent 313deg,rgba(255,220,40,0.22) 321deg,transparent 329deg
+          )`,
+          animation: 'cb-sun-spin 22s linear infinite',
+        }} />
+      )}
+      <div style={{
+        position: 'absolute', width: haloSz, height: haloSz,
+        top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+        borderRadius: '50%',
+        background: isSunny
+          ? 'radial-gradient(circle,rgba(255,230,0,0.82) 0%,rgba(255,150,0,0.38) 40%,rgba(255,80,0,0.10) 65%,transparent 100%)'
+          : 'radial-gradient(circle,rgba(255,220,80,0.55) 0%,rgba(255,200,60,0.18) 55%,transparent 100%)',
+        filter: 'blur(3px)',
+        animation: isSunny ? 'cb-sun-glow 3s ease-in-out infinite' : 'none',
+      }} />
+      <div style={{
+        position: 'relative', width: sunSize, height: sunSize, borderRadius: '50%',
+        background: isSunny
+          ? 'radial-gradient(circle at 34% 30%,#FFFFF0 0%,#FFF060 18%,#FFC800 55%,#FF8000 100%)'
+          : 'radial-gradient(circle at 34% 30%,#FFFEF0 0%,#FFF060 25%,#FFD840 60%,#FFC020 100%)',
+        boxShadow: isSunny
+          ? '0 0 18px 3px #FFD800,0 0 50px 10px rgba(255,150,0,0.90),0 0 90px 22px rgba(255,60,0,0.50)'
+          : '0 0 12px 2px #FFE070,0 0 30px 5px rgba(255,200,60,0.65)',
+      }} />
+    </div>
+  )
+}
+
+function SunShadowBanner({ isFrontLit, isDay, score, altDeg }: {
+  isFrontLit: boolean; isDay: boolean; score: number; altDeg: number
+}) {
+  if (!isDay) return (
+    <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none">
+      <div className="mx-3 mb-3 flex items-center gap-2.5 px-4 py-3 rounded-2xl"
+        style={{ background: 'rgba(8,14,22,0.88)', backdropFilter: 'blur(14px)' }}>
+        <span className="text-[20px]">🌙</span>
+        <div>
+          <p className="font-outfit font-black text-[12px] tracking-wide" style={{ color: '#A8C8E8' }}>
+            NUIT — TERRASSE FERMÉE
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (isFrontLit) return (
+    <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none">
+      <div className="mx-3 mb-3 rounded-2xl overflow-hidden"
+        style={{
+          background: 'linear-gradient(135deg,rgba(255,200,11,0.94) 0%,rgba(255,130,0,0.90) 100%)',
+          backdropFilter: 'blur(14px)',
+          boxShadow: '0 4px 24px rgba(255,160,0,0.50)',
+        }}>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-[22px]"
+            style={{ background: 'rgba(255,255,255,0.28)', animation: 'pin-halo 2.2s ease-in-out infinite' }}>☀️</div>
+          <div className="flex-1 min-w-0">
+            <p className="font-outfit font-black text-[13px] text-nuit leading-tight tracking-wide">
+              FAÇADE ENSOLEILLÉE
+            </p>
+            <p className="font-outfit text-[11px] text-nuit/60 mt-0.5 truncate">
+              {altDeg > 50 ? 'Plein soleil — ombre courte'
+                : altDeg > 25 ? 'Beau soleil — terrasse bien exposée'
+                : 'Soleil rasant — lumière dorée'}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <span className="font-playfair font-bold text-[26px] text-nuit leading-none">{score}</span>
+            <span className="font-outfit text-[11px] text-nuit/45">/5</span>
+          </div>
+        </div>
+        <div className="h-[3px] mx-3 mb-2 rounded-full overflow-hidden" style={{ background: 'rgba(27,40,56,0.18)' }}>
+          <div className="h-full rounded-full" style={{ width: `${(score / 5) * 100}%`, background: 'rgba(27,40,56,0.60)', transition: 'width 0.7s' }} />
+        </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none">
+      <div className="mx-3 mb-3 rounded-2xl overflow-hidden"
+        style={{
+          background: 'linear-gradient(135deg,rgba(21,34,52,0.92) 0%,rgba(44,68,100,0.88) 100%)',
+          backdropFilter: 'blur(14px)',
+          boxShadow: '0 4px 24px rgba(10,20,35,0.50)',
+        }}>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-[22px]"
+            style={{ background: 'rgba(255,255,255,0.07)' }}>🌑</div>
+          <div className="flex-1 min-w-0">
+            <p className="font-outfit font-black text-[13px] tracking-wide" style={{ color: '#C8DCF0' }}>
+              FAÇADE À L'OMBRE
+            </p>
+            <p className="font-outfit text-[11px] mt-0.5 truncate" style={{ color: 'rgba(168,200,230,0.55)' }}>
+              {altDeg > 0 ? 'Soleil de l\'autre côté du bâtiment' : 'Soleil sous l\'horizon'}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <span className="font-playfair font-bold text-[26px] leading-none" style={{ color: 'rgba(168,200,230,0.75)' }}>{score}</span>
+            <span className="font-outfit text-[11px]" style={{ color: 'rgba(168,200,230,0.35)' }}>/5</span>
+          </div>
+        </div>
+        <div className="h-[3px] mx-3 mb-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div className="h-full rounded-full" style={{ width: `${(score / 5) * 100}%`, background: 'rgba(141,153,174,0.65)', transition: 'width 0.7s' }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SunBadge({ altDeg, azDeg, isDay }: { altDeg: number; azDeg: number; isDay: boolean }) {
+  if (!isDay) return null
+  const cardDir = azDeg < 45 ? 'N' : azDeg < 135 ? 'E' : azDeg < 225 ? 'S' : azDeg < 315 ? 'O' : 'N'
+  return (
+    <div className="absolute top-3 right-3 z-10 pointer-events-none">
+      <div className="rounded-full px-2.5 py-1.5 flex items-center gap-1.5 shadow-md"
+        style={{ background: 'rgba(255,253,247,0.85)', backdropFilter: 'blur(12px)' }}>
+        <span className="text-[11px]">☀</span>
+        <span className="font-outfit font-bold text-[10.5px] text-nuit">{Math.round(altDeg)}° {cardDir}</span>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Marqueur
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PIN_EMOJI = ['🌙','🌥','⛅','🌤','☀️','🌞']
+
+function buildPin(score: number): HTMLElement {
+  const emoji = PIN_EMOJI[Math.max(0, Math.min(5, score))]
   const el = document.createElement('div')
-  el.style.cssText = 'display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 6px 16px rgba(0,0,0,0.55));'
+  el.style.cssText = 'display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 4px 14px rgba(0,0,0,0.65));cursor:default;'
   el.innerHTML = `
     <div style="
-      width:46px;height:46px;border-radius:50%;
+      width:42px;height:42px;border-radius:50%;
       background:radial-gradient(circle at 36% 30%,#FFF5A0 0%,#FFBE0B 55%,#FF7A00 100%);
-      border:3.5px solid rgba(255,253,247,0.95);
-      box-shadow:0 0 0 5px rgba(255,190,11,0.38),0 0 28px rgba(255,180,0,0.80),0 8px 20px rgba(27,40,56,0.55);
-      display:flex;align-items:center;justify-content:center;
-      font-size:22px;line-height:1;
-      animation:pin-halo 2.4s ease-in-out infinite;
+      border:3px solid rgba(255,253,247,0.95);
+      box-shadow:0 0 0 4px rgba(255,190,11,0.35),0 0 22px rgba(255,180,0,0.75);
+      display:flex;align-items:center;justify-content:center;font-size:20px;line-height:1;
+      animation:pin-halo 2.6s ease-in-out infinite;
     ">${emoji}</div>
-    <div style="width:3px;height:14px;background:linear-gradient(to bottom,#FFBE0B,rgba(255,190,11,0));margin-top:-2px;"></div>
+    <div style="width:2.5px;height:12px;background:linear-gradient(to bottom,#FFBE0B,rgba(255,190,11,0));margin-top:-1px;"></div>
   `
   return el
 }
 
-// ── Style carte ───────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Style Mapbox
+// ─────────────────────────────────────────────────────────────────────────────
 
 function styleMap(map: mapboxgl.Map) {
   const set = (id: string, prop: string, val: unknown) => {
     if (map.getLayer(id)) try { map.setPaintProperty(id, prop as never, val as never) } catch { /* noop */ }
   }
+  set('background','background-color','#B8D4E8')
+  set('water','fill-color','#5AA0C8')
+  set('waterway','line-color','#5AA0C8')
+  for (const r of ['road-primary','road-secondary-tertiary','road-street','road-minor','road-motorway','road-path','road-pedestrian'])
+    set(r,'line-color','#C8C0B0')
+  for (const g of ['landuse','park','national-park','pitch','grass'])
+    set(g,'fill-color','#8EC87A')
 
-  set('background', 'background-color', '#A8CCEA')
-  set('water',      'fill-color',       '#5FA8CF')
-  set('waterway',   'line-color',       '#5FA8CF')
-  for (const r of ['road-primary', 'road-secondary-tertiary', 'road-street', 'road-minor', 'road-motorway']) {
-    set(r, 'line-color', '#D8D1C4')
-  }
-  set('road-path',        'line-color', '#E8E2D8')
-  set('road-pedestrian',  'line-color', '#E8E2D8')
-  for (const g of ['landuse', 'park', 'national-park', 'pitch', 'grass']) {
-    set(g, 'fill-color', '#A4C98A')
-  }
-
-  // Cache labels & POI
   for (const l of map.getStyle().layers ?? []) {
-    if (l.type === 'symbol' || l.id.includes('poi') || l.id.includes('label') || l.id.includes('transit')) {
-      try { map.setLayoutProperty(l.id, 'visibility', 'none') } catch { /* noop */ }
-    }
+    if (l.type === 'symbol' || l.id.includes('poi') || l.id.includes('label') || l.id.includes('transit'))
+      try { map.setLayoutProperty(l.id,'visibility','none') } catch { /* noop */ }
   }
 
-  // Bâtiments 3D — pierre de taille Haussmann
   if (!map.getLayer('cb-3d-buildings')) {
     const labelLayer = map.getStyle().layers?.find(
-      (l) => l.type === 'symbol' && (l.layout as Record<string, unknown>)?.['text-field']
+      l => l.type === 'symbol' && (l.layout as Record<string,unknown>)?.['text-field']
     )?.id
-
     map.addLayer({
-      id: 'cb-3d-buildings',
-      source: 'composite',
-      'source-layer': 'building',
-      filter: ['==', ['get', 'extrude'], 'true'],
-      type: 'fill-extrusion',
-      minzoom: 14,
+      id: 'cb-3d-buildings', source: 'composite', 'source-layer': 'building',
+      filter: ['==',['get','extrude'],'true'], type: 'fill-extrusion', minzoom: 14,
       paint: {
         'fill-extrusion-color': [
-          'interpolate', ['linear'], ['get', 'height'],
-          0,  '#C8BD9E',
-          10, '#BDB090',
-          22, '#B0A480',
-          40, '#9E9070',
-          70, '#877A5E',
+          'interpolate',['linear'],['get','height'],
+          0,'#8E8478', 15,'#7A7268', 30,'#6E6459', 55,'#5E5650', 80,'#504840',
         ],
-        'fill-extrusion-height': ['get', 'height'],
-        'fill-extrusion-base':   ['get', 'min_height'],
-        'fill-extrusion-opacity': 0.96,
+        'fill-extrusion-height':  ['get','height'],
+        'fill-extrusion-base':    ['get','min_height'],
+        'fill-extrusion-opacity': 0.98,
         'fill-extrusion-vertical-gradient': true,
-        'fill-extrusion-ambient-occlusion-intensity': 0.85,
-        'fill-extrusion-ambient-occlusion-radius': 2.5,
+        'fill-extrusion-ambient-occlusion-intensity': 0.92,
+        'fill-extrusion-ambient-occlusion-radius':    3.0,
       },
     }, labelLayer)
   }
-
-  set('building',         'fill-color',    '#E8DFC8')
-  set('building',         'fill-opacity',  0.6)
-  set('building-outline', 'line-color',    '#CCC3AD')
-
+  set('building','fill-color','#D0C8B0')
+  set('building','fill-opacity',0.5)
+  set('building-outline','line-color','#B8B0A0')
   try {
     map.setFog({
-      color: '#C0D8EC', 'high-color': '#7AAECC',
-      'horizon-blend': 0.04, 'space-color': '#162030', range: [0.8, 12],
+      color:'#B0CCE0','high-color':'#6898C0',
+      'horizon-blend':0.06,'space-color':'#0C1820',range:[0.6,10],
     } as Parameters<typeof map.setFog>[0])
   } catch { /* old SDK */ }
 }
 
-// ── Highlight bâtiment cible ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Highlight bâtiment + zone terrasse
+// ─────────────────────────────────────────────────────────────────────────────
 
 function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFeature, score: number) {
   if (!feature.geometry) return
-  // Couleurs très lumineuses pour que le bâtiment cible ressorte clairement
-  const hlColor  = score >= 5 ? '#FFF040' : score >= 4 ? '#FFE030' : score >= 3 ? '#F5D060' : '#E2CA88'
-  const hlOpacity = 0.84
-  const outlineColor = score >= 4 ? '#FFB800' : '#C8A030'
-  const height   = (feature.properties?.height    as number | null) ?? 18
+  const height   = (feature.properties?.height     as number | null) ?? 20
   const minH     = (feature.properties?.min_height as number | null) ?? 0
-
+  const hlColor  = score >= 4 ? '#FFE840' : score >= 3 ? '#F5D060' : '#C8C0A8'
+  const hlOpacity = score >= 4 ? 0.88 : 0.72
+  const glowColor = score >= 4 ? '#FFB800' : '#AA9830'
   const geoData: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', geometry: feature.geometry as GeoJSON.Geometry, properties: {} }],
   }
-
   const existingSrc = map.getSource('cb-bar-bld') as mapboxgl.GeoJSONSource | undefined
   if (existingSrc) {
     existingSrc.setData(geoData)
     if (map.getLayer('cb-bar-bld-hl')) {
-      map.setPaintProperty('cb-bar-bld-hl', 'fill-extrusion-color', hlColor)
-      map.setPaintProperty('cb-bar-bld-hl', 'fill-extrusion-opacity', hlOpacity)
+      map.setPaintProperty('cb-bar-bld-hl','fill-extrusion-color',hlColor)
+      map.setPaintProperty('cb-bar-bld-hl','fill-extrusion-opacity',hlOpacity)
     }
-    if (map.getLayer('cb-bar-outline')) {
-      map.setPaintProperty('cb-bar-outline', 'line-color', outlineColor)
-    }
+    if (map.getLayer('cb-bar-glow')) map.setPaintProperty('cb-bar-glow','line-color',glowColor)
     return
   }
-
-  map.addSource('cb-bar-bld', { type: 'geojson', data: geoData })
-
-  // Extrusion colorée — vertical-gradient false pour garder la couleur uniforme sur toute la hauteur
+  map.addSource('cb-bar-bld',{type:'geojson',data:geoData})
   map.addLayer({
-    id:     'cb-bar-bld-hl',
-    source: 'cb-bar-bld',
-    type:   'fill-extrusion',
+    id:'cb-bar-bld-hl', source:'cb-bar-bld', type:'fill-extrusion',
     paint: {
-      'fill-extrusion-color':              hlColor,
-      'fill-extrusion-height':             height,
-      'fill-extrusion-base':               minH,
-      'fill-extrusion-opacity':            hlOpacity,
-      'fill-extrusion-vertical-gradient':  false,
+      'fill-extrusion-color':hlColor, 'fill-extrusion-height':height,
+      'fill-extrusion-base':minH, 'fill-extrusion-opacity':hlOpacity,
+      'fill-extrusion-vertical-gradient':false,
     },
   })
-
-  // Contour lumineux au sol (délimite clairement le bâtiment)
   map.addLayer({
-    id: 'cb-bar-outline', source: 'cb-bar-bld', type: 'line',
-    paint: {
-      'line-color':   outlineColor,
-      'line-width':   3,
-      'line-blur':    2,
-      'line-opacity': 0.95,
-    },
+    id:'cb-bar-glow', source:'cb-bar-bld', type:'line',
+    paint:{'line-color':glowColor,'line-width':4,'line-blur':3,'line-opacity':0.90},
   })
 }
 
-// ── Zone terrasse au sol ──────────────────────────────────────────────────
-// Rectangle doré devant le bar, côté rue (dans la direction –cameraBearing)
-
-function addTerraceZone(map: mapboxgl.Map, lat: number, lng: number, cameraBearing: number) {
-  const W = 8, D = 3.5   // 8m de large, 3.5m de profondeur côté rue
+function addTerraceZone(map: mapboxgl.Map, lat: number, lng: number, cameraBearing: number, score: number) {
+  const W = 9, D = 4
   const cosLat = Math.cos((lat * Math.PI) / 180)
   const rad    = (cameraBearing * Math.PI) / 180
-  // fwd = direction vers le bâtiment ; right = droite caméra
-  const fwdE  = Math.sin(rad),  fwdN  = Math.cos(rad)
-  const rightE = Math.cos(rad), rightN = -Math.sin(rad)
-
-  const toLL = (dE: number, dN: number): [number, number] => [
-    lng + dE / (111320 * cosLat),
-    lat + dN / 111320,
+  const fwdE = Math.sin(rad), fwdN = Math.cos(rad)
+  const rgtE = Math.cos(rad), rgtN = -Math.sin(rad)
+  const toLL = (dE: number, dN: number): [number,number] => [
+    lng + dE / (111320 * cosLat), lat + dN / 111320,
   ]
-
-  // Coins : de la façade vers la rue (direction -fwd)
-  const corners: [number, number][] = [
-    toLL( rightE * W / 2,                   rightN * W / 2),
-    toLL(-rightE * W / 2,                  -rightN * W / 2),
-    toLL(-fwdE * D - rightE * W / 2,  -fwdN * D - rightN * W / 2),
-    toLL(-fwdE * D + rightE * W / 2,  -fwdN * D + rightN * W / 2),
-    toLL( rightE * W / 2,                   rightN * W / 2),   // fermeture
+  const corners: [number,number][] = [
+    toLL( rgtE*W/2,               rgtN*W/2),
+    toLL(-rgtE*W/2,              -rgtN*W/2),
+    toLL(-fwdE*D - rgtE*W/2, -fwdN*D - rgtN*W/2),
+    toLL(-fwdE*D + rgtE*W/2, -fwdN*D + rgtN*W/2),
+    toLL( rgtE*W/2,               rgtN*W/2),
   ]
-
+  const fillColor   = score >= 4 ? '#FFD860' : '#7AAAC8'
+  const fillOpacity = score >= 4 ? 0.62 : 0.42
+  const lineColor   = score >= 4 ? '#C08800' : '#3A6080'
   const geoData: GeoJSON.FeatureCollection = {
-    type: 'FeatureCollection',
-    features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [corners] }, properties: {} }],
+    type:'FeatureCollection',
+    features:[{type:'Feature',geometry:{type:'Polygon',coordinates:[corners]},properties:{}}],
   }
-
   if (map.getSource('cb-terrace')) {
     ;(map.getSource('cb-terrace') as mapboxgl.GeoJSONSource).setData(geoData)
     return
   }
-  map.addSource('cb-terrace', { type: 'geojson', data: geoData })
-  map.addLayer({
-    id: 'cb-terrace-fill', source: 'cb-terrace', type: 'fill',
-    paint: { 'fill-color': '#E8B84B', 'fill-opacity': 0.55 },
-  })
-  map.addLayer({
-    id: 'cb-terrace-outline', source: 'cb-terrace', type: 'line',
-    paint: { 'line-color': '#BB8518', 'line-width': 1.5, 'line-dasharray': [3, 2] },
-  })
+  map.addSource('cb-terrace',{type:'geojson',data:geoData})
+  map.addLayer({id:'cb-terrace-fill',source:'cb-terrace',type:'fill',
+    paint:{'fill-color':fillColor,'fill-opacity':fillOpacity}})
+  map.addLayer({id:'cb-terrace-outline',source:'cb-terrace',type:'line',
+    paint:{'line-color':lineColor,'line-width':2,'line-dasharray':[4,2.5]}})
 }
 
-// ── Trouver le bâtiment le plus proche (par normale de façade) ────────────
-// Cherche l'arête la plus proche dont la normale pointe vers le bar
+// ─────────────────────────────────────────────────────────────────────────────
+// Éclairage solaire
+// ─────────────────────────────────────────────────────────────────────────────
+
+function applySunLighting(map: mapboxgl.Map, lat: number, lng: number, date: Date, score: number) {
+  const sun     = getSunPosition(date, lat, lng)
+  const azNorth = ((sun.azimuth * 180) / Math.PI + 180) % 360
+  const altDeg  = (sun.altitude * 180) / Math.PI
+  const isDay   = altDeg > -3
+  const set = (id: string, prop: string, val: unknown) => {
+    if (map.getLayer(id)) try { map.setPaintProperty(id, prop as never, val as never) } catch { /* noop */ }
+  }
+  if (isDay) {
+    const polar = Math.min(85, Math.max(55, 90 - altDeg * 0.28))
+    const color = altDeg < 5 ? '#F0C070' : score >= 4 ? '#FFFCC0' : '#FFF8E8'
+    map.setLight({ anchor:'map', position:[1.5, azNorth, polar], color, intensity: 1.0 })
+    set('background','background-color', altDeg > 8 ? '#B8D4E8' : '#C8946A')
+  } else {
+    map.setLight({ anchor:'map', position:[1.5, 0, 88], color:'#40607A', intensity: 0.04 })
+    set('background','background-color','#08101A')
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Géométrie
+// ─────────────────────────────────────────────────────────────────────────────
 
 function findNearestBuilding(map: mapboxgl.Map, lat: number, lng: number): NearestBuilding | null {
   let features: mapboxgl.MapboxGeoJSONFeature[] = []
   try {
     const pinPx = map.project([lng, lat])
-    const pad = 220
+    const pad   = 240
     const bbox: [mapboxgl.PointLike, mapboxgl.PointLike] = [
       [pinPx.x - pad, pinPx.y - pad],
       [pinPx.x + pad, pinPx.y + pad],
@@ -340,59 +490,41 @@ function findNearestBuilding(map: mapboxgl.Map, lat: number, lng: number): Neare
   for (const f of features) {
     const g = f.geometry
     if (!g) continue
-    let rings: number[][][] = []
-    if      (g.type === 'Polygon')      rings = [g.coordinates[0] as number[][]]
-    else if (g.type === 'MultiPolygon') {
-      for (const poly of g.coordinates as number[][][][]) if (poly[0]) rings.push(poly[0])
-    }
+    const rings: number[][][] = g.type === 'Polygon'
+      ? [(g as GeoJSON.Polygon).coordinates[0] as number[][]]
+      : g.type === 'MultiPolygon'
+        ? (g as GeoJSON.MultiPolygon).coordinates.map(p => p[0] as number[][])
+        : []
 
     for (const ring of rings) {
       if (ring.length < 4) continue
-
-      // Parcours chaque arête → cherche celle dont la normale pointe vers le bar
       let bestEdgeDist = Infinity
       let bestBearing  = 0
 
       for (let i = 0; i < ring.length - 1; i++) {
         const [ax, ay] = ring[i]
         const [bx, by] = ring[i + 1]
-
-        // Milieu de l'arête → vector vers le bar (en mètres, axes E/N)
-        const mx = ((ax + bx) / 2 - lng) * 111320 * cosLat
-        const my = ((ay + by) / 2 - lat) * 111320
-        const edgeDist = Math.sqrt(mx * mx + my * my)
-        if (edgeDist < 1 || edgeDist > 55) continue
-
-        // Direction de l'arête
-        const ex = (bx - ax) * 111320 * cosLat
-        const ey = (by - ay) * 111320
-        const elen = Math.sqrt(ex * ex + ey * ey)
-        if (elen < 0.5) continue
-
-        // Normale candidate (perpendiculaire) ; choisit celle qui pointe vers le bar
-        const n1x =  ey / elen, n1y = -ex / elen
-        const dot  = n1x * (-mx) + n1y * (-my)   // (-mx,-my) = vecteur arête→bar
-        const nx   = dot > 0 ? n1x : -n1x
-        const ny   = dot > 0 ? n1y : -n1y
-
-        // Bearing caméra = direction FROM caméra TOWARD bâtiment = opposé de la normale
-        const cBearing = ((Math.atan2(-nx, -ny) * 180 / Math.PI) + 360) % 360
-
-        if (edgeDist < bestEdgeDist) {
-          bestEdgeDist = edgeDist
-          bestBearing  = cBearing
-        }
+        const mx  = ((ax + bx) / 2 - lng) * 111320 * cosLat
+        const my  = ((ay + by) / 2 - lat) * 111320
+        const d   = Math.sqrt(mx * mx + my * my)
+        if (d < 1 || d > 55) continue
+        const ex  = (bx - ax) * 111320 * cosLat
+        const ey  = (by - ay) * 111320
+        const el  = Math.sqrt(ex * ex + ey * ey)
+        if (el < 0.5) continue
+        const n1x = ey / el, n1y = -ex / el
+        const dot = n1x * (-mx) + n1y * (-my)
+        const nx  = dot > 0 ? n1x : -n1x
+        const ny  = dot > 0 ? n1y : -n1y
+        const cb  = ((Math.atan2(-nx, -ny) * 180 / Math.PI) + 360) % 360
+        if (d < bestEdgeDist) { bestEdgeDist = d; bestBearing = cb }
       }
-
-      if (bestEdgeDist < Infinity && bestEdgeDist < (best?.distM ?? Infinity)) {
+      if (bestEdgeDist < Infinity && bestEdgeDist < (best?.distM ?? Infinity))
         best = { bearing: bestBearing, distM: bestEdgeDist, feature: f }
-      }
     }
   }
   return best
 }
-
-// ── Décalage du centre ────────────────────────────────────────────────────
 
 function offsetCenter(lat: number, lng: number, bearingDeg: number, distM: number): [number, number] {
   const rad    = (bearingDeg * Math.PI) / 180
@@ -401,172 +533,4 @@ function offsetCenter(lat: number, lng: number, bearingDeg: number, distM: numbe
     lng + (Math.sin(rad) * distM) / (111320 * cosLat),
     lat + (Math.cos(rad) * distM) / 111320,
   ]
-}
-
-// ── Éclairage solaire ─────────────────────────────────────────────────────
-
-function applySunLighting(map: mapboxgl.Map, lat: number, lng: number, date: Date, score: number) {
-  const sun    = getSunPosition(date, lat, lng)
-  const azNorth = ((sun.azimuth * 180) / Math.PI + 180) % 360
-  const altDeg  = (sun.altitude * 180) / Math.PI
-  const isDay   = altDeg > -3
-
-  const set = (id: string, prop: string, val: unknown) => {
-    if (map.getLayer(id)) try { map.setPaintProperty(id, prop as never, val as never) } catch { /* noop */ }
-  }
-
-  if (isDay) {
-    const t = Math.max(0, Math.min(1, altDeg / 55))
-    // Intensité élevée pour ombres bien visibles
-    // Intensité TOUJOURS élevée → ombres prononcées en toutes circonstances
-    const intensity = 1.0
-    // Couleur : dorée au lever/coucher, blanche-chaude en journée
-    const color = altDeg < 6 ? '#F2C080' : score >= 4 ? '#FFFBD0' : '#FFF6E8'
-    // Polaire très horizontal (58–82°) = ombres latérales longues et dramatiques
-    const polar = Math.min(82, Math.max(58, 90 - altDeg * 0.30))
-
-    map.setLight({
-      anchor: 'map',
-      position: [1.5, azNorth, polar],
-      color,
-      intensity,
-    })
-    set('background', 'background-color', altDeg > 6 ? '#A8CCEA' : '#D4A878')
-  } else {
-    map.setLight({ anchor: 'map', position: [1.5, 0, 90], color: '#7090B0', intensity: 0.06 })
-    set('background', 'background-color', '#0D1820')
-  }
-}
-
-// ── Overlay Soleil / Lune ─────────────────────────────────────────────────
-
-function SunOverlay({
-  lat, lng, score, date, bearing,
-}: {
-  lat: number; lng: number; score: number; date?: Date; bearing: number
-}) {
-  const d      = date ?? new Date()
-  const sun    = getSunPosition(d, lat, lng)
-  const altDeg = (sun.altitude  * 180) / Math.PI
-  const azDeg  = ((sun.azimuth  * 180) / Math.PI + 180) % 360
-  const isDay  = altDeg > -3
-  const isSunny = score >= 4
-
-  // Angle relatif soleil / caméra → position X dans le cadre
-  const rel   = (((azDeg - bearing + 540) % 360) - 180)
-  const inFov = Math.abs(rel) < 115
-  const sunX  = 50 + (rel / 115) * 42             // 8%–92% de la largeur
-  // Y recalibré pour pitch 65°  (horizon ~42% du haut)
-  const sunY  = Math.max(5, 42 - altDeg * 0.58)
-  // La façade face à la caméra est éclairée si le soleil est derrière la caméra (<90°)
-  const isFrontLit = isDay && Math.abs(rel) < 92
-
-  const cardDir = azDeg < 45 ? 'N' : azDeg < 135 ? 'E' : azDeg < 225 ? 'S' : azDeg < 315 ? 'O' : 'N'
-
-  if (!isDay) {
-    return (
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-4 right-4 rounded-full px-3 py-1.5 flex items-center gap-2 shadow-lg"
-          style={{ background: 'rgba(13,24,32,0.85)', backdropFilter: 'blur(8px)' }}>
-          <span className="text-base">🌙</span>
-          <span className="text-[11px] font-outfit font-bold text-[#B0C8E0]">Nuit</span>
-        </div>
-      </div>
-    )
-  }
-
-  const sunSize  = isSunny ? 80 : 54
-  const haloSize = isSunny ? 200 : 120
-  const raysSize = haloSize + 30
-
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {inFov && (
-        <div style={{
-          position: 'absolute',
-          left: `${sunX}%`, top: `${sunY}%`,
-          transform: 'translate(-50%, -50%)',
-          zIndex: 10,
-          transition: 'left 700ms cubic-bezier(0.34,1.1,0.64,1), top 700ms cubic-bezier(0.34,1.1,0.64,1)',
-        }}>
-          {/* Rayons rotatifs (8 faisceaux) */}
-          {isSunny && (
-            <div style={{
-              position: 'absolute',
-              width:  raysSize, height: raysSize,
-              top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              borderRadius: '50%',
-              background: `conic-gradient(
-                transparent 0deg,   rgba(255,210,0,0.22) 7deg,  transparent 14deg,
-                transparent 37deg,  rgba(255,210,0,0.22) 44deg, transparent 51deg,
-                transparent 82deg,  rgba(255,210,0,0.22) 89deg, transparent 96deg,
-                transparent 127deg, rgba(255,210,0,0.22) 134deg,transparent 141deg,
-                transparent 172deg, rgba(255,210,0,0.22) 179deg,transparent 186deg,
-                transparent 217deg, rgba(255,210,0,0.22) 224deg,transparent 231deg,
-                transparent 262deg, rgba(255,210,0,0.22) 269deg,transparent 276deg,
-                transparent 307deg, rgba(255,210,0,0.22) 314deg,transparent 321deg,
-                transparent 352deg, rgba(255,210,0,0.22) 359deg,transparent 360deg
-              )`,
-              animation: 'cb-sun-spin 20s linear infinite',
-            }} />
-          )}
-
-          {/* Halo corona */}
-          <div style={{
-            position: 'absolute',
-            width: haloSize, height: haloSize,
-            top: '50%', left: '50%',
-            transform: 'translate(-50%, -50%)',
-            borderRadius: '50%',
-            background: isSunny
-              ? 'radial-gradient(circle, rgba(255,220,0,0.70) 0%, rgba(255,160,0,0.30) 38%, rgba(255,80,0,0.08) 65%, transparent 100%)'
-              : 'radial-gradient(circle, rgba(255,230,100,0.48) 0%, rgba(255,200,80,0.16) 50%, transparent 100%)',
-            filter: 'blur(2px)',
-            animation: isSunny ? 'cb-sun-glow 3s ease-in-out infinite' : 'none',
-          }} />
-
-          {/* Disque soleil */}
-          <div style={{
-            position: 'relative',
-            width: sunSize, height: sunSize,
-            borderRadius: '50%',
-            background: isSunny
-              ? 'radial-gradient(circle at 32% 28%, #FFFFF5 0%, #FFF080 16%, #FFCC00 52%, #FF8800 100%)'
-              : 'radial-gradient(circle at 32% 28%, #FFFEF5 0%, #FFF878 22%, #FFE860 58%, #FFCC30 100%)',
-            boxShadow: isSunny
-              ? '0 0 20px 2px #FFE000, 0 0 55px 8px rgba(255,160,0,0.92), 0 0 100px 20px rgba(255,80,0,0.55)'
-              : '0 0 14px 1px #FFE090, 0 0 32px 4px rgba(255,200,80,0.68)',
-            transition: 'width 400ms, height 400ms, box-shadow 400ms',
-          }} />
-        </div>
-      )}
-
-      {/* Badge direction + altitude */}
-      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2">
-        <div className="rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg"
-          style={{ background: 'rgba(255,253,247,0.92)', backdropFilter: 'blur(10px)' }}>
-          <span className="text-[14px]">{inFov ? '☀' : '☁'}</span>
-          <span className="text-[11px] font-outfit font-bold text-nuit">
-            {Math.round(altDeg)}° {cardDir}
-          </span>
-        </div>
-        {/* Badge état façade */}
-        <div className="rounded-full px-2.5 py-1 shadow-lg" style={{
-          background: isFrontLit ? '#FFE030' : 'rgba(27,40,56,0.72)',
-        }}>
-          <span className="text-[10px] font-outfit font-black tracking-wide" style={{
-            color: isFrontLit ? '#1B2838' : '#A8C0D8',
-          }}>
-            {isFrontLit ? '☀ FAÇADE ÉCLAIRÉE' : '🌔 FAÇADE À L’OMBRE'}
-          </span>
-        </div>
-        {isSunny && isFrontLit && (
-          <div className="rounded-full px-2.5 py-1 shadow-lg" style={{ background: '#FFBE0B' }}>
-            <span className="text-[10px] font-outfit font-black text-nuit tracking-wide">SUNNY</span>
-          </div>
-        )}
-      </div>
-    </div>
-  )
 }

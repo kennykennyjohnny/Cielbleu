@@ -29,10 +29,13 @@ import type { Place } from '@/types'
 const Terrace3DView = dynamic(() => import('./Terrace3DView'), {
   ssr: false,
   loading: () => (
-    <div
-      className="w-full h-full animate-pulse"
-      style={{ background: 'linear-gradient(180deg, #87C2E0 0%, #B8D8EE 60%, #D4E8F5 100%)' }}
-    />
+    <div className="w-full h-full" style={{
+      background: 'linear-gradient(to bottom, #2D7DD2 0%, #73B9FF 40%, #B8D8F8 75%, #E8F4FF 100%)',
+    }}>
+      <div className="absolute inset-0 flex flex-col items-end justify-end p-4">
+        <div className="w-32 h-10 rounded-2xl animate-pulse" style={{ background: 'rgba(255,255,255,0.25)' }} />
+      </div>
+    </div>
   ),
 })
 
@@ -171,7 +174,7 @@ export default function PlacePageClient({ place, scores }: Props) {
     <main className="min-h-dvh overflow-x-hidden" style={{ background: theme.pageBg, transition: 'background 0.6s ease' }}>
 
       {/* ─── HERO 3D ── */}
-      <div className="relative" style={{ height: 'min(62dvh, 500px)' }}>
+      <div className="relative" style={{ height: 'min(68dvh, 540px)' }}>
         <div className="absolute inset-0">
           <Terrace3DView lat={place.lat} lng={place.lng} score={currentScore} date={displayedDate} />
         </div>
@@ -236,19 +239,24 @@ export default function PlacePageClient({ place, scores }: Props) {
         const refs = place.photos.map(extractPhotoRef).filter(Boolean) as string[]
         if (!refs.length) return null
         return (
-          <div className="relative z-20 -mt-6 px-4">
+          <div className="relative z-20 -mt-4 px-3">
             <div
-              className="flex gap-2.5 overflow-x-auto scrollbar-none pb-1"
+              className="flex gap-3 overflow-x-auto scrollbar-none pb-0.5"
               style={{ scrollSnapType: 'x mandatory' }}
             >
               {refs.map((ref, i) => (
                 <div
                   key={i}
-                  className="shrink-0 rounded-2xl overflow-hidden shadow-[0_4px_18px_rgba(27,40,56,0.22)]"
-                  style={{ width: 185, height: 124, scrollSnapAlign: 'start' }}
+                  className="shrink-0 rounded-[18px] overflow-hidden"
+                  style={{
+                    width: i === 0 ? 230 : 175,
+                    height: i === 0 ? 148 : 112,
+                    scrollSnapAlign: 'start',
+                    boxShadow: '0 6px 24px rgba(27,40,56,0.28)',
+                  }}
                 >
                   <img
-                    src={`/api/photo?ref=${encodeURIComponent(ref)}&w=400`}
+                    src={`/api/photo?ref=${encodeURIComponent(ref)}&w=500`}
                     alt={`${place.name} photo ${i + 1}`}
                     className="w-full h-full object-cover"
                     loading="lazy"
