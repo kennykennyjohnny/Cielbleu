@@ -25,7 +25,7 @@ interface Props {
 }
 
 // Distance de recul côté rue (positif = la caméra recule dans la direction OPPOSÉE au bâtiment)
-const STREET_OFFSET_M = 14
+const STREET_OFFSET_M = 20
 
 interface NearestBuilding {
   bearing: number
@@ -53,8 +53,8 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
       container: containerRef.current,
       style: 'mapbox://styles/mapbox/light-v11',
       center: [lng, lat],
-      zoom: 18.7,
-      pitch: 60,        // 60° = on voit le sol/terrasse ET la façade
+      zoom: 19.0,
+      pitch: 65,        // 65° = façade bien visible + terrasse au premier plan
       bearing: 180,
       // Pan activé, tout le reste désactivé = légèrement déplaçable
       scrollZoom: false,
@@ -84,8 +84,9 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
           map.jumpTo({ center: [streetLng, streetLat], bearing: result.bearing })
           setBearing(result.bearing)   // → SunOverlay re-render
           highlightBuilding(map, result.feature, scoreRef.current)
+          addTerraceZone(map, lat, lng, result.bearing)
           // Dolly-in doux
-          map.easeTo({ zoom: map.getZoom() + 0.1, duration: 1200, easing: (t) => t * (2 - t) })
+          map.easeTo({ zoom: map.getZoom() + 0.15, duration: 1400, easing: (t) => t * (2 - t) })
         } else if (attempt < 4) {
           setTimeout(() => tryBearing(attempt + 1), 500 * attempt)
         } else {
@@ -197,6 +198,8 @@ function styleMap(map: mapboxgl.Map) {
         'fill-extrusion-base':   ['get', 'min_height'],
         'fill-extrusion-opacity': 0.96,
         'fill-extrusion-vertical-gradient': true,
+        'fill-extrusion-ambient-occlusion-intensity': 0.85,
+        'fill-extrusion-ambient-occlusion-radius': 2.5,
       },
     }, labelLayer)
   }
@@ -251,13 +254,57 @@ function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFea
   })
 }
 
-// ── Trouver le bâtiment le plus proche ────────────────────────────────────
-// Requête dans un rayon ~200px autour du pin pour plus de fiabilité
+// ── Zone terrasse au sol ──────────────────────────────────────────────────
+// Rectangle doré devant le bar, côté rue (dans la direction –cameraBearing)
+
+function addTerraceZone(map: mapboxgl.Map, lat: number, lng: number, cameraBearing: number) {
+  const W = 8, D = 3.5   // 8m de large, 3.5m de profondeur côté rue
+  const cosLat = Math.cos((lat * Math.PI) / 180)
+  const rad    = (cameraBearing * Math.PI) / 180
+  // fwd = direction vers le bâtiment ; right = droite caméra
+  const fwdE  = Math.sin(rad),  fwdN  = Math.cos(rad)
+  const rightE = Math.cos(rad), rightN = -Math.sin(rad)
+
+  const toLL = (dE: number, dN: number): [number, number] => [
+    lng + dE / (111320 * cosLat),
+    lat + dN / 111320,
+  ]
+
+  // Coins : de la façade vers la rue (direction -fwd)
+  const corners: [number, number][] = [
+    toLL( rightE * W / 2,                   rightN * W / 2),
+    toLL(-rightE * W / 2,                  -rightN * W / 2),
+    toLL(-fwdE * D - rightE * W / 2,  -fwdN * D - rightN * W / 2),
+    toLL(-fwdE * D + rightE * W / 2,  -fwdN * D + rightN * W / 2),
+    toLL( rightE * W / 2,                   rightN * W / 2),   // fermeture
+  ]
+
+  const geoData: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [corners] }, properties: {} }],
+  }
+
+  if (map.getSource('cb-terrace')) {
+    ;(map.getSource('cb-terrace') as mapboxgl.GeoJSONSource).setData(geoData)
+    return
+  }
+  map.addSource('cb-terrace', { type: 'geojson', data: geoData })
+  map.addLayer({
+    id: 'cb-terrace-fill', source: 'cb-terrace', type: 'fill',
+    paint: { 'fill-color': '#E8B84B', 'fill-opacity': 0.55 },
+  })
+  map.addLayer({
+    id: 'cb-terrace-outline', source: 'cb-terrace', type: 'line',
+    paint: { 'line-color': '#BB8518', 'line-width': 1.5, 'line-dasharray': [3, 2] },
+  })
+}
+
+// ── Trouver le bâtiment le plus proche (par normale de façade) ────────────
+// Cherche l'arête la plus proche dont la normale pointe vers le bar
 
 function findNearestBuilding(map: mapboxgl.Map, lat: number, lng: number): NearestBuilding | null {
   let features: mapboxgl.MapboxGeoJSONFeature[] = []
   try {
-    // Convertit le bar en pixels, query dans une bbox de 220px
     const pinPx = map.project([lng, lat])
     const pad = 220
     const bbox: [mapboxgl.PointLike, mapboxgl.PointLike] = [
@@ -281,22 +328,45 @@ function findNearestBuilding(map: mapboxgl.Map, lat: number, lng: number): Neare
     }
 
     for (const ring of rings) {
-      if (!ring.length) continue
-      let cx = 0, cy = 0
-      for (const [x, y] of ring) { cx += x; cy += y }
-      cx /= ring.length; cy /= ring.length
+      if (ring.length < 4) continue
 
-      const dxM = (cx - lng) * 111320 * cosLat
-      const dyM = (cy - lat) * 111320
-      const dist = Math.sqrt(dxM * dxM + dyM * dyM)
-      if (dist < 1 || dist > 50) continue      // 1–50m
+      // Parcours chaque arête → cherche celle dont la normale pointe vers le bar
+      let bestEdgeDist = Infinity
+      let bestBearing  = 0
 
-      if (!best || dist < best.distM) {
-        best = {
-          distM: dist,
-          bearing: ((Math.atan2(dxM, dyM) * 180) / Math.PI + 360) % 360,
-          feature: f,
+      for (let i = 0; i < ring.length - 1; i++) {
+        const [ax, ay] = ring[i]
+        const [bx, by] = ring[i + 1]
+
+        // Milieu de l'arête → vector vers le bar (en mètres, axes E/N)
+        const mx = ((ax + bx) / 2 - lng) * 111320 * cosLat
+        const my = ((ay + by) / 2 - lat) * 111320
+        const edgeDist = Math.sqrt(mx * mx + my * my)
+        if (edgeDist < 1 || edgeDist > 55) continue
+
+        // Direction de l'arête
+        const ex = (bx - ax) * 111320 * cosLat
+        const ey = (by - ay) * 111320
+        const elen = Math.sqrt(ex * ex + ey * ey)
+        if (elen < 0.5) continue
+
+        // Normale candidate (perpendiculaire) ; choisit celle qui pointe vers le bar
+        const n1x =  ey / elen, n1y = -ex / elen
+        const dot  = n1x * (-mx) + n1y * (-my)   // (-mx,-my) = vecteur arête→bar
+        const nx   = dot > 0 ? n1x : -n1x
+        const ny   = dot > 0 ? n1y : -n1y
+
+        // Bearing caméra = direction FROM caméra TOWARD bâtiment = opposé de la normale
+        const cBearing = ((Math.atan2(-nx, -ny) * 180 / Math.PI) + 360) % 360
+
+        if (edgeDist < bestEdgeDist) {
+          bestEdgeDist = edgeDist
+          bestBearing  = cBearing
         }
+      }
+
+      if (bestEdgeDist < Infinity && bestEdgeDist < (best?.distM ?? Infinity)) {
+        best = { bearing: bestBearing, distM: bestEdgeDist, feature: f }
       }
     }
   }
@@ -329,14 +399,17 @@ function applySunLighting(map: mapboxgl.Map, lat: number, lng: number, date: Dat
   if (isDay) {
     const t = Math.max(0, Math.min(1, altDeg / 55))
     // Intensité élevée pour ombres bien visibles
-    const intensity = 0.35 + t * 0.65  // max 1.0
+    // Intensité haute dès le matin → ombres toujours bien visibles
+    const intensity = Math.min(1.0, 0.58 + t * 0.42)
     // Couleur : dorée au lever/coucher, blanche-chaude en journée
     const color = altDeg < 6 ? '#F2C080' : score >= 4 ? '#FFFBD0' : '#FFF6E8'
+    // Angle polaire : plus horizontal → ombres latérales dramatiques
+    // mid-day(65°) → 48° ; 3pm(45°) → 60° ; sunset(20°) → 76°
+    const polar = Math.min(76, Math.max(22, 88 - altDeg * 0.62))
 
     map.setLight({
       anchor: 'map',
-      // polar → 0 = zénith, 90 = horizontal ; plus bas = ombres longues
-      position: [1.5, azNorth, Math.max(5, 84 - altDeg * 0.95)],
+      position: [1.5, azNorth, polar],
       color,
       intensity,
     })

@@ -185,42 +185,48 @@ export default function HomePage() {
       )}
 
       {/* Voile dégradé bottom */}
-      <div className="absolute bottom-0 left-0 right-0 h-52 bg-gradient-to-t from-white/90 via-white/40 to-transparent pointer-events-none z-10" />
+      <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-creme/85 via-creme/30 to-transparent pointer-events-none z-10" />
 
-      {/* Bottom bar : filtres + search */}
+      {/* Floating bottom card */}
       <div
-        className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="absolute bottom-0 inset-x-0 z-20 pointer-events-none"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
       >
-        {/* Filtres horizontaux */}
-        <div className="pointer-events-auto pb-2.5">
-          <Filters activeFilters={activeFilters} onToggle={toggleFilter} />
-        </div>
+        <div className="pointer-events-auto mx-4 mb-2 rounded-3xl bg-white/94 backdrop-blur-xl border border-white/75 shadow-[0_8px_40px_rgba(27,40,56,0.15),0_1px_4px_rgba(27,40,56,0.06)] overflow-hidden">
 
-        {/* Search bar collée en bas */}
-        <div className="pointer-events-auto px-4 pb-4">
-          <div className="relative max-w-md mx-auto">
-            <Search
-              size={16}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-gris pointer-events-none"
-              strokeWidth={2.4}
-            />
-            <input
-              type="text"
-              placeholder="Bar, quartier, adresse…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-full border-0 bg-white/95 backdrop-blur-md pl-10 pr-10 py-3.5 text-[14px] text-nuit shadow-[0_8px_32px_rgba(27,40,56,0.16)] outline-none placeholder:text-gris/70 focus:ring-2 focus:ring-ciel/50 font-outfit"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                aria-label="Effacer"
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-gris hover:bg-creme transition"
-              >
-                <X size={16} strokeWidth={2.2} />
-              </button>
-            )}
+          {/* Filtres centrés */}
+          <div className="pt-3.5 pb-3">
+            <Filters activeFilters={activeFilters} onToggle={toggleFilter} />
+          </div>
+
+          {/* Séparateur */}
+          <div className="mx-4 h-px bg-nuit/5" />
+
+          {/* Search */}
+          <div className="px-4 py-3">
+            <div className="relative">
+              <Search
+                size={15}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gris pointer-events-none"
+                strokeWidth={2.5}
+              />
+              <input
+                type="text"
+                placeholder="Bar, quartier, adresse…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-2xl bg-nuit/[0.04] pl-9 pr-9 py-2.5 text-[13.5px] text-nuit outline-none placeholder:text-gris/60 focus:ring-2 focus:ring-ciel/40 font-outfit transition"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Effacer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-gris hover:bg-nuit/8 transition"
+                >
+                  <X size={14} strokeWidth={2.2} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
