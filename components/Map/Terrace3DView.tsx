@@ -1,8 +1,17 @@
-'use client'
+﻿'use client'
 
-// Mini map Mapbox 3D — vue façade FIXE du lieu, soleil/ombres dynamiques.
-// Le bearing est calculé une fois (toward building cluster) et ne change plus.
-// Seul le `setLight` est mis à jour quand la `date` (slider) bouge.
+/**
+ * Terrace3DView — mini carte Mapbox 3D face à la façade du bar.
+ *
+ * Bearing : calculé sur "idle" (tuiles garanties chargées) via
+ * queryRenderedFeatures sur le layer cb-3d-buildings.
+ * On trouve la direction vers le bâtiment le plus proche (1-70m),
+ * puis on décale légèrement le centre vers la façade pour que la
+ * caméra soit côté rue en train de regarder l'entrée du lieu.
+ *
+ * Éclairage : setLight() recalculé à chaque changement d'heure (slider).
+ * Overlay SVG soleil/lune animé sur la 2D.
+ */
 
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
@@ -15,19 +24,23 @@ interface Props {
   date?: Date
 }
 
-// Rayon utilisé pour estimer la direction des bâtiments depuis le lieu
-const FACADE_RADIUS_M = 60
+// Bounding rayon pour la recherche de bâtiment
+const MIN_DIST_M = 3
+const MAX_DIST_M = 75
+
+// Décalage centre vers la façade (m) : recule la caméra sur la rue
+const FACADE_OFFSET_M = 18
 
 export default function Terrace3DView({ lat, lng, score, date }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const bearingRef = useRef<number>(180)
   const dateRef = useRef<Date>(date ?? new Date())
-  dateRef.current = date ?? new Date()
   const scoreRef = useRef<number>(score)
+  dateRef.current = date ?? new Date()
   scoreRef.current = score
 
-  // Création de la map (une seule fois par lieu)
+  // ── Création carte (une fois par lieu) ─────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
@@ -36,116 +49,47 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
       container: containerRef.current,
       style: 'mapbox://styles/mapbox/light-v11',
       center: [lng, lat],
-      zoom: 18.1,
-      pitch: 76,
-      bearing: 180, // par défaut, sera ajusté après chargement des bâtiments
+      zoom: 18.6,
+      pitch: 74,
+      bearing: 180,
       interactive: false,
       attributionControl: false,
+      fadeDuration: 0,
     })
 
     map.on('style.load', () => {
-      const setIfExists = (
-        id: string,
-        prop: string,
-        value: string | number | unknown[]
-      ) => {
-        if (map.getLayer(id)) {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            map.setPaintProperty(id, prop as any, value as any)
-          } catch {
-            // ignore
-          }
-        }
-      }
-
-      // Sky-blue background (visible between buildings & above rooftops)
-      setIfExists('background', 'background-color', '#C6DFF2')
-      if (containerRef.current) containerRef.current.style.backgroundColor = '#C6DFF2'
-      setIfExists('water', 'fill-color', '#7AB8D9')
-      setIfExists('road-primary', 'line-color', '#F5F0E8')
-      setIfExists('road-secondary-tertiary', 'line-color', '#F5F0E8')
-      setIfExists('road-street', 'line-color', '#F0EBE0')
-      setIfExists('road-minor', 'line-color', '#EDE8DC')
-      setIfExists('landuse', 'fill-color', '#C8DBC0')
-      setIfExists('park', 'fill-color', '#C8DBC0')
-
-      // Cache labels & POI pour focus 3D
-      const layers = map.getStyle().layers ?? []
-      for (const l of layers) {
-        if (
-          l.type === 'symbol' ||
-          l.id.includes('poi') ||
-          l.id.includes('label') ||
-          l.id.includes('transit')
-        ) {
-          try {
-            map.setLayoutProperty(l.id, 'visibility', 'none')
-          } catch {
-            // ignore
-          }
-        }
-      }
-
-      if (!map.getLayer('cb-3d-buildings')) {
-        map.addLayer({
-          id: 'cb-3d-buildings',
-          source: 'composite',
-          'source-layer': 'building',
-          filter: ['==', ['get', 'extrude'], 'true'],
-          type: 'fill-extrusion',
-          minzoom: 14,
-          paint: {
-            'fill-extrusion-color': [
-              'interpolate', ['linear'], ['get', 'height'],
-              0,   '#DDE8F0',
-              15,  '#C8D8E8',
-              30,  '#B8C8DA',
-              60,  '#9AAFC4',
-              120, '#7A90A8',
-            ],
-            'fill-extrusion-height': ['get', 'height'],
-            'fill-extrusion-base': ['get', 'min_height'],
-            'fill-extrusion-opacity': 0.95,
-            'fill-extrusion-vertical-gradient': true,
-          },
-        })
-      }
-
-      // Premier passage de lumière
+      styleMap(map, lat, lng)
       applySunLighting(map, lat, lng, dateRef.current, scoreRef.current)
 
-      // Détermine le bearing face à la façade dès que les tuiles sont prêtes.
-      // Plusieurs essais car querySourceFeatures peut renvoyer vide pendant
-      // le premier idle.
-      let attempts = 0
-      const tryBearing = () => {
-        attempts += 1
-        const b = computeFacadeBearing(map, lat, lng)
-        if (b != null) {
-          bearingRef.current = b
-          map.easeTo({ bearing: b, duration: 700 })
-          return
-        }
-        if (attempts < 8) {
-          setTimeout(tryBearing, 250)
+      // Tente de calculer le bearing. Réessaie si les tuiles ne sont pas encore chargées.
+      function tryBearing(attempt: number) {
+        const bearing = computeFacadeBearing(map, lat, lng)
+        if (bearing != null) {
+          bearingRef.current = bearing
+          const [offLng, offLat] = offsetCenter(lat, lng, bearing, FACADE_OFFSET_M)
+          map.jumpTo({ center: [offLng, offLat], bearing })
+          // Animation d'entrée douce
+          map.easeTo({ zoom: map.getZoom() + 0.15, duration: 1200, easing: (t) => t * (2 - t) })
+        } else if (attempt < 3) {
+          // Les tuiles bâtiments ne sont pas encore rendues — réessayer après un court délai
+          setTimeout(() => tryBearing(attempt + 1), 400 * attempt)
+        } else {
+          // Fallback : animation d'entrée sans correction de bearing
+          map.easeTo({ zoom: map.getZoom() + 0.15, duration: 1200, easing: (t) => t * (2 - t) })
         }
       }
-      tryBearing()
+
+      // On attend "idle" — les tuiles vectorielles bâtiments sont garanties rendues
+      map.once('idle', () => tryBearing(1))
     })
 
-    // Pin doré pulsant au centre
+    // Pin doré pulsant
     const pinEl = document.createElement('div')
     pinEl.style.cssText = `
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: #FFBE0B;
-      border: 3px solid #FFFDF7;
-      box-shadow:
-        0 0 0 2px #FFBE0B,
-        0 0 24px rgba(255,190,11,0.7),
-        0 6px 12px rgba(27,40,56,0.4);
+      width: 18px; height: 18px; border-radius: 50%;
+      background: radial-gradient(circle at 38% 32%, #FFE570 0%, #FFBE0B 60%, #FF9500 100%);
+      border: 2.5px solid rgba(255,253,247,0.9);
+      box-shadow: 0 0 0 3px rgba(255,190,11,0.35), 0 0 20px rgba(255,190,11,0.6), 0 4px 10px rgba(27,40,56,0.5);
       animation: pin-halo 2.4s ease-in-out infinite;
     `
     new mapboxgl.Marker({ element: pinEl, anchor: 'center' })
@@ -153,14 +97,13 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
       .addTo(map)
 
     mapRef.current = map
-
     return () => {
       map.remove()
       mapRef.current = null
     }
-  }, [lat, lng])
+  }, [lat, lng]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Date / score change → on met juste à jour la lumière, pas la caméra
+  // ── Mise à jour éclairage (slider horaire) ─────────────────────────────
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -184,70 +127,164 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
   )
 }
 
-// --- Bearing toward facade --------------------------------------------------
-// Centroïde pondéré (1 / distance) des bâtiments dans un rayon donné.
-// Le bearing renvoyé pointe DEPUIS le lieu vers le gros des bâtiments,
-// donc avec center=lieu la caméra finit du côté ouvert (rue).
+// ── Style carte ─────────────────────────────────────────────────────────────
+
+function styleMap(map: mapboxgl.Map, lat: number, lng: number) {
+  const set = (id: string, prop: string, val: string | number | unknown[]) => {
+    if (map.getLayer(id)) {
+      try { map.setPaintProperty(id, prop as Parameters<typeof map.setPaintProperty>[1], val as never) } catch { /* ignore */ }
+    }
+  }
+
+  // Ciel & sol
+  set('background', 'background-color', '#B8D8EE')
+  set('water', 'fill-color', '#6AAFD1')
+  set('waterway', 'line-color', '#6AAFD1')
+
+  // Routes — beige doux
+  for (const r of ['road-primary', 'road-secondary-tertiary', 'road-street', 'road-minor']) {
+    set(r, 'line-color', '#EDE6D9')
+  }
+  set('road-motorway', 'line-color', '#EDE6D9')
+
+  // Espaces verts
+  for (const g of ['landuse', 'park', 'national-park', 'pitch']) {
+    set(g, 'fill-color', '#B8D4A0')
+  }
+
+  // Cache tous les labels & POI
+  const layers = map.getStyle().layers ?? []
+  for (const l of layers) {
+    if (l.type === 'symbol' || l.id.includes('poi') || l.id.includes('label') || l.id.includes('transit')) {
+      try { map.setLayoutProperty(l.id, 'visibility', 'none') } catch { /* ignore */ }
+    }
+  }
+
+  // Bâtiments 3D — palette Haussmann chaude (pierre/ardoise)
+  if (!map.getLayer('cb-3d-buildings')) {
+    const labelLayerId = layers.find(
+      (l) => l.type === 'symbol' && (l.layout as Record<string, unknown>)?.['text-field']
+    )?.id
+
+    map.addLayer(
+      {
+        id: 'cb-3d-buildings',
+        source: 'composite',
+        'source-layer': 'building',
+        filter: ['==', ['get', 'extrude'], 'true'],
+        type: 'fill-extrusion',
+        minzoom: 14,
+        paint: {
+          'fill-extrusion-color': [
+            'interpolate', ['linear'], ['get', 'height'],
+            0,  '#E8DECA',
+            12, '#DDD3BC',
+            25, '#CDC3AB',
+            50, '#B8AB92',
+            80, '#A09178',
+          ],
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': ['get', 'min_height'],
+          'fill-extrusion-opacity': 0.97,
+          'fill-extrusion-vertical-gradient': true,
+        },
+      },
+      labelLayerId
+    )
+  }
+
+  // Fog / atmosphère pour profondeur
+  try {
+    map.setFog({
+      color: '#C8DFF0',
+      'high-color': '#8CC0DC',
+      'horizon-blend': 0.06,
+      'space-color': '#1A2A3A',
+      range: [0.5, 10],
+    } as Parameters<typeof map.setFog>[0])
+  } catch { /* setFog may not exist in older sdk versions */ }
+
+  // Sol entre bâtiments de la tuile satellite
+  set('building', 'fill-color', '#EBE2D0')
+  set('building', 'fill-opacity', 0.7)
+  set('building-outline', 'line-color', '#D8CDB8')
+
+  void lat; void lng // pas utilisé ici mais gardé pour signature claire
+}
+
+// ── Bearing vers la façade ──────────────────────────────────────────────────
+// On cherche le bâtiment le plus proche parmi les features rendus (cb-3d-buildings).
+// Le bearing renvoyé = direction depuis le bar vers le bâtiment voisin
+// → la caméra Mapbox regardera dans cette direction = on voit la façade.
 
 function computeFacadeBearing(
   map: mapboxgl.Map,
   lat: number,
   lng: number
 ): number | null {
-  let features: { geometry: unknown }[] = []
+  let features: mapboxgl.MapboxGeoJSONFeature[] = []
   try {
-    features = map.querySourceFeatures('composite', {
-      sourceLayer: 'building',
-    }) as unknown as { geometry: unknown }[]
+    features = map.queryRenderedFeatures({ layers: ['cb-3d-buildings'] })
   } catch {
     return null
   }
-  if (!features || features.length === 0) return null
+  if (!features?.length) return null
 
-  let sumX = 0
-  let sumY = 0
-  let sumW = 0
   const cosLat = Math.cos((lat * Math.PI) / 180)
+  let nearestDist = Infinity
+  let nearestBearing: number | null = null
 
   for (const f of features) {
-    const g = f.geometry as { type?: string; coordinates?: unknown }
-    if (!g || !g.coordinates) continue
+    const g = f.geometry
+    if (!g) continue
 
-    let ring: number[][] | null = null
-    if (g.type === 'Polygon') {
-      ring = (g.coordinates as number[][][])[0] ?? null
-    } else if (g.type === 'MultiPolygon') {
-      ring = (g.coordinates as number[][][][])[0]?.[0] ?? null
+    let rings: number[][][] = []
+    if (g.type === 'Polygon') rings = g.coordinates as number[][][]
+    else if (g.type === 'MultiPolygon') {
+      for (const poly of g.coordinates as number[][][][]) {
+        if (poly[0]) rings.push(poly[0])
+      }
     }
-    if (!ring || ring.length === 0) continue
 
-    let cx = 0
-    let cy = 0
-    for (const [x, y] of ring) {
-      cx += x
-      cy += y
+    for (const ring of rings) {
+      // Centroïde du ring
+      let cx = 0, cy = 0
+      for (const [x, y] of ring) { cx += x; cy += y }
+      cx /= ring.length; cy /= ring.length
+
+      const dxM = (cx - lng) * 111320 * cosLat
+      const dyM = (cy - lat) * 111320
+      const dist = Math.sqrt(dxM * dxM + dyM * dyM)
+      if (dist < MIN_DIST_M || dist > MAX_DIST_M) continue
+
+      if (dist < nearestDist) {
+        nearestDist = dist
+        nearestBearing = ((Math.atan2(dxM, dyM) * 180) / Math.PI + 360) % 360
+      }
     }
-    cx /= ring.length
-    cy /= ring.length
-
-    const dxM = (cx - lng) * 111320 * cosLat
-    const dyM = (cy - lat) * 111320
-    const dist = Math.sqrt(dxM * dxM + dyM * dyM)
-    if (dist > FACADE_RADIUS_M || dist < 2) continue
-
-    const w = 1 / (dist + 5)
-    sumX += dxM * w
-    sumY += dyM * w
-    sumW += w
   }
 
-  if (sumW === 0) return null
-  const mx = sumX / sumW
-  const my = sumY / sumW
-  return ((Math.atan2(mx, my) * 180) / Math.PI + 360) % 360
+  return nearestBearing
 }
 
-// --- Sun lighting -----------------------------------------------------------
+// ── Décalage centre ─────────────────────────────────────────────────────────
+// Décale [lat,lng] de `distM` mètres dans la direction `bearingDeg`.
+// Retourne [newLng, newLat] pour Mapbox.
+
+function offsetCenter(
+  lat: number,
+  lng: number,
+  bearingDeg: number,
+  distM: number
+): [number, number] {
+  const bearingRad = (bearingDeg * Math.PI) / 180
+  const cosLat = Math.cos((lat * Math.PI) / 180)
+  const deltaLng = (Math.sin(bearingRad) * distM) / (111320 * cosLat)
+  const deltaLat = (Math.cos(bearingRad) * distM) / 111320
+  return [lng + deltaLng, lat + deltaLat]
+}
+
+// ── Éclairage solaire ───────────────────────────────────────────────────────
 
 function applySunLighting(
   map: mapboxgl.Map,
@@ -257,49 +294,46 @@ function applySunLighting(
   score: number
 ) {
   const sun = getSunPosition(date, lat, lng)
-  const sunAzimuthFromNorth = ((sun.azimuth * 180) / Math.PI + 180) % 360
-  const sunAltDeg = (sun.altitude * 180) / Math.PI
-  const isDay = sunAltDeg > 0
+  const azNorth = ((sun.azimuth * 180) / Math.PI + 180) % 360
+  const altDeg = (sun.altitude * 180) / Math.PI
+  const isDay = altDeg > -3 // léger crépuscule civil inclus
+
+  const set = (id: string, prop: string, val: string | number | unknown[]) => {
+    if (map.getLayer(id)) {
+      try { map.setPaintProperty(id, prop as Parameters<typeof map.setPaintProperty>[1], val as never) } catch { /* ignore */ }
+    }
+  }
 
   if (isDay) {
-    const intensity = Math.min(0.72, 0.20 + sunAltDeg / 55)
-    // Warm/orange tint for high sun, cooler for low sun
-    const lightColor = sunAltDeg > 30
-      ? (score >= 4 ? '#FFE9A8' : '#FFF5DC')
-      : (sunAltDeg > 5 ? '#FFE0AA' : '#E8D5C0')
+    const t = Math.max(0, Math.min(1, altDeg / 60))
+    const intensity = 0.22 + t * 0.50
+
+    // Couleur chaude plein soleil, bleutée à l'aube/crépuscule
+    let color = '#FFFDE8'
+    if (altDeg < 8) color = '#F0D8B0' // lever/coucher
+    else if (score >= 4) color = '#FFE9A0' // beau soleil
+
     map.setLight({
       anchor: 'map',
-      position: [1.5, sunAzimuthFromNorth, Math.max(12, 88 - sunAltDeg)],
-      color: lightColor,
+      position: [1.5, azNorth, Math.max(10, 88 - altDeg)],
+      color,
       intensity,
     })
-    // Brighten sky background during day
-    try {
-      const layers = map.getStyle().layers ?? []
-      if (layers.some(l => l.id === 'background')) {
-        map.setPaintProperty('background', 'background-color' as Parameters<typeof map.setPaintProperty>[1], '#C6DFF2')
-      }
-    } catch { /* ignore */ }
+
+    // Ciel jour
+    set('background', 'background-color', altDeg > 5 ? '#B8D8EE' : '#E8C8A0')
   } else {
     map.setLight({
       anchor: 'map',
-      position: [1.5, 0, 80],
-      color: '#8AAAC4',
-      intensity: 0.10,
+      position: [1.5, 0, 90],
+      color: '#8898B8',
+      intensity: 0.09,
     })
-    // Darken sky background at night
-    try {
-      const layers = map.getStyle().layers ?? []
-      if (layers.some(l => l.id === 'background')) {
-        map.setPaintProperty('background', 'background-color' as Parameters<typeof map.setPaintProperty>[1], '#1A2A3A')
-      }
-    } catch { /* ignore */ }
+    set('background', 'background-color', '#0F1C2A')
   }
 }
 
-// --- Sun overlay ------------------------------------------------------------
-// Dessine le soleil (ou la lune) à la position relative à la caméra,
-// pour que l'utilisateur visualise d'où il éclaire la façade.
+// ── Overlay soleil / lune ───────────────────────────────────────────────────
 
 function SunOverlay({
   lat,
@@ -318,73 +352,80 @@ function SunOverlay({
   const sun = getSunPosition(d, lat, lng)
   const altDeg = (sun.altitude * 180) / Math.PI
   const azDeg = ((sun.azimuth * 180) / Math.PI + 180) % 360
-  const isDay = altDeg > 0
+  const isDay = altDeg > -3
   const isSunny = score >= 4
 
-  // Position relative à la caméra : -180..180
   const cameraBearing = bearingRef.current ?? 180
+  // Angle relatif entre soleil et caméra : -180..180
   const rel = (((azDeg - cameraBearing + 540) % 360) - 180)
-  const visible = Math.abs(rel) < 100
+  const inFov = Math.abs(rel) < 110
 
-  // Boussole textuelle pour le badge
-  const cardN = azDeg < 90 || azDeg > 270 ? 'N' : 'S'
-  const cardE = azDeg < 180 ? 'E' : 'O'
-  const card = `${cardN}-${cardE}`
+  // Position X : centré quand rel=0, hors cadre quand |rel|>110
+  const sunX = 50 + (rel / 110) * 44 // % de la largeur
+  // Position Y : haut quand altDeg grand
+  const sunY = Math.max(5, 60 - altDeg * 0.85)
+
+  // Boussole
+  const cardDir =
+    azDeg < 45 ? 'N' : azDeg < 135 ? 'E' : azDeg < 225 ? 'S' : azDeg < 315 ? 'O' : 'N'
 
   if (!isDay) {
     return (
-      <div className="absolute top-3 left-3 rounded-full bg-nuit/85 backdrop-blur px-3 py-1.5 text-[11px] font-outfit font-semibold text-creme shadow-md flex items-center gap-1.5 pointer-events-none">
-        <span>☾</span>
-        Nuit
+      <div className="absolute top-4 left-4 z-10 rounded-full bg-[#0F1C2A]/80 backdrop-blur-sm px-3 py-1.5 flex items-center gap-2 pointer-events-none">
+        <span className="text-base">🌙</span>
+        <span className="text-[11px] font-outfit font-semibold text-[#B8CCE4]">Nuit</span>
       </div>
     )
   }
 
   return (
     <>
-      {visible && (
+      {/* Soleil animé */}
+      {inFov && (
         <div
-          className="absolute pointer-events-none"
+          className="absolute pointer-events-none z-10"
           style={{
-            left: `${50 + (rel / 100) * 38}%`,
-            top: `${Math.max(6, 55 - altDeg / 1.5)}%`,
+            left: `${sunX}%`,
+            top: `${sunY}%`,
             transform: 'translate(-50%, -50%)',
-            transition: 'left 400ms ease, top 400ms ease',
+            transition: 'left 500ms cubic-bezier(0.34,1.2,0.64,1), top 500ms cubic-bezier(0.34,1.2,0.64,1)',
           }}
         >
-          {/* Outer glow */}
+          {/* Halo externe */}
           <div
             style={{
               position: 'absolute',
-              inset: isSunny ? '-24px' : '-14px',
+              inset: isSunny ? -28 : -18,
               borderRadius: '50%',
               background: isSunny
-                ? 'radial-gradient(circle, rgba(255,190,11,0.50) 0%, rgba(255,149,0,0.20) 50%, transparent 70%)'
-                : 'radial-gradient(circle, rgba(255,217,118,0.30) 0%, transparent 70%)',
-              pointerEvents: 'none',
+                ? 'radial-gradient(circle, rgba(255,190,11,0.45) 0%, rgba(255,140,0,0.18) 50%, transparent 70%)'
+                : 'radial-gradient(circle, rgba(255,224,100,0.28) 0%, transparent 70%)',
             }}
           />
-          {/* Sun disc */}
+          {/* Disque */}
           <div
             style={{
-              width: isSunny ? 46 : 34,
-              height: isSunny ? 46 : 34,
+              width: isSunny ? 50 : 36,
+              height: isSunny ? 50 : 36,
               borderRadius: '50%',
               background: isSunny
-                ? 'radial-gradient(circle at 38% 32%, #FFF0A0 0%, #FFBE0B 48%, #FF9500 100%)'
-                : 'radial-gradient(circle at 38% 32%, #FFFDE0 0%, #FFE88A 60%, #FFD976 100%)',
+                ? 'radial-gradient(circle at 36% 30%, #FFF5A0 0%, #FFCC00 45%, #FF9500 100%)'
+                : 'radial-gradient(circle at 36% 30%, #FFFBE0 0%, #FFE878 55%, #FFD060 100%)',
               boxShadow: isSunny
-                ? '0 0 22px rgba(255,190,11,0.95), 0 0 60px rgba(255,140,0,0.55)'
-                : '0 0 14px rgba(255,220,80,0.65)',
-              transition: 'width 300ms, height 300ms',
+                ? '0 0 28px rgba(255,200,0,0.9), 0 0 70px rgba(255,140,0,0.6)'
+                : '0 0 16px rgba(255,220,80,0.7)',
+              transition: 'width 400ms, height 400ms, box-shadow 400ms',
             }}
           />
         </div>
       )}
-      {/* Direction badge */}
-      <div className="absolute top-3 left-3 rounded-full bg-white/90 backdrop-blur-sm px-3 py-1.5 text-[11px] font-outfit font-semibold text-nuit shadow-md flex items-center gap-1.5 pointer-events-none">
-        <span className="text-[#FFBE0B]">☀</span>
-        {Math.round(altDeg)}° · {card}
+
+      {/* Badge altitude + direction */}
+      <div className="absolute top-4 left-4 z-10 rounded-full bg-white/85 backdrop-blur-sm px-3 py-1.5 flex items-center gap-1.5 shadow-md pointer-events-none">
+        <span className="text-[13px]">☀</span>
+        <span className="text-[11px] font-outfit font-semibold text-nuit">
+          {Math.round(altDeg)}° {cardDir}
+        </span>
       </div>
     </>
   )

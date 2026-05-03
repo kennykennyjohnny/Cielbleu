@@ -131,41 +131,36 @@ export default function HomePage() {
         />
       </div>
 
-      {/* Voile dégradé top — lisibilité du logo */}
-      <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-creme/85 via-creme/40 to-creme/0 pointer-events-none z-10" />
+      {/* Voile dégradé top */}
+      <div className="absolute top-0 left-0 right-0 h-36 bg-gradient-to-b from-white/80 via-white/30 to-transparent pointer-events-none z-10" />
 
-      {/* Header — logo centré */}
+      {/* Header */}
       <header className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
         <div className="pt-5 pb-2 flex flex-col items-center gap-1">
-          <div className="flex items-baseline gap-1 pointer-events-auto">
-            <span className="font-playfair italic text-[28px] font-bold text-nuit tracking-tight leading-none">
-              Ciel
-            </span>
-            <span className="font-playfair italic text-[28px] font-bold text-ciel tracking-tight leading-none">
-              Bleu
-            </span>
-            <span className="ml-1 text-soleil text-xl leading-none translate-y-[-2px] inline-block">☀</span>
+          <div className="flex items-baseline gap-0.5 pointer-events-auto">
+            <span className="font-playfair italic text-[30px] font-bold text-nuit tracking-tight leading-none">Ciel</span>
+            <span className="font-playfair italic text-[30px] font-bold text-ciel tracking-tight leading-none">Bleu</span>
+            <span className="ml-1.5 text-soleil text-xl leading-none -translate-y-0.5 inline-block">☀</span>
           </div>
-          <span className="text-[10px] font-outfit text-gris uppercase tracking-[0.18em] first-letter:capitalize">
+          <span className="text-[10px] font-outfit text-gris/80 uppercase tracking-[0.2em] first-letter:capitalize">
             {TODAY_LABEL}
           </span>
         </div>
       </header>
 
-      {/* Stats en pilule — top center, sous le logo */}
+      {/* Stats pilule */}
       {!loading && (
-        <div className="absolute top-[88px] left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="rounded-full bg-white/95 backdrop-blur shadow-md px-4 py-1.5 flex items-center gap-2">
-            <span className="font-outfit text-[13px] text-nuit">
-              <span className="font-bold">{displayedPlaces.length}</span>{' '}
-              {displayedPlaces.length > 1 ? 'terrasses' : 'terrasse'}
+        <div className="absolute top-[90px] left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="rounded-full bg-white/90 backdrop-blur-md shadow-md border border-nuit/6 px-4 py-1.5 flex items-center gap-2.5">
+            <span className="font-outfit text-[12.5px] text-nuit">
+              <span className="font-bold">{displayedPlaces.length}</span>
+              {' '}{displayedPlaces.length > 1 ? 'terrasses' : 'terrasse'}
             </span>
             {sunnyCount > 0 && (
               <>
                 <span className="w-px h-3 bg-nuit/15" />
-                <span className="font-outfit text-[13px] text-soleil font-semibold flex items-center gap-1">
-                  <span>☀</span>
-                  <span>{sunnyCount}</span>
+                <span className="font-outfit text-[12.5px] font-bold flex items-center gap-1" style={{ color: '#FF8C00' }}>
+                  ☀ {sunnyCount} au soleil
                 </span>
               </>
             )}
@@ -188,8 +183,8 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Voile dégradé bottom — pour la barre de recherche */}
-      <div className="absolute bottom-0 left-0 right-0 h-44 bg-gradient-to-t from-creme/95 via-creme/50 to-creme/0 pointer-events-none z-10" />
+      {/* Voile dégradé bottom */}
+      <div className="absolute bottom-0 left-0 right-0 h-52 bg-gradient-to-t from-white/90 via-white/40 to-transparent pointer-events-none z-10" />
 
       {/* Bottom bar : filtres + search */}
       <div
@@ -205,16 +200,16 @@ export default function HomePage() {
         <div className="pointer-events-auto px-4 pb-4">
           <div className="relative max-w-md mx-auto">
             <Search
-              size={18}
+              size={16}
               className="absolute left-4 top-1/2 -translate-y-1/2 text-gris pointer-events-none"
-              strokeWidth={2.2}
+              strokeWidth={2.4}
             />
             <input
               type="text"
-              placeholder="Quartier, adresse, bar…"
+              placeholder="Bar, quartier, adresse…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-full border-0 bg-white pl-11 pr-10 py-3.5 text-sm text-nuit shadow-[0_8px_28px_rgba(27,40,56,0.18)] outline-none placeholder:text-gris focus:ring-2 focus:ring-ciel/60 font-outfit"
+              className="w-full rounded-full border-0 bg-white/95 backdrop-blur-md pl-10 pr-10 py-3.5 text-[14px] text-nuit shadow-[0_8px_32px_rgba(27,40,56,0.16)] outline-none placeholder:text-gris/70 focus:ring-2 focus:ring-ciel/50 font-outfit"
             />
             {searchQuery && (
               <button
