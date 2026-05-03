@@ -8,7 +8,9 @@
  *   SUPABASE_SERVICE_ROLE_KEY
  */
 
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
+loadEnv({ path: '.env.local' })
+
 import { createClient } from '@supabase/supabase-js'
 import { searchNearbyPlaces, getGoogleMapsUrl, type GooglePlace } from '../lib/googlePlaces'
 

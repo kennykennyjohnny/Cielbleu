@@ -81,3 +81,49 @@ body {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Slider horaire — track invisible (on dessine notre propre piste en bg) + thumb stylé */
+.cb-hour-slider {
+  height: 28px;
+  outline: none;
+}
+.cb-hour-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  background: transparent;
+  border-radius: 9999px;
+}
+.cb-hour-slider::-moz-range-track {
+  height: 8px;
+  background: transparent;
+  border-radius: 9999px;
+}
+.cb-hour-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #FFFDF7;
+  border: 3px solid #1B2838;
+  box-shadow: 0 4px 10px rgba(27, 40, 56, 0.25);
+  cursor: grab;
+  margin-top: -9px;
+  transition: transform 0.15s ease;
+}
+.cb-hour-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.15);
+}
+.cb-hour-slider::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #FFFDF7;
+  border: 3px solid #1B2838;
+  box-shadow: 0 4px 10px rgba(27, 40, 56, 0.25);
+  cursor: grab;
+}
+.cb-hour-slider::-moz-range-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.15);
+}

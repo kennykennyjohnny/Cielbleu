@@ -54,3 +54,6 @@ logs
 
 # Claude Code
 .claude/
+
+# Données sources lourdes (APUR, etc.) — versionner uniquement le résultat traité
+data/source/

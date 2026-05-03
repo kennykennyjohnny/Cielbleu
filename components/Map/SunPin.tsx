@@ -1,4 +1,5 @@
 // Factory DOM pour les markers Mapbox — pas de React (évite les fuites mémoire)
+// Zone tactile élargie (60×60) au-dessus du visuel (38×46) pour le mobile.
 
 type Palette = {
   ring: string
@@ -23,17 +24,30 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
   const s = Math.max(0, Math.min(5, Math.round(score)))
   const p = PALETTES[s]
 
-  // Wrapper (sert d'ancrage pour le halo + pointe)
+  // Wrapper invisible élargi pour la zone tactile (60×60) — la pointe est au centre-bas du visuel
+  const hit = document.createElement('div')
+  hit.setAttribute('data-score', String(s))
+  hit.style.cssText = `
+    position: relative;
+    width: 60px;
+    height: 60px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  `
+
+  // Conteneur visuel (38×46)
   const wrap = document.createElement('div')
-  wrap.setAttribute('data-score', String(s))
   wrap.style.cssText = `
     position: relative;
     width: 38px;
     height: 46px;
-    cursor: pointer;
-    user-select: none;
     transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
     will-change: transform;
+    pointer-events: none;
   `
 
   // Halo (score >= 4 uniquement)
@@ -100,7 +114,7 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
   badge.textContent = String(s)
   wrap.appendChild(badge)
 
-  // Pointe en bas (SVG triangle pour rendu propre)
+  // Pointe en bas
   const tail = document.createElement('div')
   tail.style.cssText = `
     position: absolute;
@@ -116,21 +130,25 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
   `
   wrap.appendChild(tail)
 
-  // Interactions
-  wrap.addEventListener('click', (e) => {
+  hit.appendChild(wrap)
+
+  // Click via pointerdown (plus fiable sur mobile que click sur DOM marker Mapbox)
+  const fire = (e: Event) => {
     e.stopPropagation()
+    e.preventDefault()
     onClick()
-  })
+  }
+  hit.addEventListener('click', fire)
+  hit.addEventListener('touchend', fire, { passive: false })
 
-  wrap.addEventListener('mouseenter', () => {
+  hit.addEventListener('mouseenter', () => {
     wrap.style.transform = 'translateY(-3px) scale(1.08)'
-    wrap.style.zIndex = '10'
+    hit.style.zIndex = '10'
   })
-
-  wrap.addEventListener('mouseleave', () => {
+  hit.addEventListener('mouseleave', () => {
     wrap.style.transform = ''
-    wrap.style.zIndex = ''
+    hit.style.zIndex = ''
   })
 
-  return wrap
+  return hit
 }

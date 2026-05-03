@@ -22,6 +22,8 @@ export interface Place {
   // Champs calculés côté client
   currentScore?: number
   distance?: number
+  // { month → { "HH:MM" → score } } — chargé en lot dans HomePage
+  scoresByMonth?: Record<number, Record<string, number>>
 }
 
 export interface SunScore {
