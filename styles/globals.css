@@ -77,15 +77,16 @@ body {
   to   { transform: translateY(0); }
 }
 
-/* Soleil 3D — rayons rotatifs */
+/* Soleil 3D — rayons rotatifs (pas de translate : l'élément est positionné par width+top+left) */
 @keyframes cb-sun-spin {
-  to { transform: translate(-50%, -50%) rotate(360deg); }
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
-/* Soleil 3D — pulsation halo corona */
+/* Soleil 3D — pulsation halo corona (garde le translate(-50%,-50%) de l'élément) */
 @keyframes cb-sun-glow {
-  0%, 100% { opacity: 0.85; transform: translate(-50%, -50%) scale(1); }
-  50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
+  0%, 100% { opacity: 0.88; transform: translate(-50%, -50%) scale(1); }
+  50%       { opacity: 1;   transform: translate(-50%, -50%) scale(1.10); }
 }
 
 /* Désactive le tap-highlight bleu mobile */

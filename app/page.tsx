@@ -47,6 +47,7 @@ export default function HomePage() {
         .select('*')
         .not('lat', 'is', null)
         .not('lng', 'is', null)
+        .limit(10000)   // PostgREST default = 1000 ; on force 10k pour voir tous les lieux
 
       if (errPlaces) {
         console.error('Erreur chargement lieux:', errPlaces.message)
