@@ -77,6 +77,17 @@ body {
   to   { transform: translateY(0); }
 }
 
+/* Soleil 3D — rayons rotatifs */
+@keyframes cb-sun-spin {
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Soleil 3D — pulsation halo corona */
+@keyframes cb-sun-glow {
+  0%, 100% { opacity: 0.85; transform: translate(-50%, -50%) scale(1); }
+  50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
+}
+
 /* Désactive le tap-highlight bleu mobile */
 * {
   -webkit-tap-highlight-color: transparent;

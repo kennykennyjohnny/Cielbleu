@@ -19,21 +19,22 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Grille de 9 points couvrant Paris intra-muros (rayon 3km chacun)
+// Grille 4×4 — couvre Paris intra-muros à rayon 1500m (densité x3 vs ancienne grille 9pts/3km)
+// ~16 × 5 types × 60 résultats max = jusqu'à 4800 lieux potentiels
 const PARIS_GRID = [
-  { lat: 48.8566, lng: 2.3522 }, // Centre
-  { lat: 48.8756, lng: 2.3000 }, // NW
-  { lat: 48.8756, lng: 2.4000 }, // NE
-  { lat: 48.8400, lng: 2.3000 }, // SW
-  { lat: 48.8400, lng: 2.4000 }, // SE
-  { lat: 48.8756, lng: 2.3522 }, // N
-  { lat: 48.8400, lng: 2.3522 }, // S
-  { lat: 48.8566, lng: 2.2800 }, // W
-  { lat: 48.8566, lng: 2.4200 }, // E
+  // Ligne Nord
+  { lat: 48.878, lng: 2.295 }, { lat: 48.878, lng: 2.332 }, { lat: 48.878, lng: 2.369 }, { lat: 48.878, lng: 2.406 },
+  // Ligne Centre-Nord  
+  { lat: 48.860, lng: 2.295 }, { lat: 48.860, lng: 2.332 }, { lat: 48.860, lng: 2.369 }, { lat: 48.860, lng: 2.406 },
+  // Ligne Centre-Sud
+  { lat: 48.843, lng: 2.295 }, { lat: 48.843, lng: 2.332 }, { lat: 48.843, lng: 2.369 }, { lat: 48.843, lng: 2.406 },
+  // Ligne Sud
+  { lat: 48.826, lng: 2.295 }, { lat: 48.826, lng: 2.332 }, { lat: 48.826, lng: 2.369 }, { lat: 48.826, lng: 2.406 },
 ]
 
-const PLACE_TYPES = ['bar', 'restaurant', 'cafe', 'park'] as const
-const SEARCH_RADIUS = 3000 // mètres
+// Types : bar + restaurant + cafe + park + night_club
+const PLACE_TYPES = ['bar', 'restaurant', 'cafe', 'park', 'night_club'] as const
+const SEARCH_RADIUS = 1500 // mètres — maillage plus fin = moins de doublons, plus de précision
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -106,7 +107,11 @@ async function upsertPlaces(places: GooglePlace[], type: string) {
         google_maps_url: getGoogleMapsUrl(p.place_id),
         arrondissement: extractArrondissement(p.vicinity),
         has_terrace: null,
-        terrace_probability: 0.5,
+        // Score probabilité terrasse : les bars/cafés ont statistiquement plus de terrasses
+        terrace_probability: p.types.includes('park') ? 0.99
+          : p.types.includes('bar') || p.types.includes('night_club') ? 0.72
+          : p.types.includes('cafe') ? 0.70
+          : 0.55,
       }
     })
 
