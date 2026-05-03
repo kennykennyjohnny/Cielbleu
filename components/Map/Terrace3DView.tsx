@@ -188,11 +188,11 @@ function styleMap(map: mapboxgl.Map) {
       paint: {
         'fill-extrusion-color': [
           'interpolate', ['linear'], ['get', 'height'],
-          0,  '#EDE3CE',
-          10, '#E2D6BC',
-          22, '#D3C7A6',
-          40, '#BEB090',
-          70, '#A89A7A',
+          0,  '#C8BD9E',
+          10, '#BDB090',
+          22, '#B0A480',
+          40, '#9E9070',
+          70, '#877A5E',
         ],
         'fill-extrusion-height': ['get', 'height'],
         'fill-extrusion-base':   ['get', 'min_height'],
@@ -220,10 +220,12 @@ function styleMap(map: mapboxgl.Map) {
 
 function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFeature, score: number) {
   if (!feature.geometry) return
-  const hlColor   = score >= 4 ? '#FFD060' : score >= 3 ? '#F0C878' : '#DDD0A8'
-  const hlOpacity = score >= 4 ? 0.62 : 0.48
-  const height    = (feature.properties?.height    as number | null) ?? 18
-  const minH      = (feature.properties?.min_height as number | null) ?? 0
+  // Couleurs très lumineuses pour que le bâtiment cible ressorte clairement
+  const hlColor  = score >= 5 ? '#FFF040' : score >= 4 ? '#FFE030' : score >= 3 ? '#F5D060' : '#E2CA88'
+  const hlOpacity = 0.84
+  const outlineColor = score >= 4 ? '#FFB800' : '#C8A030'
+  const height   = (feature.properties?.height    as number | null) ?? 18
+  const minH     = (feature.properties?.min_height as number | null) ?? 0
 
   const geoData: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
@@ -237,19 +239,36 @@ function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFea
       map.setPaintProperty('cb-bar-bld-hl', 'fill-extrusion-color', hlColor)
       map.setPaintProperty('cb-bar-bld-hl', 'fill-extrusion-opacity', hlOpacity)
     }
+    if (map.getLayer('cb-bar-outline')) {
+      map.setPaintProperty('cb-bar-outline', 'line-color', outlineColor)
+    }
     return
   }
+
   map.addSource('cb-bar-bld', { type: 'geojson', data: geoData })
+
+  // Extrusion colorée — vertical-gradient false pour garder la couleur uniforme sur toute la hauteur
   map.addLayer({
     id:     'cb-bar-bld-hl',
     source: 'cb-bar-bld',
     type:   'fill-extrusion',
     paint: {
-      'fill-extrusion-color':   hlColor,
-      'fill-extrusion-height':  height,
-      'fill-extrusion-base':    minH,
-      'fill-extrusion-opacity': hlOpacity,
-      'fill-extrusion-vertical-gradient': true,
+      'fill-extrusion-color':              hlColor,
+      'fill-extrusion-height':             height,
+      'fill-extrusion-base':               minH,
+      'fill-extrusion-opacity':            hlOpacity,
+      'fill-extrusion-vertical-gradient':  false,
+    },
+  })
+
+  // Contour lumineux au sol (délimite clairement le bâtiment)
+  map.addLayer({
+    id: 'cb-bar-outline', source: 'cb-bar-bld', type: 'line',
+    paint: {
+      'line-color':   outlineColor,
+      'line-width':   3,
+      'line-blur':    2,
+      'line-opacity': 0.95,
     },
   })
 }
@@ -399,13 +418,12 @@ function applySunLighting(map: mapboxgl.Map, lat: number, lng: number, date: Dat
   if (isDay) {
     const t = Math.max(0, Math.min(1, altDeg / 55))
     // Intensité élevée pour ombres bien visibles
-    // Intensité haute dès le matin → ombres toujours bien visibles
-    const intensity = Math.min(1.0, 0.58 + t * 0.42)
+    // Intensité TOUJOURS élevée → ombres prononcées en toutes circonstances
+    const intensity = 1.0
     // Couleur : dorée au lever/coucher, blanche-chaude en journée
     const color = altDeg < 6 ? '#F2C080' : score >= 4 ? '#FFFBD0' : '#FFF6E8'
-    // Angle polaire : plus horizontal → ombres latérales dramatiques
-    // mid-day(65°) → 48° ; 3pm(45°) → 60° ; sunset(20°) → 76°
-    const polar = Math.min(76, Math.max(22, 88 - altDeg * 0.62))
+    // Polaire très horizontal (58–82°) = ombres latérales longues et dramatiques
+    const polar = Math.min(82, Math.max(58, 90 - altDeg * 0.30))
 
     map.setLight({
       anchor: 'map',
@@ -438,8 +456,10 @@ function SunOverlay({
   const rel   = (((azDeg - bearing + 540) % 360) - 180)
   const inFov = Math.abs(rel) < 115
   const sunX  = 50 + (rel / 115) * 42             // 8%–92% de la largeur
-  // Y recalibré pour pitch 60°  (horizon ~46% du haut)
-  const sunY  = Math.max(5, 44 - altDeg * 0.62)
+  // Y recalibré pour pitch 65°  (horizon ~42% du haut)
+  const sunY  = Math.max(5, 42 - altDeg * 0.58)
+  // La façade face à la caméra est éclairée si le soleil est derrière la caméra (<90°)
+  const isFrontLit = isDay && Math.abs(rel) < 92
 
   const cardDir = azDeg < 45 ? 'N' : azDeg < 135 ? 'E' : azDeg < 225 ? 'S' : azDeg < 315 ? 'O' : 'N'
 
@@ -531,7 +551,17 @@ function SunOverlay({
             {Math.round(altDeg)}° {cardDir}
           </span>
         </div>
-        {isSunny && (
+        {/* Badge état façade */}
+        <div className="rounded-full px-2.5 py-1 shadow-lg" style={{
+          background: isFrontLit ? '#FFE030' : 'rgba(27,40,56,0.72)',
+        }}>
+          <span className="text-[10px] font-outfit font-black tracking-wide" style={{
+            color: isFrontLit ? '#1B2838' : '#A8C0D8',
+          }}>
+            {isFrontLit ? '☀ FAÇADE ÉCLAIRÉE' : '🌔 FAÇADE À L’OMBRE'}
+          </span>
+        </div>
+        {isSunny && isFrontLit && (
           <div className="rounded-full px-2.5 py-1 shadow-lg" style={{ background: '#FFBE0B' }}>
             <span className="text-[10px] font-outfit font-black text-nuit tracking-wide">SUNNY</span>
           </div>

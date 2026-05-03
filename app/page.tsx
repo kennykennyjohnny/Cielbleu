@@ -132,42 +132,45 @@ export default function HomePage() {
         />
       </div>
 
-      {/* Voile dégradé top */}
-      <div className="absolute top-0 left-0 right-0 h-36 bg-gradient-to-b from-white/80 via-white/30 to-transparent pointer-events-none z-10" />
+      {/* ── Header app bleu CielBleu ── */}
+      <header className="absolute top-0 left-0 right-0 z-20">
+        <div
+          className="bg-ciel shadow-[0_2px_24px_rgba(58,134,255,0.55)]"
+          style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 14px)', paddingBottom: 11 }}
+        >
+          <div className="flex items-center justify-between px-5">
+            {/* Logo */}
+            <div className="flex items-baseline gap-0">
+              <span className="font-playfair italic text-[27px] font-bold text-white tracking-tight leading-none">Ciel</span>
+              <span className="font-playfair italic text-[27px] font-bold text-soleil tracking-tight leading-none">Bleu</span>
+              <span className="ml-1 text-white/90 text-[18px] leading-none -translate-y-0.5 inline-block">☀</span>
+            </div>
 
-      {/* Header */}
-      <header className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
-        <div className="pt-5 pb-2 flex flex-col items-center gap-1">
-          <div className="flex items-baseline gap-0.5 pointer-events-auto">
-            <span className="font-playfair italic text-[30px] font-bold text-nuit tracking-tight leading-none">Ciel</span>
-            <span className="font-playfair italic text-[30px] font-bold text-ciel tracking-tight leading-none">Bleu</span>
-            <span className="ml-1.5 text-soleil text-xl leading-none -translate-y-0.5 inline-block">☀</span>
-          </div>
-          <span className="text-[10px] font-outfit text-gris/80 uppercase tracking-[0.2em] first-letter:capitalize">
-            {TODAY_LABEL}
-          </span>
-        </div>
-      </header>
-
-      {/* Stats pilule */}
-      {!loading && (
-        <div className="absolute top-[90px] left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="rounded-full bg-white/90 backdrop-blur-md shadow-md border border-nuit/6 px-4 py-1.5 flex items-center gap-2.5">
-            <span className="font-outfit text-[12.5px] text-nuit">
-              <span className="font-bold">{displayedPlaces.length}</span>
-              {' '}{displayedPlaces.length > 1 ? 'terrasses' : 'terrasse'}
-            </span>
-            {sunnyCount > 0 && (
-              <>
-                <span className="w-px h-3 bg-nuit/15" />
-                <span className="font-outfit text-[12.5px] font-bold flex items-center gap-1" style={{ color: '#FF8C00' }}>
-                  ☀ {sunnyCount} au soleil
+            {/* Stats inline */}
+            {!loading && (
+              <div className="flex items-center gap-2">
+                <span className="font-outfit text-[12px] text-white/75">
+                  <span className="font-bold text-white">{displayedPlaces.length}</span>
+                  {' '}{displayedPlaces.length > 1 ? 'terrasses' : 'terrasse'}
                 </span>
-              </>
+                {sunnyCount > 0 && (
+                  <>
+                    <span className="w-px h-3 bg-white/30" />
+                    <span className="font-outfit text-[12px] font-bold flex items-center gap-1 text-soleil">
+                      ☀ {sunnyCount}
+                    </span>
+                  </>
+                )}
+              </div>
             )}
           </div>
+          <p className="text-[9.5px] text-center font-outfit text-white/50 uppercase tracking-[0.22em] mt-0.5 first-letter:capitalize">
+            {TODAY_LABEL}
+          </p>
         </div>
-      )}
+        {/* Sweep dégradé bleu → transparent */}
+        <div className="h-8 bg-gradient-to-b from-ciel/30 to-transparent pointer-events-none" />
+      </header>
 
       {/* État vide */}
       {!loading && displayedPlaces.length === 0 && (
@@ -184,18 +187,23 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Voile dégradé bottom */}
-      <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-creme/85 via-creme/30 to-transparent pointer-events-none z-10" />
-
-      {/* Floating bottom card */}
+      {/* ─── Floating bottom card ─── */}
       <div
         className="absolute bottom-0 inset-x-0 z-20 pointer-events-none"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
       >
-        <div className="pointer-events-auto mx-4 mb-2 rounded-3xl bg-white/94 backdrop-blur-xl border border-white/75 shadow-[0_8px_40px_rgba(27,40,56,0.15),0_1px_4px_rgba(27,40,56,0.06)] overflow-hidden">
+        <div className="pointer-events-auto mx-4 mb-2 rounded-3xl overflow-hidden"
+          style={{
+            background: 'rgba(255,253,247,0.96)',
+            backdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 40px rgba(27,40,56,0.18), 0 1px 4px rgba(27,40,56,0.06)',
+          }}
+        >
+          {/* Bandeau bleu en haut de la card */}
+          <div className="h-1 bg-ciel rounded-t-3xl" />
 
           {/* Filtres centrés */}
-          <div className="pt-3.5 pb-3">
+          <div className="pt-3 pb-2.5">
             <Filters activeFilters={activeFilters} onToggle={toggleFilter} />
           </div>
 
@@ -221,7 +229,7 @@ export default function HomePage() {
                 <button
                   onClick={() => setSearchQuery('')}
                   aria-label="Effacer"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-gris hover:bg-nuit/8 transition"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-gris hover:bg-nuit/[0.08] transition"
                 >
                   <X size={14} strokeWidth={2.2} />
                 </button>

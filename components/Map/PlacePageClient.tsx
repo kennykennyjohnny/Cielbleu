@@ -116,6 +116,15 @@ function ScoreRing({ score, theme, size = 100 }: { score: number; theme: ScoreTh
   )
 }
 
+// ── Photo helper ─────────────────────────────────────────────────────────────
+function extractPhotoRef(url: string): string | null {
+  try {
+    return new URL(url).searchParams.get('photo_reference')
+  } catch {
+    return null
+  }
+}
+
 // ── Composant principal ────────────────────────────────────────────────────
 
 interface Props {
@@ -221,6 +230,35 @@ export default function PlacePageClient({ place, scores }: Props) {
           </div>
         </div>
       </div>
+
+      {/* ── Photos Google Maps ── */}
+      {place.photos && place.photos.length > 0 && (() => {
+        const refs = place.photos.map(extractPhotoRef).filter(Boolean) as string[]
+        if (!refs.length) return null
+        return (
+          <div className="relative z-20 -mt-6 px-4">
+            <div
+              className="flex gap-2.5 overflow-x-auto scrollbar-none pb-1"
+              style={{ scrollSnapType: 'x mandatory' }}
+            >
+              {refs.map((ref, i) => (
+                <div
+                  key={i}
+                  className="shrink-0 rounded-2xl overflow-hidden shadow-[0_4px_18px_rgba(27,40,56,0.22)]"
+                  style={{ width: 185, height: 124, scrollSnapAlign: 'start' }}
+                >
+                  <img
+                    src={`/api/photo?ref=${encodeURIComponent(ref)}&w=400`}
+                    alt={`${place.name} photo ${i + 1}`}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ─── CONTENU ── */}
       <div className="relative z-10 mx-auto max-w-xl px-3 space-y-3" style={{ paddingBottom: 'max(56px, env(safe-area-inset-bottom, 56px))' }}>
