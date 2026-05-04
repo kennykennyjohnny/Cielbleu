@@ -1,15 +1,14 @@
 'use client'
 
 /**
- * Terrace3DView v5 — "Vous êtes dans la rue, face au bar."
+ * Terrace3DView v7 — "Vous êtes dans la rue, face au bar."
  *
- * v5 :
- *  - Pitch 78° + zoom 20 = vue rue, on lève les yeux vers la façade
- *  - Fond de ciel CSS dynamique (bleu jour / orange coucher / nuit étoilée)
- *  - SunShadowBanner : grande bande lisible (éclairée = dorée, ombre = bleue nuit)
- *  - buildingColor : doré-vif si score élevé, foncé pour voisins → contraste fort
- *  - Terrasse : dorée si ensoleillée, bleu-acier si à l'ombre
- *  - SunDisc dans le ciel à la bonne position
+ * v7 (robustesse) :
+ *  - querySourceFeatures au lieu de queryRenderedFeatures
+ *    → pas de dépendance sur le viewport, fonctionne même avec pitch élevé
+ *  - Orientation déclenchée sur sourcedata + idle + timeouts (triple sécurité)
+ *  - Nettoyage propre des listeners au démontage
+ *  - Google Maps warm-stone palette, pitch 72°, zoom 19.5
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -23,7 +22,7 @@ interface Props {
   date?: Date
 }
 
-const STREET_OFFSET_M = 32 // 32 m en rue = on voit toute la façade
+const STREET_OFFSET_M = 30  // distance caméra ← façade en rue
 
 interface NearestBuilding {
   bearing: number
@@ -51,8 +50,8 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
       container: containerRef.current,
       style: 'mapbox://styles/mapbox/light-v11',
       center: [lng, lat],
-      zoom: 19.6,
-      pitch: 76,
+      zoom: 19.5,
+      pitch: 72,
       bearing: 180,
       scrollZoom: false, boxZoom: false, doubleClickZoom: false,
       dragRotate: false, keyboard: false,
@@ -60,32 +59,56 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
       attributionControl: false, fadeDuration: 0,
     })
 
+    // Timeouts pour cleanup
+    const timers: ReturnType<typeof setTimeout>[] = []
+
     map.on('style.load', () => {
       styleMap(map)
       applySunLighting(map, lat, lng, dateRef.current, scoreRef.current)
-      map.once('idle', () => triggerBearing(1))
 
-      function triggerBearing(attempt: number) {
+      let oriented = false
+
+      const orient = () => {
+        if (oriented) return
         const result = findNearestBuilding(map, lat, lng)
-        if (result) {
-          const [cLng, cLat] = offsetCenter(lat, lng, result.bearing, -STREET_OFFSET_M)
-          map.jumpTo({ center: [cLng, cLat], bearing: result.bearing })
-          setBearing(result.bearing)
-          highlightBuilding(map, result.feature, scoreRef.current)
-          addTerraceZone(map, lat, lng, result.bearing, scoreRef.current)
-          setResolvedScore(scoreRef.current)
-        } else if (attempt < 9) {
-          // Retry: give the tile renderer more time on first attempts, then slow down
-          setTimeout(() => triggerBearing(attempt + 1), attempt <= 3 ? 300 : 700)
-        }
+        if (!result) return
+        oriented = true
+
+        const [cLng, cLat] = offsetCenter(lat, lng, result.bearing, -STREET_OFFSET_M)
+        map.jumpTo({ center: [cLng, cLat], bearing: result.bearing })
+        setBearing(result.bearing)
+        highlightBuilding(map, result.feature, scoreRef.current)
+        addTerraceZone(map, lat, lng, result.bearing, scoreRef.current)
+        setResolvedScore(scoreRef.current)
       }
+
+      // 1. Dès qu'une tuile composite est totalement chargée
+      const onSourceData = (e: mapboxgl.MapSourceDataEvent) => {
+        if (oriented) { map.off('sourcedata', onSourceData); return }
+        if (e.sourceId === 'composite' && e.isSourceLoaded) orient()
+      }
+      map.on('sourcedata', onSourceData)
+
+      // 2. À chaque idle (toutes tuiles du viewport chargées)
+      const onIdle = () => { if (!oriented) orient() }
+      map.on('idle', onIdle)
+
+      // 3. Fallbacks temporels pour connexions lentes
+      timers.push(setTimeout(orient, 400))
+      timers.push(setTimeout(orient, 900))
+      timers.push(setTimeout(orient, 1800))
+      timers.push(setTimeout(orient, 3500))
     })
 
     const pinEl = buildPin()
     new mapboxgl.Marker({ element: pinEl, anchor: 'bottom' }).setLngLat([lng, lat]).addTo(map)
 
     mapRef.current = map
-    return () => { map.remove(); mapRef.current = null }
+    return () => {
+      timers.forEach(clearTimeout)
+      map.remove()
+      mapRef.current = null
+    }
   }, [lat, lng]) // eslint-disable-line
 
   useEffect(() => {
@@ -412,41 +435,64 @@ function applySunLighting(map: mapboxgl.Map, lat: number, lng: number, date: Dat
 
 function findNearestBuilding(map: mapboxgl.Map, lat: number, lng: number): NearestBuilding | null {
   let features: mapboxgl.MapboxGeoJSONFeature[] = []
+
+  // Essai principal : querySourceFeatures — cache de tuiles, sans contrainte viewport
   try {
-    const pinPx = map.project([lng, lat])
-    const pad   = 340  // wider query to find buildings even if bar is near edge of tile
-    const bbox: [mapboxgl.PointLike, mapboxgl.PointLike] = [
-      [pinPx.x - pad, pinPx.y - pad],
-      [pinPx.x + pad, pinPx.y + pad],
-    ]
-    features = map.queryRenderedFeatures(bbox, { layers: ['cb-3d-buildings'] })
-  } catch { return null }
-  if (!features?.length) return null
+    features = map.querySourceFeatures('composite', {
+      sourceLayer: 'building',
+      filter: ['==', ['get', 'extrude'], 'true'],
+    })
+  } catch { /* noop */ }
+
+  // Fallback : queryRenderedFeatures sur notre couche si composite vide
+  if (!features.length && map.getLayer('cb-3d-buildings')) {
+    try {
+      const pinPx = map.project([lng, lat])
+      const pad = 400
+      const bbox: [mapboxgl.PointLike, mapboxgl.PointLike] = [
+        [pinPx.x - pad, pinPx.y - pad],
+        [pinPx.x + pad, pinPx.y + pad],
+      ]
+      features = map.queryRenderedFeatures(bbox, { layers: ['cb-3d-buildings'] })
+    } catch { return null }
+  }
+
+  if (!features.length) return null
 
   const cosLat = Math.cos((lat * Math.PI) / 180)
+  const maxDeg = 150 / 111320   // filtre géo : 150 m autour du bar
+
   let best: NearestBuilding | null = null
 
   for (const f of features) {
     const g = f.geometry
     if (!g) continue
-    const rings: number[][][] = g.type === 'Polygon'
-      ? [(g as GeoJSON.Polygon).coordinates[0] as number[][]]
-      : g.type === 'MultiPolygon'
-        ? (g as GeoJSON.MultiPolygon).coordinates.map(p => p[0] as number[][])
-        : []
+    const rings: number[][][] =
+      g.type === 'Polygon'
+        ? [(g as GeoJSON.Polygon).coordinates[0] as number[][]]
+        : g.type === 'MultiPolygon'
+          ? (g as GeoJSON.MultiPolygon).coordinates.map(p => p[0] as number[][])
+          : []
 
     for (const ring of rings) {
       if (ring.length < 4) continue
+
+      // Filtre rapide : centroïde de l'anneau doit être proche
+      const sumLng = ring.reduce((s, c) => s + c[0], 0) / ring.length
+      const sumLat = ring.reduce((s, c) => s + c[1], 0) / ring.length
+      if (Math.abs(sumLng - lng) > maxDeg * 2 || Math.abs(sumLat - lat) > maxDeg * 2) continue
+
       let bestEdgeDist = Infinity
       let bestBearing  = 0
 
       for (let i = 0; i < ring.length - 1; i++) {
         const [ax, ay] = ring[i]
         const [bx, by] = ring[i + 1]
-        const mx  = ((ax + bx) / 2 - lng) * 111320 * cosLat
-        const my  = ((ay + by) / 2 - lat) * 111320
-        const d   = Math.sqrt(mx * mx + my * my)
-        if (d < 1 || d > 55) continue
+        const mx = ((ax + bx) / 2 - lng) * 111320 * cosLat
+        const my = ((ay + by) / 2 - lat) * 111320
+        const d  = Math.sqrt(mx * mx + my * my)
+        if (d < 1 || d > 80) continue   // arête trop proche ou trop loin
+
         const ex  = (bx - ax) * 111320 * cosLat
         const ey  = (by - ay) * 111320
         const el  = Math.sqrt(ex * ex + ey * ey)
