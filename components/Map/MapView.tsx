@@ -6,7 +6,8 @@
  * Pins colorés par score (0-5), regroupés en clusters au dézoom.
  */
 
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import type { Place } from '@/types'
@@ -128,6 +129,11 @@ interface Props {
   onPlaceSelect: (place: Place | null) => void
 }
 
+interface AmeniteInfo {
+  type: 'fontaine' | 'sanisette'
+  props: Record<string, unknown>
+}
+
 export default function MapView({ places, onPlaceSelect }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
@@ -135,6 +141,8 @@ export default function MapView({ places, onPlaceSelect }: Props) {
   const onSelectRef   = useRef(onPlaceSelect)
   placesRef.current   = places
   onSelectRef.current = onPlaceSelect
+
+  const [amenite, setAmenite] = useState<AmeniteInfo | null>(null)
 
   // GeoJSON mis à jour dès que places change
   const geojson = useMemo((): GeoJSON.FeatureCollection => ({
@@ -291,12 +299,53 @@ export default function MapView({ places, onPlaceSelect }: Props) {
       map.on('mouseleave', 'clusters',    () => { map.getCanvas().style.cursor = '' })
       map.on('mouseenter', 'places-pins', () => { map.getCanvas().style.cursor = 'pointer' })
       map.on('mouseleave', 'places-pins', () => { map.getCanvas().style.cursor = '' })
+
+      // Curseurs + clics fontaines / sanisettes
+      map.on('mouseenter', 'fontaines-layer',  () => { map.getCanvas().style.cursor = 'pointer' })
+      map.on('mouseleave', 'fontaines-layer',  () => { map.getCanvas().style.cursor = '' })
+      map.on('mouseenter', 'sanisettes-layer', () => { map.getCanvas().style.cursor = 'pointer' })
+      map.on('mouseleave', 'sanisettes-layer', () => { map.getCanvas().style.cursor = '' })
+
+      map.on('click', 'fontaines-layer', (e) => {
+        e.originalEvent.stopPropagation()
+        const f = e.features?.[0]
+        if (f) setAmenite({ type: 'fontaine', props: f.properties ?? {} })
+      })
+      map.on('click', 'sanisettes-layer', (e) => {
+        e.originalEvent.stopPropagation()
+        const f = e.features?.[0]
+        if (f) setAmenite({ type: 'sanisette', props: f.properties ?? {} })
+      })
+
+      // Labels EAU / WC au zoom 16+
+      map.addLayer({
+        id: 'fontaines-label', type: 'symbol', source: 'fontaines',
+        filter: ['==', ['get', 'dispo'], 'OUI'], minzoom: 16,
+        layout: { 'text-field': 'EAU', 'text-size': 8,
+          'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
+          'text-offset': [0, 1.2], 'text-anchor': 'top', 'text-allow-overlap': false },
+        paint: { 'text-color': '#3A86FF',
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0, 16.5, 0.8] as mapboxgl.Expression,
+          'text-halo-color': '#ffffff', 'text-halo-width': 1 },
+      })
+      map.addLayer({
+        id: 'sanisettes-label', type: 'symbol', source: 'sanisettes',
+        filter: ['==', ['get', 'statut'], 'En service'], minzoom: 16,
+        layout: { 'text-field': 'WC', 'text-size': 8,
+          'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
+          'text-offset': [0, 1.2], 'text-anchor': 'top', 'text-allow-overlap': false },
+        paint: { 'text-color': '#52B788',
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0, 16.5, 0.8] as mapboxgl.Expression,
+          'text-halo-color': '#ffffff', 'text-halo-width': 1 },
+      })
     })
 
     // Clic fond → déselection
     map.on('click', (e) => {
-      const hits = map.queryRenderedFeatures(e.point, { layers: ['places-pins', 'clusters'] })
-      if (!hits.length) onSelectRef.current(null)
+      const hits = map.queryRenderedFeatures(e.point, {
+        layers: ['places-pins', 'clusters', 'fontaines-layer', 'sanisettes-layer'],
+      })
+      if (!hits.length) { onSelectRef.current(null); setAmenite(null) }
     })
 
     mapRef.current = map
@@ -314,5 +363,63 @@ export default function MapView({ places, onPlaceSelect }: Props) {
     else map.once('style.load', update)
   }, [geojson])
 
-  return <div ref={containerRef} className="w-full h-full" />
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="absolute inset-0" />
+      {amenite && <FicheAmenite amenite={amenite} onClose={() => setAmenite(null)} />}
+    </div>
+  )
+}
+
+// ─── FicheAmenite ─────────────────────────────────────────────────────────────
+
+function FicheAmenite({ amenite, onClose }: { amenite: AmeniteInfo; onClose: () => void }) {
+  const p          = amenite.props
+  const isFontaine = amenite.type === 'fontaine'
+  const status     = isFontaine
+    ? (p.dispo === 'OUI' ? 'Disponible' : 'Indisponible')
+    : (String(p.statut ?? '') === 'En service' ? 'En service' : 'Hors service')
+  const statusOk = status === 'Disponible' || status === 'En service'
+  const potable  = isFontaine && p.potable ? (String(p.potable) === 'OUI' ? 'Eau potable' : null) : null
+  const pmr      = !isFontaine && p.acces_pmr ? (String(p.acces_pmr).toLowerCase() === 'oui' ? 'Accessible PMR' : null) : null
+  const horaire  = !isFontaine && p.horaire_ouverture ? String(p.horaire_ouverture) : null
+  const model    = isFontaine && p.modele ? String(p.modele) : null
+
+  return (
+    <div className="absolute bottom-4 left-4 z-20 pointer-events-auto" style={{ maxWidth: 320 }}>
+      <div className="rounded-2xl overflow-hidden"
+        style={{ background: 'rgba(255,253,247,0.97)', backdropFilter: 'blur(20px)',
+          boxShadow: '0 8px 32px rgba(11,31,58,0.18), 0 2px 8px rgba(11,31,58,0.10)' }}>
+        <div className="px-4 pt-4 pb-3 flex items-center gap-3"
+          style={{ borderBottom: '1px solid rgba(11,31,58,0.08)' }}>
+          <span className="text-2xl">{isFontaine ? '💧' : '🚻'}</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-playfair text-[15px] font-bold" style={{ color: '#0b1f3a' }}>
+              {isFontaine ? 'Fontaine à boire' : 'Sanisette'}
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[13px]"
+            style={{ background: 'rgba(11,31,58,0.08)', color: '#1B2838' }}
+            aria-label="Fermer">✕</button>
+        </div>
+        <div className="px-4 py-3 flex flex-wrap gap-2">
+          <Chip color={statusOk ? '#3D9A70' : '#E05252'}>{status}</Chip>
+          {potable && <Chip color="#3A86FF">💧 {potable}</Chip>}
+          {pmr     && <Chip color="#7B61FF">♿ {pmr}</Chip>}
+          {horaire && <Chip color="#F77F00">🕐 {horaire}</Chip>}
+          {model   && <Chip color="#8D99AE">{model}</Chip>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Chip({ children, color }: { children: ReactNode; color: string }) {
+  return (
+    <span className="font-outfit text-[11px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1"
+      style={{ background: color + '18', color, border: `1px solid ${color}30` }}>
+      {children}
+    </span>
+  )
 }
