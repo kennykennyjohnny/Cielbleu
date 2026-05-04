@@ -1,5 +1,5 @@
 export type PlaceType = 'bar' | 'restaurant' | 'cafe' | 'park'
-export type FilterType = 'sun' | 'bar' | 'restaurant' | 'cafe' | 'park'
+export type FilterType = 'sun' | 'open' | 'bar' | 'restaurant' | 'cafe' | 'park'
 
 export interface Place {
   id: string

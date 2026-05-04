@@ -74,14 +74,19 @@ function drawPinImage(score: number): { width: number; height: number; data: Uin
   ctx.stroke()
   ctx.restore()
 
-  // ☀ + score number — drawn at normal orientation (center CX, CY)
+  // icon + score — drawn at normal orientation (center CX, CY)
   ctx.fillStyle = tx
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = 'bold 10px system-ui, sans-serif'
-  ctx.fillText('☀', CX, CY - 5.5)
-  ctx.font = 'bold 13px system-ui, sans-serif'
-  ctx.fillText(String(score), CX, CY + 6)
+  if (score === 0) {
+    ctx.font = '16px system-ui'
+    ctx.fillText('🌙', CX, CY + 1)
+  } else {
+    ctx.font = 'bold 10px system-ui, sans-serif'
+    ctx.fillText('☀', CX, CY - 5.5)
+    ctx.font = 'bold 13px system-ui, sans-serif'
+    ctx.fillText(String(score), CX, CY + 6)
+  }
 
   return { width: W, height: H, data: new Uint8Array(ctx.getImageData(0, 0, W, H).data.buffer) }
 }

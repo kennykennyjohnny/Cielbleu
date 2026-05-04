@@ -4,6 +4,7 @@ import type { FilterType } from '@/types'
 
 const FILTERS: { id: FilterType; label: string; icon: string }[] = [
   { id: 'sun', label: 'Au soleil', icon: '☀' },
+  { id: 'open', label: 'Ouvert mtn', icon: '●' },
   { id: 'bar', label: 'Bars', icon: '🍺' },
   { id: 'restaurant', label: 'Restos', icon: '🍽' },
   { id: 'cafe', label: 'Cafés', icon: '☕' },

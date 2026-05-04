@@ -72,6 +72,12 @@ export default function HomePage() {
     )
     if (typeFilters.length > 0) result = result.filter((p) => typeFilters.includes(p.type))
     if (activeFilters.includes('sun')) result = result.filter((p) => (p.currentScore ?? 0) >= 4)
+    if (activeFilters.includes('open')) {
+      result = result.filter((p) => {
+        if (!p.opening_hours) return true
+        return (p.opening_hours as Record<string, unknown>).open_now !== false
+      })
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()

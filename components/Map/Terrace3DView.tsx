@@ -23,7 +23,7 @@ interface Props {
   date?: Date
 }
 
-const STREET_OFFSET_M = 22
+const STREET_OFFSET_M = 32 // 32 m en rue = on voit toute la façade
 
 interface NearestBuilding {
   bearing: number
@@ -51,8 +51,8 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
       container: containerRef.current,
       style: 'mapbox://styles/mapbox/light-v11',
       center: [lng, lat],
-      zoom: 20,
-      pitch: 78,
+      zoom: 19.6,
+      pitch: 76,
       bearing: 180,
       scrollZoom: false, boxZoom: false, doubleClickZoom: false,
       dragRotate: false, keyboard: false,
@@ -74,14 +74,14 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
           highlightBuilding(map, result.feature, scoreRef.current)
           addTerraceZone(map, lat, lng, result.bearing, scoreRef.current)
           setResolvedScore(scoreRef.current)
-          map.easeTo({ zoom: map.getZoom() + 0.2, duration: 1600, easing: t => t * (2 - t) })
-        } else if (attempt < 5) {
-          setTimeout(() => triggerBearing(attempt + 1), 600 * attempt)
+        } else if (attempt < 9) {
+          // Retry: give the tile renderer more time on first attempts, then slow down
+          setTimeout(() => triggerBearing(attempt + 1), attempt <= 3 ? 300 : 700)
         }
       }
     })
 
-    const pinEl = buildPin(score)
+    const pinEl = buildPin()
     new mapboxgl.Marker({ element: pinEl, anchor: 'bottom' }).setLngLat([lng, lat]).addTo(map)
 
     mapRef.current = map
@@ -231,22 +231,18 @@ function ShadowPill({ isFrontLit, isDay }: { isFrontLit: boolean; isDay: boolean
 // Marqueur
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PIN_EMOJI = ['🌙','🌥','⛅','🌤','☀️','🌞']
-
-function buildPin(score: number): HTMLElement {
-  const emoji = PIN_EMOJI[Math.max(0, Math.min(5, score))]
+// Simple gold dot pin — identifies which building is the bar without clutter
+function buildPin(): HTMLElement {
   const el = document.createElement('div')
-  el.style.cssText = 'display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 4px 14px rgba(0,0,0,0.65));cursor:default;'
+  el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:default;pointer-events:none;'
   el.innerHTML = `
     <div style="
-      width:42px;height:42px;border-radius:50%;
-      background:radial-gradient(circle at 36% 30%,#FFF5A0 0%,#FFBE0B 55%,#FF7A00 100%);
-      border:3px solid rgba(255,253,247,0.95);
-      box-shadow:0 0 0 4px rgba(255,190,11,0.35),0 0 22px rgba(255,180,0,0.75);
-      display:flex;align-items:center;justify-content:center;font-size:20px;line-height:1;
-      animation:pin-halo 2.6s ease-in-out infinite;
-    ">${emoji}</div>
-    <div style="width:2.5px;height:12px;background:linear-gradient(to bottom,#FFBE0B,rgba(255,190,11,0));margin-top:-1px;"></div>
+      width:14px;height:14px;border-radius:50%;
+      background:#FFB703;
+      border:3px solid rgba(255,255,255,0.96);
+      box-shadow:0 0 0 3px rgba(255,183,3,0.38),0 3px 10px rgba(11,31,58,0.38);
+    "></div>
+    <div style="width:2px;height:12px;background:linear-gradient(to bottom,#FFB703,transparent);margin-top:-1px;"></div>
   `
   return el
 }
@@ -259,13 +255,14 @@ function styleMap(map: mapboxgl.Map) {
   const set = (id: string, prop: string, val: unknown) => {
     if (map.getLayer(id)) try { map.setPaintProperty(id, prop as never, val as never) } catch { /* noop */ }
   }
-  set('background','background-color','#B8D4E8')
-  set('water','fill-color','#5AA0C8')
-  set('waterway','line-color','#5AA0C8')
+  // ── Google Maps-style warm stone palette ──────────────────────────────
+  set('background','background-color','#EDE5D6')  // warm pavement
+  set('water','fill-color','#A8C8DC')
+  set('waterway','line-color','#A8C8DC')
   for (const r of ['road-primary','road-secondary-tertiary','road-street','road-minor','road-motorway','road-path','road-pedestrian'])
-    set(r,'line-color','#C8C0B0')
+    set(r,'line-color','#F2E8D4')  // cream roads like Google Maps
   for (const g of ['landuse','park','national-park','pitch','grass'])
-    set(g,'fill-color','#8EC87A')
+    set(g,'fill-color','#C4DCA0')  // muted green
 
   for (const l of map.getStyle().layers ?? []) {
     if (l.type === 'symbol' || l.id.includes('poi') || l.id.includes('label') || l.id.includes('transit'))
@@ -280,26 +277,32 @@ function styleMap(map: mapboxgl.Map) {
       id: 'cb-3d-buildings', source: 'composite', 'source-layer': 'building',
       filter: ['==',['get','extrude'],'true'], type: 'fill-extrusion', minzoom: 14,
       paint: {
+        // Light warm stone, graduated by height — like Haussmann limestone
         'fill-extrusion-color': [
           'interpolate',['linear'],['get','height'],
-          0,'#8E8478', 15,'#7A7268', 30,'#6E6459', 55,'#5E5650', 80,'#504840',
+          0,'#E4DDD2',   // ground: warm limestone
+          15,'#DDD5C8',  // lower floors
+          30,'#D6CEBC',  // mid floors
+          60,'#CEC6B2',  // upper floors
+          90,'#C6BCA8',  // rooftop
         ],
         'fill-extrusion-height':  ['get','height'],
         'fill-extrusion-base':    ['get','min_height'],
-        'fill-extrusion-opacity': 0.98,
-        'fill-extrusion-vertical-gradient': true,
-        'fill-extrusion-ambient-occlusion-intensity': 0.92,
-        'fill-extrusion-ambient-occlusion-radius':    3.0,
+        'fill-extrusion-opacity': 0.96,
+        'fill-extrusion-vertical-gradient': true,   // crucial for realistic look
+        'fill-extrusion-ambient-occlusion-intensity': 0.88,
+        'fill-extrusion-ambient-occlusion-radius':    4.0,
       },
     }, labelLayer)
   }
-  set('building','fill-color','#D0C8B0')
-  set('building','fill-opacity',0.5)
-  set('building-outline','line-color','#B8B0A0')
+  set('building','fill-color','#E0D8CA')
+  set('building','fill-opacity',0.50)
+  set('building-outline','line-color','#CABFB0')
   try {
     map.setFog({
-      color:'#B0CCE0','high-color':'#6898C0',
-      'horizon-blend':0.06,'space-color':'#0C1820',range:[0.6,10],
+      // Warm hazy atmosphere (not cold blue)
+      color:'#E8E0D0','high-color':'#D0C0A8',
+      'horizon-blend':0.04,'space-color':'#101828',range:[0.8,14],
     } as Parameters<typeof map.setFog>[0])
   } catch { /* old SDK */ }
 }
@@ -312,9 +315,10 @@ function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFea
   if (!feature.geometry) return
   const height   = (feature.properties?.height     as number | null) ?? 20
   const minH     = (feature.properties?.min_height as number | null) ?? 0
-  const hlColor  = score >= 4 ? '#FFE840' : score >= 3 ? '#F5D060' : '#C8C0A8'
-  const hlOpacity = score >= 4 ? 0.88 : 0.72
-  const glowColor = score >= 4 ? '#FFB800' : '#AA9830'
+  // Target building: warm gold if sunny, ivory if mid, same stone if dark — stays readable on light neighbors
+  const hlColor   = score >= 4 ? '#FAEA90' : score >= 2 ? '#F4E8C0' : '#E0D8C4'
+  const hlOpacity = score >= 4 ? 0.95 : 0.90
+  const glowColor = score >= 4 ? '#D4A800' : '#A89860'
   const geoData: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', geometry: feature.geometry as GeoJSON.Geometry, properties: {} }],
@@ -391,13 +395,14 @@ function applySunLighting(map: mapboxgl.Map, lat: number, lng: number, date: Dat
     if (map.getLayer(id)) try { map.setPaintProperty(id, prop as never, val as never) } catch { /* noop */ }
   }
   if (isDay) {
-    const polar = Math.min(85, Math.max(55, 90 - altDeg * 0.28))
-    const color = altDeg < 5 ? '#F0C070' : score >= 4 ? '#FFFCC0' : '#FFF8E8'
-    map.setLight({ anchor:'map', position:[1.5, azNorth, polar], color, intensity: 1.0 })
-    set('background','background-color', altDeg > 8 ? '#B8D4E8' : '#C8946A')
+    // More horizontal sun → stronger shadow contrast between building faces (like Google Maps)
+    const polar = Math.min(80, Math.max(40, 90 - altDeg * 0.60))
+    const color = altDeg < 6 ? '#F0B850' : score >= 4 ? '#FFFCE0' : '#FFF8F0'
+    map.setLight({ anchor:'map', position:[1.5, azNorth, polar], color, intensity: 1.5 })
+    set('background','background-color', altDeg > 8 ? '#EDE5D6' : '#D09060')
   } else {
-    map.setLight({ anchor:'map', position:[1.5, 0, 88], color:'#40607A', intensity: 0.04 })
-    set('background','background-color','#08101A')
+    map.setLight({ anchor:'map', position:[1.5, 0, 88], color:'#304860', intensity: 0.04 })
+    set('background','background-color','#0A1420')
   }
 }
 
@@ -409,7 +414,7 @@ function findNearestBuilding(map: mapboxgl.Map, lat: number, lng: number): Neare
   let features: mapboxgl.MapboxGeoJSONFeature[] = []
   try {
     const pinPx = map.project([lng, lat])
-    const pad   = 240
+    const pad   = 340  // wider query to find buildings even if bar is near edge of tile
     const bbox: [mapboxgl.PointLike, mapboxgl.PointLike] = [
       [pinPx.x - pad, pinPx.y - pad],
       [pinPx.x + pad, pinPx.y + pad],
