@@ -59,6 +59,26 @@ export interface SunConfirmation {
   created_at: string
 }
 
+export interface PlaceContext {
+  building: {
+    geo_shape: GeoJSON.Polygon | GeoJSON.MultiPolygon | null
+    nb_pl: number | null
+    l_plan_h: string | null
+    h_et_max: number | null
+    objectid: number | null
+    n_ar: number | null
+  } | null
+  terrace: {
+    nom_enseigne: string | null
+    longueur: number | null
+    largeur: number | null
+    typologie: string | null
+    geo_point_2d: { lat: number; lon: number } | null
+  } | null
+  fontaines: Array<{ geo_point_2d: { lat: number; lon: number }; dispo: string }>
+  sanisettes: Array<{ geo_point_2d: { lat: number; lon: number }; statut: string; acces_pmr: string }>
+}
+
 export interface Presence {
   id: string
   place_id: string

@@ -237,6 +237,36 @@ export default function MapView({ places, onPlaceSelect }: Props) {
         },
       })
 
+      // ── Fontaines à boire (points bleus, zoom ≥ 14) ─────────────────────
+      map.addSource('fontaines', { type: 'geojson', data: '/api/geo/fontaines' })
+      map.addLayer({
+        id: 'fontaines-layer', type: 'circle', source: 'fontaines',
+        filter: ['==', ['get', 'dispo'], 'OUI'],
+        minzoom: 13,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 16, 4.5],
+          'circle-color': '#3A86FF',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1.5,
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 14, 0.70],
+        },
+      })
+
+      // ── Sanisettes (points verts, zoom ≥ 14) ────────────────────────────
+      map.addSource('sanisettes', { type: 'geojson', data: '/api/geo/sanisettes' })
+      map.addLayer({
+        id: 'sanisettes-layer', type: 'circle', source: 'sanisettes',
+        filter: ['==', ['get', 'statut'], 'En service'],
+        minzoom: 13,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 16, 4.5],
+          'circle-color': '#52B788',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1.5,
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 14, 0.62],
+        },
+      })
+
       map.on('click', 'clusters', (e) => {
         e.originalEvent.stopPropagation()
         const f = e.features?.[0]

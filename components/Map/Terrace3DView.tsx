@@ -1,47 +1,73 @@
-'use client'
+﻿'use client'
 
 /**
- * Terrace3DView v7 — "Vous êtes dans la rue, face au bar."
+ * Terrace3DView v8 — Architecture fiable
  *
- * v7 (robustesse) :
- *  - querySourceFeatures au lieu de queryRenderedFeatures
- *    → pas de dépendance sur le viewport, fonctionne même avec pitch élevé
- *  - Orientation déclenchée sur sourcedata + idle + timeouts (triple sécurité)
- *  - Nettoyage propre des listeners au démontage
- *  - Google Maps warm-stone palette, pitch 72°, zoom 19.5
+ * Stratégie d'orientation (du plus au moins fiable) :
+ *  1. /api/place-context → polygon réel APUR volumesbatisparis
+ *     → ajouté comme source GeoJSON locale, AUCUNE dépendance aux tuiles Mapbox
+ *  2. querySourceFeatures('composite') sur tuiles déjà en cache
+ *  3. Fallbacks temporels (600ms, 1400ms, 3000ms)
+ *
+ * Caméra :
+ *  - Démarre zoom=16 pitch=0 (charge plus de tuiles en moins de temps)
+ *  - flyTo vers zoom=19.5 pitch=72 dès que le bâtiment est trouvé
+ *  - dragRotate activé après orientation, clampé à ±88° autour de la façade
  */
 
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import { getSunPosition } from '@/lib/suncalc'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface Props {
   lat: number
   lng: number
   score: number
   date?: Date
+  name?: string
 }
 
-const STREET_OFFSET_M = 30  // distance caméra ← façade en rue
+interface PlaceContext {
+  building: {
+    geo_shape: GeoJSON.Polygon | GeoJSON.MultiPolygon | null
+    nb_pl: number | null
+    l_plan_h: string | null
+    h_et_max: number | null
+  } | null
+  terrace: {
+    nom_enseigne: string | null
+    longueur: number | null
+    largeur: number | null
+    typologie: string | null
+  } | null
+}
 
-interface NearestBuilding {
+interface OrientResult {
   bearing: number
   distM: number
   feature: mapboxgl.MapboxGeoJSONFeature
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-export default function Terrace3DView({ lat, lng, score, date }: Props) {
+const STREET_OFFSET_M = 28  // Recul caméra depuis la façade
+
+// ─── Composant principal ─────────────────────────────────────────────────────
+
+export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef       = useRef<mapboxgl.Map | null>(null)
   const dateRef      = useRef<Date>(date ?? new Date())
   const scoreRef     = useRef<number>(score)
-  const [bearing, setBearing]             = useState<number>(180)
+  const nameRef      = useRef<string>(name ?? '')
+  const [bearing, setBearing]             = useState<number>(0)
   const [resolvedScore, setResolvedScore] = useState<number>(score)
 
   dateRef.current  = date ?? new Date()
   scoreRef.current = score
+  nameRef.current  = name ?? ''
 
+  // ── Initialisation carte ───────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
@@ -50,61 +76,117 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
       container: containerRef.current,
       style: 'mapbox://styles/mapbox/light-v11',
       center: [lng, lat],
-      zoom: 19.5,
-      pitch: 72,
-      bearing: 180,
+      zoom: 16,
+      pitch: 0,
+      bearing: 0,
       scrollZoom: false, boxZoom: false, doubleClickZoom: false,
-      dragRotate: false, keyboard: false,
+      dragRotate: false,
+      dragPan: false,
+      keyboard: false,
       touchZoomRotate: false, touchPitch: false,
       attributionControl: false, fadeDuration: 0,
     })
 
-    // Timeouts pour cleanup
+    let disposed = false
+    let oriented = false
     const timers: ReturnType<typeof setTimeout>[] = []
 
+    const ctxPromise = fetch(`/api/place-context?lat=${lat}&lng=${lng}`)
+      .then(r => r.ok ? r.json() as Promise<PlaceContext> : null)
+      .catch(() => null)
+
     map.on('style.load', () => {
+      if (disposed) return
       styleMap(map)
       applySunLighting(map, lat, lng, dateRef.current, scoreRef.current)
 
-      let oriented = false
-
-      const orient = () => {
-        if (oriented) return
-        const result = findNearestBuilding(map, lat, lng)
-        if (!result) return
+      const finalize = (result: OrientResult, terraceW = 9, terraceD = 3.5) => {
+        if (disposed || oriented) return
         oriented = true
-
-        const [cLng, cLat] = offsetCenter(lat, lng, result.bearing, -STREET_OFFSET_M)
-        map.jumpTo({ center: [cLng, cLat], bearing: result.bearing })
-        setBearing(result.bearing)
+        const baseBearing = result.bearing
+        const [cLng, cLat] = offsetCenter(lat, lng, baseBearing, -STREET_OFFSET_M)
+        map.flyTo({
+          center: [cLng, cLat], bearing: baseBearing,
+          zoom: 19.5, pitch: 72, speed: 1.2, curve: 1.2, essential: true,
+        })
+        setBearing(baseBearing)
         highlightBuilding(map, result.feature, scoreRef.current)
-        addTerraceZone(map, lat, lng, result.bearing, scoreRef.current)
+        addTerraceZone(map, lat, lng, baseBearing, scoreRef.current, terraceW, terraceD)
         setResolvedScore(scoreRef.current)
+        map.once('moveend', () => {
+          if (disposed) return
+          map.dragRotate.enable()
+          let clamping = false
+          map.on('rotate', () => {
+            if (clamping) return
+            const delta = ((map.getBearing() - baseBearing + 540) % 360) - 180
+            if (Math.abs(delta) > 88) {
+              clamping = true
+              map.jumpTo({ bearing: baseBearing + (delta > 0 ? 88 : -88) })
+              setTimeout(() => { clamping = false }, 30)
+            }
+          })
+        })
       }
 
-      // 1. Dès qu'une tuile composite est totalement chargée
-      const onSourceData = (e: mapboxgl.MapSourceDataEvent) => {
-        if (oriented) { map.off('sourcedata', onSourceData); return }
-        if (e.sourceId === 'composite' && e.isSourceLoaded) orient()
+      // Stratégie 1 : API polygon APUR
+      ctxPromise.then(ctx => {
+        if (disposed || oriented) return
+        const shape = ctx?.building?.geo_shape
+        if (!shape) return
+        const poly = normalizeToPolygon(shape)
+        if (!poly) return
+        const b = bearingFromPolygon(poly, lat, lng)
+        if (b === null) return
+        const nbPl   = ctx?.building?.nb_pl ?? 0
+        const height = Math.max(8, Math.round(nbPl * 3 + 2))
+        const feature = makeFeature(poly, height)
+        const tw = ctx?.terrace?.longueur ?? 9
+        const td = ctx?.terrace?.largeur  ?? 3.5
+        const geoData: GeoJSON.FeatureCollection = {
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', geometry: poly, properties: { height, min_height: 0 } }],
+        }
+        if (!map.getSource('cb-api-bld')) {
+          map.addSource('cb-api-bld', { type: 'geojson', data: geoData })
+          map.addLayer({
+            id: 'cb-api-bld-base', source: 'cb-api-bld', type: 'fill-extrusion',
+            paint: {
+              'fill-extrusion-color': buildingColorFromFloors(nbPl, scoreRef.current),
+              'fill-extrusion-height': height,
+              'fill-extrusion-base': 0,
+              'fill-extrusion-opacity': 0.96,
+              'fill-extrusion-vertical-gradient': true,
+              'fill-extrusion-ambient-occlusion-intensity': 0.92,
+              'fill-extrusion-ambient-occlusion-radius': 4.5,
+            },
+          })
+        }
+        finalize({ bearing: b, distM: 0, feature }, tw, td)
+      })
+
+      // Stratégie 2 : querySourceFeatures (tiles Mapbox)
+      const tryTiles = () => {
+        if (disposed || oriented) return
+        const result = findNearestBuilding(map, lat, lng)
+        if (result) finalize(result)
       }
-      map.on('sourcedata', onSourceData)
-
-      // 2. À chaque idle (toutes tuiles du viewport chargées)
-      const onIdle = () => { if (!oriented) orient() }
-      map.on('idle', onIdle)
-
-      // 3. Fallbacks temporels pour connexions lentes
-      timers.push(setTimeout(orient, 400))
-      timers.push(setTimeout(orient, 900))
-      timers.push(setTimeout(orient, 1800))
-      timers.push(setTimeout(orient, 3500))
+      map.on('idle', tryTiles)
+      map.on('sourcedata', (e: mapboxgl.MapSourceDataEvent) => {
+        if (e.sourceId === 'composite' && e.isSourceLoaded) tryTiles()
+      })
+      timers.push(
+        setTimeout(tryTiles, 600),
+        setTimeout(tryTiles, 1400),
+        setTimeout(tryTiles, 3000),
+      )
     })
 
     const pinEl = buildPin()
     new mapboxgl.Marker({ element: pinEl, anchor: 'bottom' }).setLngLat([lng, lat]).addTo(map)
-
     mapRef.current = map
     return () => {
+      disposed = true
       timers.forEach(clearTimeout)
       map.remove()
       mapRef.current = null
@@ -119,12 +201,12 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
     else map.once('style.load', apply)
   }, [date, score, lat, lng])
 
-  const d        = date ?? new Date()
-  const sun      = getSunPosition(d, lat, lng)
-  const altDeg   = (sun.altitude * 180) / Math.PI
-  const azDeg    = ((sun.azimuth  * 180) / Math.PI + 180) % 360
-  const isDay    = altDeg > -3
-  const relAngle = (((azDeg - bearing + 540) % 360) - 180)
+  const d          = date ?? new Date()
+  const sun        = getSunPosition(d, lat, lng)
+  const altDeg     = (sun.altitude * 180) / Math.PI
+  const azDeg      = ((sun.azimuth  * 180) / Math.PI + 180) % 360
+  const isDay      = altDeg > -3
+  const relAngle   = ((azDeg - bearing + 540) % 360) - 180
   const isFrontLit = isDay && Math.abs(relAngle) < 90
 
   return (
@@ -138,15 +220,13 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
           style={{ zIndex: 3, background: 'rgba(8,14,22,0.72)' }} />
       )}
       {isDay && <SunDisc altDeg={altDeg} relAngle={relAngle} score={resolvedScore} />}
-      {/* Shadow indicator: compact pill top-left (not a full banner — keeps 3D visible) */}
       <ShadowPill isFrontLit={isFrontLit} isDay={isDay} />
+      <RotationHint />
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UI Overlay Components
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── UI Overlays ──────────────────────────────────────────────────────────────
 
 function SkyGradient({ altDeg, isDay }: { altDeg: number; isDay: boolean }) {
   let bg = 'linear-gradient(to bottom, #0D1820 0%, #1B2838 100%)'
@@ -164,26 +244,21 @@ function SkyGradient({ altDeg, isDay }: { altDeg: number; isDay: boolean }) {
 }
 
 function SunDisc({ altDeg, relAngle, score }: { altDeg: number; relAngle: number; score: number }) {
-  const inFov   = Math.abs(relAngle) < 130
-  const sunX    = 50 + (relAngle / 130) * 44
-  const sunY    = Math.max(4, 38 - altDeg * 0.55)
-  const isSunny = score >= 4
-  const sunSize = isSunny ? 72 : 48
-  const haloSz  = isSunny ? 180 : 110
+  const inFov  = Math.abs(relAngle) < 128
+  const sunX   = 50 + (relAngle / 128) * 44
+  const sunY   = Math.max(4, 38 - altDeg * 0.55)
+  const sunny  = score >= 4
+  const sz     = sunny ? 68 : 44
+  const haloSz = sunny ? 170 : 100
   if (!inFov) return null
   return (
     <div className="absolute pointer-events-none"
-      style={{
-        left: `${sunX}%`, top: `${sunY}%`,
-        transform: 'translate(-50%,-50%)',
-        zIndex: 2,
-        transition: 'left 800ms cubic-bezier(0.34,1.1,0.64,1), top 800ms ease',
-      }}>
-      {isSunny && (
+      style={{ left: `${sunX}%`, top: `${sunY}%`, transform: 'translate(-50%,-50%)', zIndex: 2,
+        transition: 'left 800ms cubic-bezier(0.34,1.1,0.64,1), top 800ms ease' }}>
+      {sunny && (
         <div style={{
           position: 'absolute', width: haloSz + 40, height: haloSz + 40,
-          top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-          borderRadius: '50%',
+          top: '50%', left: '50%', transform: 'translate(-50%,-50%)', borderRadius: '50%',
           background: `conic-gradient(
             transparent 0deg,rgba(255,220,40,0.22) 8deg,transparent 16deg,
             transparent 43deg,rgba(255,220,40,0.22) 51deg,transparent 59deg,
@@ -192,27 +267,24 @@ function SunDisc({ altDeg, relAngle, score }: { altDeg: number; relAngle: number
             transparent 178deg,rgba(255,220,40,0.22) 186deg,transparent 194deg,
             transparent 223deg,rgba(255,220,40,0.22) 231deg,transparent 239deg,
             transparent 268deg,rgba(255,220,40,0.22) 276deg,transparent 284deg,
-            transparent 313deg,rgba(255,220,40,0.22) 321deg,transparent 329deg
-          )`,
+            transparent 313deg,rgba(255,220,40,0.22) 321deg,transparent 329deg)`,
           animation: 'cb-sun-spin 22s linear infinite',
         }} />
       )}
       <div style={{
         position: 'absolute', width: haloSz, height: haloSz,
-        top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        borderRadius: '50%',
-        background: isSunny
+        top: '50%', left: '50%', transform: 'translate(-50%,-50%)', borderRadius: '50%',
+        background: sunny
           ? 'radial-gradient(circle,rgba(255,230,0,0.82) 0%,rgba(255,150,0,0.38) 40%,rgba(255,80,0,0.10) 65%,transparent 100%)'
           : 'radial-gradient(circle,rgba(255,220,80,0.55) 0%,rgba(255,200,60,0.18) 55%,transparent 100%)',
-        filter: 'blur(3px)',
-        animation: isSunny ? 'cb-sun-glow 3s ease-in-out infinite' : 'none',
+        filter: 'blur(3px)', animation: sunny ? 'cb-sun-glow 3s ease-in-out infinite' : 'none',
       }} />
       <div style={{
-        position: 'relative', width: sunSize, height: sunSize, borderRadius: '50%',
-        background: isSunny
+        position: 'relative', width: sz, height: sz, borderRadius: '50%',
+        background: sunny
           ? 'radial-gradient(circle at 34% 30%,#FFFFF0 0%,#FFF060 18%,#FFC800 55%,#FF8000 100%)'
           : 'radial-gradient(circle at 34% 30%,#FFFEF0 0%,#FFF060 25%,#FFD840 60%,#FFC020 100%)',
-        boxShadow: isSunny
+        boxShadow: sunny
           ? '0 0 18px 3px #FFD800,0 0 50px 10px rgba(255,150,0,0.90),0 0 90px 22px rgba(255,60,0,0.50)'
           : '0 0 12px 2px #FFE070,0 0 30px 5px rgba(255,200,60,0.65)',
       }} />
@@ -224,37 +296,47 @@ function ShadowPill({ isFrontLit, isDay }: { isFrontLit: boolean; isDay: boolean
   if (!isDay) return (
     <div className="absolute top-3 left-3 z-10 pointer-events-none">
       <div className="rounded-full px-2.5 py-1.5 flex items-center gap-1.5"
-        style={{ background:'rgba(8,14,22,0.82)', backdropFilter:'blur(12px)' }}>
+        style={{ background: 'rgba(8,14,22,0.82)', backdropFilter: 'blur(12px)' }}>
         <span className="text-[13px]">🌙</span>
-        <span className="font-outfit font-bold text-[11px]" style={{ color:'#8abbe0' }}>Nuit</span>
+        <span className="font-outfit font-bold text-[11px]" style={{ color: '#8abbe0' }}>Nuit</span>
       </div>
     </div>
   )
   if (isFrontLit) return (
     <div className="absolute top-3 left-3 z-10 pointer-events-none">
       <div className="rounded-full px-2.5 py-1.5 flex items-center gap-1.5"
-        style={{ background:'rgba(255,183,3,0.90)', backdropFilter:'blur(10px)',
-          boxShadow:'0 4px 16px rgba(255,160,0,0.40)' }}>
-        <span className="text-[13px]" style={{ animation:'pin-halo 2s ease-in-out infinite' }}>☀️</span>
-        <span className="font-outfit font-black text-[11px]" style={{ color:'#0b1f3a' }}>Façade éclairée</span>
+        style={{ background: 'rgba(255,183,3,0.90)', backdropFilter: 'blur(10px)',
+          boxShadow: '0 4px 16px rgba(255,160,0,0.40)' }}>
+        <span className="text-[13px]">☀️</span>
+        <span className="font-outfit font-black text-[11px]" style={{ color: '#0b1f3a' }}>Façade éclairée</span>
       </div>
     </div>
   )
   return (
     <div className="absolute top-3 left-3 z-10 pointer-events-none">
       <div className="rounded-full px-2.5 py-1.5 flex items-center gap-1.5"
-        style={{ background:'rgba(20,40,70,0.82)', backdropFilter:'blur(12px)' }}>
+        style={{ background: 'rgba(20,40,70,0.82)', backdropFilter: 'blur(12px)' }}>
         <span className="text-[13px]">🌑</span>
-        <span className="font-outfit font-bold text-[11px]" style={{ color:'#8abbe0' }}>Façade à l&apos;ombre</span>
+        <span className="font-outfit font-bold text-[11px]" style={{ color: '#8abbe0' }}>Façade à l&apos;ombre</span>
       </div>
     </div>
   )
 }
-// ─────────────────────────────────────────────────────────────────────────────
-// Marqueur
-// ─────────────────────────────────────────────────────────────────────────────
 
-// Simple gold dot pin — identifies which building is the bar without clutter
+function RotationHint() {
+  return (
+    <div className="absolute bottom-3 right-3 z-10 pointer-events-none opacity-60">
+      <div className="rounded-full px-2 py-1 flex items-center gap-1"
+        style={{ background: 'rgba(255,255,255,0.80)', backdropFilter: 'blur(8px)' }}>
+        <span className="text-[11px]">↔</span>
+        <span className="font-outfit text-[10px] text-[#0b1f3a]">Regarder la façade</span>
+      </div>
+    </div>
+  )
+}
+
+// ─── Marqueur ─────────────────────────────────────────────────────────────────
+
 function buildPin(): HTMLElement {
   const el = document.createElement('div')
   el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:default;pointer-events:none;'
@@ -270,78 +352,62 @@ function buildPin(): HTMLElement {
   return el
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Style Mapbox
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Style Mapbox ─────────────────────────────────────────────────────────────
 
 function styleMap(map: mapboxgl.Map) {
   const set = (id: string, prop: string, val: unknown) => {
     if (map.getLayer(id)) try { map.setPaintProperty(id, prop as never, val as never) } catch { /* noop */ }
   }
-  // ── Google Maps-style warm stone palette ──────────────────────────────
-  set('background','background-color','#EDE5D6')  // warm pavement
-  set('water','fill-color','#A8C8DC')
-  set('waterway','line-color','#A8C8DC')
-  for (const r of ['road-primary','road-secondary-tertiary','road-street','road-minor','road-motorway','road-path','road-pedestrian'])
-    set(r,'line-color','#F2E8D4')  // cream roads like Google Maps
+  set('background', 'background-color', '#EDE5D6')
+  set('water', 'fill-color', '#A8C8DC')
+  set('waterway', 'line-color', '#A8C8DC')
+  for (const r of ['road-primary','road-secondary-tertiary','road-street','road-minor',
+                   'road-motorway','road-path','road-pedestrian'])
+    set(r, 'line-color', '#F2E8D4')
   for (const g of ['landuse','park','national-park','pitch','grass'])
-    set(g,'fill-color','#C4DCA0')  // muted green
-
+    set(g, 'fill-color', '#C4DCA0')
   for (const l of map.getStyle().layers ?? []) {
     if (l.type === 'symbol' || l.id.includes('poi') || l.id.includes('label') || l.id.includes('transit'))
-      try { map.setLayoutProperty(l.id,'visibility','none') } catch { /* noop */ }
+      try { map.setLayoutProperty(l.id, 'visibility', 'none') } catch { /* noop */ }
   }
-
   if (!map.getLayer('cb-3d-buildings')) {
     const labelLayer = map.getStyle().layers?.find(
-      l => l.type === 'symbol' && (l.layout as Record<string,unknown>)?.['text-field']
+      l => l.type === 'symbol' && (l.layout as Record<string, unknown>)?.['text-field']
     )?.id
     map.addLayer({
       id: 'cb-3d-buildings', source: 'composite', 'source-layer': 'building',
-      filter: ['==',['get','extrude'],'true'], type: 'fill-extrusion', minzoom: 14,
+      filter: ['==', ['get', 'extrude'], 'true'], type: 'fill-extrusion', minzoom: 14,
       paint: {
-        // Light warm stone, graduated by height — like Haussmann limestone
         'fill-extrusion-color': [
-          'interpolate',['linear'],['get','height'],
-          0,'#E4DDD2',   // ground: warm limestone
-          15,'#DDD5C8',  // lower floors
-          30,'#D6CEBC',  // mid floors
-          60,'#CEC6B2',  // upper floors
-          90,'#C6BCA8',  // rooftop
+          'interpolate', ['linear'], ['get', 'height'],
+          0, '#E8E2D8', 10, '#E2DAD0', 20, '#DAD2C6', 40, '#D2CABc', 70, '#C8BEB0',
         ],
-        'fill-extrusion-height':  ['get','height'],
-        'fill-extrusion-base':    ['get','min_height'],
-        'fill-extrusion-opacity': 0.96,
-        'fill-extrusion-vertical-gradient': true,   // crucial for realistic look
-        'fill-extrusion-ambient-occlusion-intensity': 0.88,
-        'fill-extrusion-ambient-occlusion-radius':    4.0,
+        'fill-extrusion-height':  ['get', 'height'],
+        'fill-extrusion-base':    ['get', 'min_height'],
+        'fill-extrusion-opacity': 0.94,
+        'fill-extrusion-vertical-gradient': true,
+        'fill-extrusion-ambient-occlusion-intensity': 0.85,
+        'fill-extrusion-ambient-occlusion-radius': 4.0,
       },
     }, labelLayer)
   }
-  set('building','fill-color','#E0D8CA')
-  set('building','fill-opacity',0.50)
-  set('building-outline','line-color','#CABFB0')
+  set('building', 'fill-color', '#E0D8CA')
+  set('building', 'fill-opacity', 0.45)
   try {
     map.setFog({
-      // Warm hazy atmosphere (not cold blue)
-      color:'#E8E0D0','high-color':'#D0C0A8',
-      'horizon-blend':0.04,'space-color':'#101828',range:[0.8,14],
+      color: '#EAE2D2', 'high-color': '#D4C8B4',
+      'horizon-blend': 0.04, 'space-color': '#101828', range: [0.8, 14],
     } as Parameters<typeof map.setFog>[0])
   } catch { /* old SDK */ }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Highlight bâtiment + zone terrasse
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Highlight bâtiment + zone terrasse ──────────────────────────────────────
 
 function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFeature, score: number) {
   if (!feature.geometry) return
-  const height   = (feature.properties?.height     as number | null) ?? 20
-  const minH     = (feature.properties?.min_height as number | null) ?? 0
-  // Target building: warm gold if sunny, ivory if mid, same stone if dark — stays readable on light neighbors
-  const hlColor   = score >= 4 ? '#FAEA90' : score >= 2 ? '#F4E8C0' : '#E0D8C4'
-  const hlOpacity = score >= 4 ? 0.95 : 0.90
-  const glowColor = score >= 4 ? '#D4A800' : '#A89860'
+  const height  = (feature.properties?.height     as number | null) ?? 20
+  const minH    = (feature.properties?.min_height as number | null) ?? 0
+  const hlColor = score >= 4 ? '#FAE880' : score >= 2 ? '#F2E8C0' : '#E8DCC8'
   const geoData: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', geometry: feature.geometry as GeoJSON.Geometry, properties: {} }],
@@ -349,121 +415,179 @@ function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFea
   const existingSrc = map.getSource('cb-bar-bld') as mapboxgl.GeoJSONSource | undefined
   if (existingSrc) {
     existingSrc.setData(geoData)
-    if (map.getLayer('cb-bar-bld-hl')) {
-      map.setPaintProperty('cb-bar-bld-hl','fill-extrusion-color',hlColor)
-      map.setPaintProperty('cb-bar-bld-hl','fill-extrusion-opacity',hlOpacity)
-    }
-    if (map.getLayer('cb-bar-glow')) map.setPaintProperty('cb-bar-glow','line-color',glowColor)
+    if (map.getLayer('cb-bar-bld-hl'))
+      map.setPaintProperty('cb-bar-bld-hl', 'fill-extrusion-color', hlColor)
     return
   }
-  map.addSource('cb-bar-bld',{type:'geojson',data:geoData})
+  map.addSource('cb-bar-bld', { type: 'geojson', data: geoData })
   map.addLayer({
-    id:'cb-bar-bld-hl', source:'cb-bar-bld', type:'fill-extrusion',
+    id: 'cb-bar-bld-hl', source: 'cb-bar-bld', type: 'fill-extrusion',
     paint: {
-      'fill-extrusion-color':hlColor, 'fill-extrusion-height':height,
-      'fill-extrusion-base':minH, 'fill-extrusion-opacity':hlOpacity,
-      'fill-extrusion-vertical-gradient':false,
+      'fill-extrusion-color': hlColor,
+      'fill-extrusion-height': height,
+      'fill-extrusion-base': minH,
+      'fill-extrusion-opacity': 0.96,
+      'fill-extrusion-vertical-gradient': false,
+      'fill-extrusion-ambient-occlusion-intensity': 0.90,
+      'fill-extrusion-ambient-occlusion-radius': 4.5,
     },
   })
   map.addLayer({
-    id:'cb-bar-glow', source:'cb-bar-bld', type:'line',
-    paint:{'line-color':glowColor,'line-width':4,'line-blur':3,'line-opacity':0.90},
+    id: 'cb-bar-glow', source: 'cb-bar-bld', type: 'line',
+    paint: {
+      'line-color': score >= 4 ? '#D4A800' : '#8A8060',
+      'line-width': 3.5, 'line-blur': 3, 'line-opacity': 0.85,
+    },
   })
 }
 
-function addTerraceZone(map: mapboxgl.Map, lat: number, lng: number, cameraBearing: number, score: number) {
-  const W = 9, D = 4
+function addTerraceZone(
+  map: mapboxgl.Map,
+  lat: number, lng: number,
+  cameraBearing: number,
+  score: number,
+  terraceW = 9,
+  terraceD = 3.5,
+) {
   const cosLat = Math.cos((lat * Math.PI) / 180)
   const rad    = (cameraBearing * Math.PI) / 180
-  const fwdE = Math.sin(rad), fwdN = Math.cos(rad)
-  const rgtE = Math.cos(rad), rgtN = -Math.sin(rad)
-  const toLL = (dE: number, dN: number): [number,number] => [
+  const fwdE   = Math.sin(rad), fwdN = Math.cos(rad)
+  const rgtE   = Math.cos(rad), rgtN = -Math.sin(rad)
+  const toLL   = (dE: number, dN: number): [number, number] => [
     lng + dE / (111320 * cosLat), lat + dN / 111320,
   ]
-  const corners: [number,number][] = [
-    toLL( rgtE*W/2,               rgtN*W/2),
-    toLL(-rgtE*W/2,              -rgtN*W/2),
-    toLL(-fwdE*D - rgtE*W/2, -fwdN*D - rgtN*W/2),
-    toLL(-fwdE*D + rgtE*W/2, -fwdN*D + rgtN*W/2),
-    toLL( rgtE*W/2,               rgtN*W/2),
+  const W = terraceW / 2, D = terraceD
+  const corners: [number, number][] = [
+    toLL( rgtE * W,              rgtN * W),
+    toLL(-rgtE * W,             -rgtN * W),
+    toLL(-fwdE * D - rgtE * W, -fwdN * D - rgtN * W),
+    toLL(-fwdE * D + rgtE * W, -fwdN * D + rgtN * W),
+    toLL( rgtE * W,              rgtN * W),
   ]
-  const fillColor   = score >= 4 ? '#FFD860' : '#7AAAC8'
-  const fillOpacity = score >= 4 ? 0.62 : 0.42
-  const lineColor   = score >= 4 ? '#C08800' : '#3A6080'
+  const fillColor   = score >= 4 ? '#FFD444' : '#78A8C8'
+  const fillOpacity = score >= 4 ? 0.65 : 0.40
+  const lineColor   = score >= 4 ? '#B88000' : '#3A6080'
   const geoData: GeoJSON.FeatureCollection = {
-    type:'FeatureCollection',
-    features:[{type:'Feature',geometry:{type:'Polygon',coordinates:[corners]},properties:{}}],
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [corners] }, properties: {} }],
   }
   if (map.getSource('cb-terrace')) {
     ;(map.getSource('cb-terrace') as mapboxgl.GeoJSONSource).setData(geoData)
     return
   }
-  map.addSource('cb-terrace',{type:'geojson',data:geoData})
-  map.addLayer({id:'cb-terrace-fill',source:'cb-terrace',type:'fill',
-    paint:{'fill-color':fillColor,'fill-opacity':fillOpacity}})
-  map.addLayer({id:'cb-terrace-outline',source:'cb-terrace',type:'line',
-    paint:{'line-color':lineColor,'line-width':2,'line-dasharray':[4,2.5]}})
+  map.addSource('cb-terrace', { type: 'geojson', data: geoData })
+  map.addLayer({ id: 'cb-terrace-fill', source: 'cb-terrace', type: 'fill',
+    paint: { 'fill-color': fillColor, 'fill-opacity': fillOpacity } })
+  map.addLayer({ id: 'cb-terrace-outline', source: 'cb-terrace', type: 'line',
+    paint: { 'line-color': lineColor, 'line-width': 2, 'line-dasharray': [4, 2] } })
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Éclairage solaire
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Éclairage solaire ────────────────────────────────────────────────────────
 
 function applySunLighting(map: mapboxgl.Map, lat: number, lng: number, date: Date, score: number) {
-  const sun     = getSunPosition(date, lat, lng)
+  const sun    = getSunPosition(date, lat, lng)
   const azNorth = ((sun.azimuth * 180) / Math.PI + 180) % 360
   const altDeg  = (sun.altitude * 180) / Math.PI
   const isDay   = altDeg > -3
-  const set = (id: string, prop: string, val: unknown) => {
+  const set     = (id: string, prop: string, val: unknown) => {
     if (map.getLayer(id)) try { map.setPaintProperty(id, prop as never, val as never) } catch { /* noop */ }
   }
   if (isDay) {
-    // More horizontal sun → stronger shadow contrast between building faces (like Google Maps)
-    const polar = Math.min(80, Math.max(40, 90 - altDeg * 0.60))
+    const polar = Math.min(78, Math.max(38, 90 - altDeg * 0.62))
     const color = altDeg < 6 ? '#F0B850' : score >= 4 ? '#FFFCE0' : '#FFF8F0'
-    map.setLight({ anchor:'map', position:[1.5, azNorth, polar], color, intensity: 1.5 })
-    set('background','background-color', altDeg > 8 ? '#EDE5D6' : '#D09060')
+    map.setLight({ anchor: 'map', position: [1.5, azNorth, polar], color, intensity: 1.6 })
+    set('background', 'background-color', altDeg > 8 ? '#EDE5D6' : '#D09060')
   } else {
-    map.setLight({ anchor:'map', position:[1.5, 0, 88], color:'#304860', intensity: 0.04 })
-    set('background','background-color','#0A1420')
+    map.setLight({ anchor: 'map', position: [1.5, 0, 88], color: '#2A3C58', intensity: 0.04 })
+    set('background', 'background-color', '#0A1420')
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Géométrie
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Géométrie ─────────────────────────────────────────────────────────────────
 
-function findNearestBuilding(map: mapboxgl.Map, lat: number, lng: number): NearestBuilding | null {
+function bearingFromPolygon(poly: GeoJSON.Polygon, lat: number, lng: number): number | null {
+  const ring = poly.coordinates[0] as number[][]
+  if (!ring || ring.length < 3) return null
+  const cosLat = Math.cos((lat * Math.PI) / 180)
+  let bestDist = Infinity, bestBearing: number | null = null
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [ax, ay] = ring[i], [bx, by] = ring[i + 1]
+    const mx = ((ax + bx) / 2 - lng) * 111320 * cosLat
+    const my = ((ay + by) / 2 - lat) * 111320
+    const d  = Math.sqrt(mx * mx + my * my)
+    if (d < 1 || d > 100) continue
+    const ex = (bx - ax) * 111320 * cosLat, ey = (by - ay) * 111320
+    const el = Math.sqrt(ex * ex + ey * ey)
+    if (el < 0.5) continue
+    const n1x = ey / el, n1y = -ex / el
+    const dot = n1x * (-mx) + n1y * (-my)
+    const nx  = dot > 0 ? n1x : -n1x, ny = dot > 0 ? n1y : -n1y
+    const cb  = ((Math.atan2(-nx, -ny) * 180 / Math.PI) + 360) % 360
+    if (d < bestDist) { bestDist = d; bestBearing = cb }
+  }
+  return bestBearing
+}
+
+function buildingColorFromFloors(nbPl: number | null, score: number): string {
+  if (score >= 4) return '#FAE880'
+  const n = nbPl ?? 5
+  if (n <= 3) return '#EDE6DC'
+  if (n <= 5) return '#E4DDD2'
+  if (n <= 7) return '#D8D0C4'
+  return '#CCCABE'
+}
+
+function normalizeToPolygon(
+  shape: GeoJSON.Polygon | GeoJSON.MultiPolygon | { type?: string; coordinates?: unknown },
+): GeoJSON.Polygon | null {
+  if (!shape?.type) return null
+  if (shape.type === 'Polygon') return shape as GeoJSON.Polygon
+  if (shape.type === 'MultiPolygon') {
+    const coords = (shape as GeoJSON.MultiPolygon).coordinates
+    if (!coords?.length) return null
+    let best = coords[0][0]
+    for (const poly of coords) {
+      if (poly[0].length > best.length) best = poly[0]
+    }
+    return { type: 'Polygon', coordinates: [best] }
+  }
+  return null
+}
+
+function makeFeature(poly: GeoJSON.Polygon, height: number): mapboxgl.MapboxGeoJSONFeature {
+  return {
+    type: 'Feature',
+    geometry: poly as GeoJSON.Geometry,
+    properties: { height, min_height: 0 },
+    id: 0,
+    layer: { id: 'cb-api-bld-base', type: 'fill-extrusion' } as mapboxgl.AnyLayer,
+    source: 'cb-api-bld',
+    sourceLayer: 'building',
+    state: {},
+  } as unknown as mapboxgl.MapboxGeoJSONFeature
+}
+
+function findNearestBuilding(map: mapboxgl.Map, lat: number, lng: number): OrientResult | null {
   let features: mapboxgl.MapboxGeoJSONFeature[] = []
-
-  // Essai principal : querySourceFeatures — cache de tuiles, sans contrainte viewport
   try {
     features = map.querySourceFeatures('composite', {
       sourceLayer: 'building',
       filter: ['==', ['get', 'extrude'], 'true'],
     })
   } catch { /* noop */ }
-
-  // Fallback : queryRenderedFeatures sur notre couche si composite vide
   if (!features.length && map.getLayer('cb-3d-buildings')) {
     try {
-      const pinPx = map.project([lng, lat])
-      const pad = 400
-      const bbox: [mapboxgl.PointLike, mapboxgl.PointLike] = [
-        [pinPx.x - pad, pinPx.y - pad],
-        [pinPx.x + pad, pinPx.y + pad],
-      ]
-      features = map.queryRenderedFeatures(bbox, { layers: ['cb-3d-buildings'] })
+      const p   = map.project([lng, lat])
+      const pad = 350
+      features  = map.queryRenderedFeatures(
+        [[p.x - pad, p.y - pad], [p.x + pad, p.y + pad]],
+        { layers: ['cb-3d-buildings'] },
+      )
     } catch { return null }
   }
-
   if (!features.length) return null
-
   const cosLat = Math.cos((lat * Math.PI) / 180)
-  const maxDeg = 150 / 111320   // filtre géo : 150 m autour du bar
-
-  let best: NearestBuilding | null = null
-
+  let best: OrientResult | null = null
   for (const f of features) {
     const g = f.geometry
     if (!g) continue
@@ -473,34 +597,24 @@ function findNearestBuilding(map: mapboxgl.Map, lat: number, lng: number): Neare
         : g.type === 'MultiPolygon'
           ? (g as GeoJSON.MultiPolygon).coordinates.map(p => p[0] as number[][])
           : []
-
     for (const ring of rings) {
       if (ring.length < 4) continue
-
-      // Filtre rapide : centroïde de l'anneau doit être proche
-      const sumLng = ring.reduce((s, c) => s + c[0], 0) / ring.length
-      const sumLat = ring.reduce((s, c) => s + c[1], 0) / ring.length
-      if (Math.abs(sumLng - lng) > maxDeg * 2 || Math.abs(sumLat - lat) > maxDeg * 2) continue
-
-      let bestEdgeDist = Infinity
-      let bestBearing  = 0
-
+      const cLng = ring.reduce((s, c) => s + c[0], 0) / ring.length
+      const cLat = ring.reduce((s, c) => s + c[1], 0) / ring.length
+      if (Math.abs(cLng - lng) > 0.003 || Math.abs(cLat - lat) > 0.003) continue
+      let bestEdgeDist = Infinity, bestBearing = 0
       for (let i = 0; i < ring.length - 1; i++) {
-        const [ax, ay] = ring[i]
-        const [bx, by] = ring[i + 1]
+        const [ax, ay] = ring[i], [bx, by] = ring[i + 1]
         const mx = ((ax + bx) / 2 - lng) * 111320 * cosLat
         const my = ((ay + by) / 2 - lat) * 111320
         const d  = Math.sqrt(mx * mx + my * my)
-        if (d < 1 || d > 80) continue   // arête trop proche ou trop loin
-
-        const ex  = (bx - ax) * 111320 * cosLat
-        const ey  = (by - ay) * 111320
-        const el  = Math.sqrt(ex * ex + ey * ey)
+        if (d < 1 || d > 80) continue
+        const ex = (bx - ax) * 111320 * cosLat, ey = (by - ay) * 111320
+        const el = Math.sqrt(ex * ex + ey * ey)
         if (el < 0.5) continue
         const n1x = ey / el, n1y = -ex / el
         const dot = n1x * (-mx) + n1y * (-my)
-        const nx  = dot > 0 ? n1x : -n1x
-        const ny  = dot > 0 ? n1y : -n1y
+        const nx  = dot > 0 ? n1x : -n1x, ny = dot > 0 ? n1y : -n1y
         const cb  = ((Math.atan2(-nx, -ny) * 180 / Math.PI) + 360) % 360
         if (d < bestEdgeDist) { bestEdgeDist = d; bestBearing = cb }
       }
