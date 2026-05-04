@@ -112,11 +112,11 @@ export default function Terrace3DView({ lat, lng, score, date }: Props) {
       <div ref={containerRef} className="absolute inset-0" style={{ zIndex: 1 }} />
       {!isDay && (
         <div className="absolute inset-0 pointer-events-none"
-          style={{ zIndex: 3, background: 'rgba(8,14,22,0.65)' }} />
+          style={{ zIndex: 3, background: 'rgba(8,14,22,0.72)' }} />
       )}
       {isDay && <SunDisc altDeg={altDeg} relAngle={relAngle} score={resolvedScore} />}
-      <SunShadowBanner isFrontLit={isFrontLit} isDay={isDay} score={resolvedScore} altDeg={altDeg} />
-      <SunBadge altDeg={altDeg} azDeg={azDeg} isDay={isDay} />
+      {/* Shadow indicator: compact pill top-left (not a full banner — keeps 3D visible) */}
+      <ShadowPill isFrontLit={isFrontLit} isDay={isDay} />
     </div>
   )
 }
@@ -197,102 +197,36 @@ function SunDisc({ altDeg, relAngle, score }: { altDeg: number; relAngle: number
   )
 }
 
-function SunShadowBanner({ isFrontLit, isDay, score, altDeg }: {
-  isFrontLit: boolean; isDay: boolean; score: number; altDeg: number
-}) {
+function ShadowPill({ isFrontLit, isDay }: { isFrontLit: boolean; isDay: boolean }) {
   if (!isDay) return (
-    <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none">
-      <div className="mx-3 mb-3 flex items-center gap-2.5 px-4 py-3 rounded-2xl"
-        style={{ background: 'rgba(8,14,22,0.88)', backdropFilter: 'blur(14px)' }}>
-        <span className="text-[20px]">🌙</span>
-        <div>
-          <p className="font-outfit font-black text-[12px] tracking-wide" style={{ color: '#A8C8E8' }}>
-            NUIT — TERRASSE FERMÉE
-          </p>
-        </div>
+    <div className="absolute top-3 left-3 z-10 pointer-events-none">
+      <div className="rounded-full px-2.5 py-1.5 flex items-center gap-1.5"
+        style={{ background:'rgba(8,14,22,0.82)', backdropFilter:'blur(12px)' }}>
+        <span className="text-[13px]">🌙</span>
+        <span className="font-outfit font-bold text-[11px]" style={{ color:'#8abbe0' }}>Nuit</span>
       </div>
     </div>
   )
-
   if (isFrontLit) return (
-    <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none">
-      <div className="mx-3 mb-3 rounded-2xl overflow-hidden"
-        style={{
-          background: 'linear-gradient(135deg,rgba(255,200,11,0.94) 0%,rgba(255,130,0,0.90) 100%)',
-          backdropFilter: 'blur(14px)',
-          boxShadow: '0 4px 24px rgba(255,160,0,0.50)',
-        }}>
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-[22px]"
-            style={{ background: 'rgba(255,255,255,0.28)', animation: 'pin-halo 2.2s ease-in-out infinite' }}>☀️</div>
-          <div className="flex-1 min-w-0">
-            <p className="font-outfit font-black text-[13px] text-nuit leading-tight tracking-wide">
-              FAÇADE ENSOLEILLÉE
-            </p>
-            <p className="font-outfit text-[11px] text-nuit/60 mt-0.5 truncate">
-              {altDeg > 50 ? 'Plein soleil — ombre courte'
-                : altDeg > 25 ? 'Beau soleil — terrasse bien exposée'
-                : 'Soleil rasant — lumière dorée'}
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <span className="font-playfair font-bold text-[26px] text-nuit leading-none">{score}</span>
-            <span className="font-outfit text-[11px] text-nuit/45">/5</span>
-          </div>
-        </div>
-        <div className="h-[3px] mx-3 mb-2 rounded-full overflow-hidden" style={{ background: 'rgba(27,40,56,0.18)' }}>
-          <div className="h-full rounded-full" style={{ width: `${(score / 5) * 100}%`, background: 'rgba(27,40,56,0.60)', transition: 'width 0.7s' }} />
-        </div>
+    <div className="absolute top-3 left-3 z-10 pointer-events-none">
+      <div className="rounded-full px-2.5 py-1.5 flex items-center gap-1.5"
+        style={{ background:'rgba(255,183,3,0.90)', backdropFilter:'blur(10px)',
+          boxShadow:'0 4px 16px rgba(255,160,0,0.40)' }}>
+        <span className="text-[13px]" style={{ animation:'pin-halo 2s ease-in-out infinite' }}>☀️</span>
+        <span className="font-outfit font-black text-[11px]" style={{ color:'#0b1f3a' }}>Façade éclairée</span>
       </div>
     </div>
   )
-
   return (
-    <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none">
-      <div className="mx-3 mb-3 rounded-2xl overflow-hidden"
-        style={{
-          background: 'linear-gradient(135deg,rgba(21,34,52,0.92) 0%,rgba(44,68,100,0.88) 100%)',
-          backdropFilter: 'blur(14px)',
-          boxShadow: '0 4px 24px rgba(10,20,35,0.50)',
-        }}>
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-[22px]"
-            style={{ background: 'rgba(255,255,255,0.07)' }}>🌑</div>
-          <div className="flex-1 min-w-0">
-            <p className="font-outfit font-black text-[13px] tracking-wide" style={{ color: '#C8DCF0' }}>
-              FAÇADE À L'OMBRE
-            </p>
-            <p className="font-outfit text-[11px] mt-0.5 truncate" style={{ color: 'rgba(168,200,230,0.55)' }}>
-              {altDeg > 0 ? 'Soleil de l\'autre côté du bâtiment' : 'Soleil sous l\'horizon'}
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <span className="font-playfair font-bold text-[26px] leading-none" style={{ color: 'rgba(168,200,230,0.75)' }}>{score}</span>
-            <span className="font-outfit text-[11px]" style={{ color: 'rgba(168,200,230,0.35)' }}>/5</span>
-          </div>
-        </div>
-        <div className="h-[3px] mx-3 mb-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-          <div className="h-full rounded-full" style={{ width: `${(score / 5) * 100}%`, background: 'rgba(141,153,174,0.65)', transition: 'width 0.7s' }} />
-        </div>
+    <div className="absolute top-3 left-3 z-10 pointer-events-none">
+      <div className="rounded-full px-2.5 py-1.5 flex items-center gap-1.5"
+        style={{ background:'rgba(20,40,70,0.82)', backdropFilter:'blur(12px)' }}>
+        <span className="text-[13px]">🌑</span>
+        <span className="font-outfit font-bold text-[11px]" style={{ color:'#8abbe0' }}>Façade à l&apos;ombre</span>
       </div>
     </div>
   )
 }
-
-function SunBadge({ altDeg, azDeg, isDay }: { altDeg: number; azDeg: number; isDay: boolean }) {
-  if (!isDay) return null
-  const cardDir = azDeg < 45 ? 'N' : azDeg < 135 ? 'E' : azDeg < 225 ? 'S' : azDeg < 315 ? 'O' : 'N'
-  return (
-    <div className="absolute top-3 right-3 z-10 pointer-events-none">
-      <div className="rounded-full px-2.5 py-1.5 flex items-center gap-1.5 shadow-md"
-        style={{ background: 'rgba(255,253,247,0.85)', backdropFilter: 'blur(12px)' }}>
-        <span className="text-[11px]">☀</span>
-        <span className="font-outfit font-bold text-[10.5px] text-nuit">{Math.round(altDeg)}° {cardDir}</span>
-      </div>
-    </div>
-  )
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Marqueur
 // ─────────────────────────────────────────────────────────────────────────────

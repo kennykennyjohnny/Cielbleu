@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from 'next'
-import { Playfair_Display, Outfit } from 'next/font/google'
+import { Fraunces, Outfit } from 'next/font/google'
 import '../styles/globals.css'
 
-const playfair = Playfair_Display({
+const fraunces = Fraunces({
   subsets: ['latin'],
-  variable: '--font-playfair-var',
-  weight: ['700'],
+  variable: '--font-fraunces-var',
+  weight: ['500', '600', '700', '800'],
   style: ['normal', 'italic'],
   display: 'swap',
 })
@@ -20,11 +20,11 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: 'CielBleu — Trouve ta terrasse au soleil à Paris',
   description:
-    'La carte des terrasses ensoleillées à Paris en temps réel. Score soleil calculé par algo, confirmé par la communauté.',
+    'Le radar des terrasses ensoleillées à Paris. Score soleil temps réel, vue 3D, fenêtre d’ensoleillement.',
   metadataBase: new URL('https://cielbleu.fr'),
   openGraph: {
     title: 'CielBleu ☀',
-    description: 'Terrasses au soleil à Paris — en temps réel',
+    description: 'Le radar des terrasses ensoleillées à Paris.',
     url: 'https://cielbleu.fr',
     siteName: 'CielBleu',
     images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'CielBleu' }],
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'CielBleu ☀',
-    description: 'Terrasses au soleil à Paris — en temps réel',
+    description: 'Le radar des terrasses ensoleillées à Paris.',
     images: ['/og-image.png'],
   },
 }
@@ -43,13 +43,13 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#FFBE0B',
+  themeColor: '#2f9bff',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
-      <body className={`${playfair.variable} ${outfit.variable}`}>{children}</body>
+      <body className={`${fraunces.variable} ${outfit.variable}`}>{children}</body>
     </html>
   )
 }

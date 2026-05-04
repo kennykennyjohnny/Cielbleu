@@ -11,10 +11,10 @@ import type { Place, FilterType } from '@/types'
 const MapView = dynamic(() => import('@/components/Map/MapView'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full items-center justify-center bg-creme">
+    <div className="flex h-full items-center justify-center">
       <div className="flex flex-col items-center gap-3">
-        <span className="text-5xl animate-spin" style={{ animationDuration: '2.4s' }}>☀</span>
-        <span className="text-sm text-gris font-outfit tracking-wide">Le ciel se découvre…</span>
+        <span className="text-5xl animate-spin text-sun-500" style={{ animationDuration: '2.4s' }}>☀</span>
+        <span className="text-sm text-text-soft font-outfit tracking-wide">Le ciel se découvre…</span>
       </div>
     </div>
   ),
@@ -22,8 +22,7 @@ const MapView = dynamic(() => import('@/components/Map/MapView'), {
 
 const TODAY_LABEL = (() => {
   const d = new Date()
-  const formatter = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
-  return formatter.format(d)
+  return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(d)
 })()
 
 export default function HomePage() {
@@ -41,30 +40,16 @@ export default function HomePage() {
       const m = now.getMinutes() < 30 ? '00' : '30'
       const timeSlot = `${String(h).padStart(2, '0')}:${m}`
 
-      // 1. Places (sans les scores) — payload léger
       const { data: rawPlaces, error: errPlaces } = await supabase
-        .from('places')
-        .select('*')
-        .not('lat', 'is', null)
-        .not('lng', 'is', null)
-        .limit(10000)   // PostgREST default = 1000 ; on force 10k pour voir tous les lieux
+        .from('places').select('*')
+        .not('lat', 'is', null).not('lng', 'is', null).limit(10000)
 
-      if (errPlaces) {
-        console.error('Erreur chargement lieux:', errPlaces.message)
-        setLoading(false)
-        return
-      }
-      if (!rawPlaces) {
-        setLoading(false)
-        return
-      }
+      if (errPlaces) { console.error('Erreur chargement lieux:', errPlaces.message); setLoading(false); return }
+      if (!rawPlaces) { setLoading(false); return }
 
-      // 2. Scores du créneau actuel uniquement (1 ligne par place)
       const { data: nowScores } = await supabase
-        .from('sun_scores')
-        .select('place_id, score')
-        .eq('month', month)
-        .eq('time_slot', timeSlot)
+        .from('sun_scores').select('place_id, score')
+        .eq('month', month).eq('time_slot', timeSlot)
 
       const scoreByPlace = new Map<string, number>()
       for (const r of nowScores ?? []) scoreByPlace.set(r.place_id, r.score)
@@ -77,33 +62,21 @@ export default function HomePage() {
       setPlaces(enriched)
       setLoading(false)
     }
-
     loadPlaces()
   }, [])
 
-  // Filtrage réactif
   const displayedPlaces = useMemo(() => {
     let result = places
-
     const typeFilters = activeFilters.filter((f): f is 'bar' | 'restaurant' | 'cafe' | 'park' =>
       ['bar', 'restaurant', 'cafe', 'park'].includes(f)
     )
-
-    if (typeFilters.length > 0) {
-      result = result.filter((p) => typeFilters.includes(p.type))
-    }
-
-    if (activeFilters.includes('sun')) {
-      result = result.filter((p) => (p.currentScore ?? 0) >= 4)
-    }
+    if (typeFilters.length > 0) result = result.filter((p) => typeFilters.includes(p.type))
+    if (activeFilters.includes('sun')) result = result.filter((p) => (p.currentScore ?? 0) >= 4)
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
-      result = result.filter(
-        (p) => p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q)
-      )
+      result = result.filter((p) => p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q))
     }
-
     return result
   }, [places, activeFilters, searchQuery])
 
@@ -123,113 +96,141 @@ export default function HomePage() {
   }, [router])
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-creme">
+    <main className="relative h-dvh w-full overflow-hidden">
       {/* Carte plein écran */}
       <div className="absolute inset-0">
-        <MapView
-          places={displayedPlaces}
-          onPlaceSelect={handlePlaceSelect}
-        />
+        <MapView places={displayedPlaces} onPlaceSelect={handlePlaceSelect} />
       </div>
 
-      {/* ── Header app bleu CielBleu ── */}
-      <header className="absolute top-0 left-0 right-0 z-20">
-        <div
-          className="bg-ciel shadow-[0_2px_24px_rgba(58,134,255,0.55)]"
-          style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 14px)', paddingBottom: 11 }}
-        >
-          <div className="flex items-center justify-between px-5">
-            {/* Logo */}
-            <div className="flex items-baseline gap-0">
-              <span className="font-playfair italic text-[27px] font-bold text-white tracking-tight leading-none">Ciel</span>
-              <span className="font-playfair italic text-[27px] font-bold text-soleil tracking-tight leading-none">Bleu</span>
-              <span className="ml-1 text-white/90 text-[18px] leading-none -translate-y-0.5 inline-block">☀</span>
-            </div>
-
-            {/* Stats inline */}
-            {!loading && (
-              <div className="flex items-center gap-2">
-                <span className="font-outfit text-[12px] text-white/75">
-                  <span className="font-bold text-white">{displayedPlaces.length}</span>
-                  {' '}{displayedPlaces.length > 1 ? 'terrasses' : 'terrasse'}
-                </span>
-                {sunnyCount > 0 && (
-                  <>
-                    <span className="w-px h-3 bg-white/30" />
-                    <span className="font-outfit text-[12px] font-bold flex items-center gap-1 text-soleil">
-                      ☀ {sunnyCount}
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
+      {/* ─── Top bar : brand-pill (gauche) + radar count (droite) ─── */}
+      <header
+        className="absolute top-0 inset-x-0 z-20 pointer-events-none"
+        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)' }}
+      >
+        <div className="px-3 flex items-start justify-between gap-2 pointer-events-none">
+          {/* Brand pill */}
+          <div
+            className="pointer-events-auto inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full"
+            aria-label="CielBleu"
+            style={{
+              background: 'rgba(255,255,255,0.86)',
+              border: '1px solid rgba(20,32,51,0.10)',
+              boxShadow: '0 6px 22px rgba(11,31,58,0.10)',
+              backdropFilter: 'blur(16px)',
+            }}
+          >
+            <span
+              className="grid place-items-center w-7 h-7 rounded-full text-[14px]"
+              style={{
+                background: 'radial-gradient(circle at 36% 30%, #fff5a0 0%, #ffb703 60%, #f77f00 100%)',
+                boxShadow: '0 6px 14px rgba(255,183,3,0.35)',
+                color: '#0b1f3a',
+              }}
+              aria-hidden="true"
+            >☀</span>
+            <span className="font-fraunces font-extrabold text-[19px] tracking-[-0.04em] leading-none text-navy-900">
+              CielBleu
+            </span>
           </div>
-          <p className="text-[9.5px] text-center font-outfit text-white/50 uppercase tracking-[0.22em] mt-0.5 first-letter:capitalize">
-            {TODAY_LABEL}
-          </p>
+
+          {/* Radar pill : nombre */}
+          {!loading && displayedPlaces.length > 0 && (
+            <div
+              className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full"
+              style={{
+                background: 'rgba(255,255,255,0.86)',
+                border: '1px solid rgba(20,32,51,0.10)',
+                boxShadow: '0 6px 22px rgba(11,31,58,0.10)',
+                backdropFilter: 'blur(16px)',
+              }}
+            >
+              <span className="font-fraunces font-bold text-[14px] text-navy-900 leading-none">
+                {displayedPlaces.length}
+              </span>
+              {sunnyCount > 0 && (
+                <>
+                  <span aria-hidden="true" className="w-1 h-1 rounded-full bg-text-soft/40" />
+                  <span className="font-outfit font-bold text-[11.5px] text-sun-700 leading-none flex items-center gap-1">
+                    <span aria-hidden="true">☀</span>
+                    {sunnyCount}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </div>
-        {/* Sweep dégradé bleu → transparent */}
-        <div className="h-8 bg-gradient-to-b from-ciel/30 to-transparent pointer-events-none" />
+
+        {/* Date subtile sous le brand pill */}
+        <p className="mt-1.5 px-4 font-outfit text-[10px] uppercase tracking-[0.22em] text-text-soft pointer-events-none">
+          {TODAY_LABEL}
+        </p>
       </header>
 
       {/* État vide */}
       {!loading && displayedPlaces.length === 0 && (
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-10 pointer-events-none flex justify-center px-6">
-          <div className="rounded-2xl bg-white/95 px-6 py-4 shadow-lg max-w-xs text-center">
-            <span className="text-3xl">🌥</span>
-            <p className="mt-2 text-sm text-nuit font-outfit font-medium">
+          <div className="rounded-2xl bg-surface-0/95 px-6 py-4 shadow-lg max-w-xs text-center"
+            style={{ border: '1px solid rgba(20,32,51,0.10)' }}>
+            <span aria-hidden="true" className="text-3xl">🌥</span>
+            <p className="mt-2 text-sm text-text-primary font-outfit font-bold">
               Aucune terrasse trouvée
             </p>
-            <p className="text-xs text-gris font-outfit mt-1">
-              Essaie de désactiver un filtre ou de modifier ta recherche.
+            <p className="text-xs text-text-soft font-outfit mt-1">
+              Désactive un filtre ou modifie ta recherche.
             </p>
           </div>
         </div>
       )}
 
-      {/* ─── Floating bottom card ─── */}
+      {/* ─── Floating bottom card : filtres + search ─── */}
       <div
         className="absolute bottom-0 inset-x-0 z-20 pointer-events-none"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
       >
-        <div className="pointer-events-auto mx-4 mb-2 rounded-3xl overflow-hidden"
+        <div
+          className="pointer-events-auto mx-3 mb-2 rounded-3xl overflow-hidden"
           style={{
-            background: 'rgba(255,253,247,0.96)',
+            background: 'rgba(255,252,243,0.94)',
+            border: '1px solid rgba(20,32,51,0.10)',
             backdropFilter: 'blur(20px)',
-            boxShadow: '0 8px 40px rgba(27,40,56,0.18), 0 1px 4px rgba(27,40,56,0.06)',
+            boxShadow: '0 18px 50px rgba(11,31,58,0.16), 0 1px 4px rgba(11,31,58,0.06)',
           }}
         >
-          {/* Bandeau bleu en haut de la card */}
-          <div className="h-1 bg-ciel rounded-t-3xl" />
-
-          {/* Filtres centrés */}
-          <div className="pt-3 pb-2.5">
+          {/* Filtres */}
+          <div className="pt-2.5 pb-2">
             <Filters activeFilters={activeFilters} onToggle={toggleFilter} />
           </div>
 
-          {/* Séparateur */}
-          <div className="mx-4 h-px bg-nuit/5" />
-
           {/* Search */}
-          <div className="px-4 py-3">
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gris pointer-events-none"
-                strokeWidth={2.5}
-              />
+          <div className="px-3 pb-3">
+            <div
+              className="relative flex items-center gap-2 px-2 rounded-2xl"
+              style={{
+                background: '#ffffff',
+                border: '1px solid rgba(20,32,51,0.10)',
+                minHeight: 48,
+              }}
+            >
+              <span
+                className="w-9 h-9 grid place-items-center rounded-xl shrink-0"
+                style={{ background: 'var(--color-sky-100)', color: 'var(--color-sky-700)' }}
+                aria-hidden="true"
+              >
+                <Search size={15} strokeWidth={2.4} />
+              </span>
               <input
                 type="text"
-                placeholder="Bar, quartier, adresse…"
+                placeholder="Chercher un café, un quartier…"
+                aria-label="Rechercher un lieu"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-2xl bg-nuit/[0.04] pl-9 pr-9 py-2.5 text-[13.5px] text-nuit outline-none placeholder:text-gris/60 focus:ring-2 focus:ring-ciel/40 font-outfit transition"
+                className="flex-1 bg-transparent outline-none font-outfit font-semibold text-[14px] text-text-primary placeholder:text-text-soft/85 placeholder:font-medium pr-2"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  aria-label="Effacer"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-gris hover:bg-nuit/[0.08] transition"
+                  aria-label="Effacer la recherche"
+                  className="p-1.5 rounded-full text-text-soft hover:bg-surface-2 transition shrink-0"
                 >
                   <X size={14} strokeWidth={2.2} />
                 </button>
@@ -238,7 +239,6 @@ export default function HomePage() {
           </div>
         </div>
       </div>
-
     </main>
   )
 }

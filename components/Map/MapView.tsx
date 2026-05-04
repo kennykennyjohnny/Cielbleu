@@ -13,42 +13,75 @@ import type { Place } from '@/types'
 
 const PARIS_CENTER: [number, number] = [2.3522, 48.8566]
 
-// Couleurs fill/light par score (0=nuit, 5=plein soleil)
-const PIN_FILL  = ['#253448', '#8E9EB0', '#C8A030', '#FFBE0B', '#FF9500', '#FF6A00']
-const PIN_LIGHT = ['#4A6080', '#BCC8D8', '#F0D060', '#FFEE90', '#FFD060', '#FFA050']
+// Couleurs (bg/text) par score 0..5 — dominante chaude pour 5/4/3.
+const SCORE_BG = ['#0b1f3a', '#cbd5e1', '#98a2b3', '#f77f00', '#ffd76a', '#ffb703']
+const SCORE_TX = ['#ffffff', '#142033', '#ffffff', '#ffffff', '#3a2700', '#0b1f3a']
 
-// ── Génère une image de pin (30×44px) pour un score donné ─────────────────
+// ── Diamond pin — border-radius:50% 50% 50% 12px rotate(-45deg) ──────────────
+// Matches the HTML mockup's .pin shape exactly.
 function drawPinImage(score: number): { width: number; height: number; data: Uint8Array } {
-  const W = 30, H = 44
+  const W = 54, H = 60
   const canvas = document.createElement('canvas')
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')!
-  const CX = W / 2, CY = 13, CR = 11
 
-  const fill  = PIN_FILL [score] ?? PIN_FILL [3]
-  const light = PIN_LIGHT[score] ?? PIN_LIGHT[3]
+  const bg = SCORE_BG[score] ?? SCORE_BG[3]
+  const tx = SCORE_TX[score] ?? SCORE_TX[3]
 
+  // Square size (pre-rotation). After -45° rotation, the bottom-left corner
+  // (small radius = point) becomes the bottom-most tip of the diamond.
+  const SIZE = 30
+  const CX = W / 2        // horizontal center
+  const CY = H / 2 - 1   // vertical center of the square
+
+  // Radii: top-left=50%, top-right=50%, bottom-right=50%, bottom-left=12px equiv
+  const r50 = SIZE / 2          // 15px
+  const r12 = Math.round(SIZE * 12 / 46)  // ≈ 8px
+
+  // Drop shadow
   ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.52)'
-  ctx.shadowBlur = 8; ctx.shadowOffsetX = 0.5; ctx.shadowOffsetY = 4
+  ctx.shadowColor   = 'rgba(11,31,58,0.34)'
+  ctx.shadowBlur    = 14
+  ctx.shadowOffsetX = 0
+  ctx.shadowOffsetY = 6
 
-  // Disque avec dégradé radial
-  const g = ctx.createRadialGradient(CX - 3, CY - 3, 1.5, CX, CY, CR + 1)
-  g.addColorStop(0, light); g.addColorStop(0.75, fill); g.addColorStop(1, fill)
-  ctx.beginPath(); ctx.arc(CX, CY, CR, 0, Math.PI * 2)
-  ctx.fillStyle = g; ctx.fill()
-
-  // Pointer triangulaire
+  // Draw rounded square rotated -45°
+  ctx.translate(CX, CY)
+  ctx.rotate(-Math.PI / 4)
   ctx.beginPath()
-  ctx.moveTo(CX - 5, CY + CR - 3)
-  ctx.lineTo(CX,     H - 4)
-  ctx.lineTo(CX + 5, CY + CR - 3)
-  ctx.closePath(); ctx.fillStyle = fill; ctx.fill()
+  const rr = ctx as CanvasRenderingContext2D & { roundRect?: (...a: unknown[]) => void }
+  if (rr.roundRect) {
+    rr.roundRect(-SIZE / 2, -SIZE / 2, SIZE, SIZE, [r50, r50, r50, r12])
+  } else {
+    ctx.arc(0, 0, SIZE / 2, 0, Math.PI * 2)
+  }
+  ctx.fillStyle = bg
+  ctx.fill()
   ctx.restore()
 
-  // Anneau blanc
-  ctx.beginPath(); ctx.arc(CX, CY, CR, 0, Math.PI * 2)
-  ctx.strokeStyle = 'rgba(255,253,247,0.95)'; ctx.lineWidth = 2.0; ctx.stroke()
+  // White border (no shadow, same transform)
+  ctx.save()
+  ctx.translate(CX, CY)
+  ctx.rotate(-Math.PI / 4)
+  ctx.beginPath()
+  if (rr.roundRect) {
+    rr.roundRect(-SIZE / 2, -SIZE / 2, SIZE, SIZE, [r50, r50, r50, r12])
+  } else {
+    ctx.arc(0, 0, SIZE / 2, 0, Math.PI * 2)
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+  ctx.lineWidth = 2.5
+  ctx.stroke()
+  ctx.restore()
+
+  // ☀ + score number — drawn at normal orientation (center CX, CY)
+  ctx.fillStyle = tx
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = 'bold 10px system-ui, sans-serif'
+  ctx.fillText('☀', CX, CY - 5.5)
+  ctx.font = 'bold 13px system-ui, sans-serif'
+  ctx.fillText(String(score), CX, CY + 6)
 
   return { width: W, height: H, data: new Uint8Array(ctx.getImageData(0, 0, W, H).data.buffer) }
 }
@@ -58,17 +91,18 @@ function applyStyle(map: mapboxgl.Map) {
   const set = (id: string, prop: string, val: unknown) => {
     if (map.getLayer(id)) try { map.setPaintProperty(id, prop as never, val as never) } catch { /* noop */ }
   }
-  set('background', 'background-color', '#FFFDF7')
-  set('water',      'fill-color',       '#BFDBFE')
-  set('waterway',   'line-color',       '#BFDBFE')
-  set('building',   'fill-color',       '#F0EAD8')
-  set('building',   'fill-opacity',     0.85)
-  set('building-outline', 'line-color', '#E2D9C0')
-  for (const id of ['landuse', 'national-park', 'park', 'pitch']) set(id, 'fill-color', '#DDEBC8')
+  // Carte papier-crème CielBleu : fond chaud, eau bleu ciel, bâtiments calcaire
+  set('background', 'background-color', '#fffcf3')          // paper
+  set('water',      'fill-color',       '#c7e8ff')          // sky-200
+  set('waterway',   'line-color',       '#8fd3ff')          // sky-300
+  set('building',   'fill-color',       '#e9e1d4')          // limestone
+  set('building',   'fill-opacity',     0.72)
+  set('building-outline', 'line-color', '#d8d2c8')
+  for (const id of ['landuse', 'national-park', 'park', 'pitch']) set(id, 'fill-color', '#e6efd9')
   for (const id of ['road-primary', 'road-secondary-tertiary', 'road-street', 'road-trunk', 'road-motorway']) {
-    set(id, 'line-color', '#FFFFFF')
+    set(id, 'line-color', '#ffffff')
   }
-  set('road-minor', 'line-color', '#FAF7EE')
+  set('road-minor', 'line-color', '#fff8ea')
 
   // Masque POI et labels parasites
   for (const l of map.getStyle().layers ?? []) {
@@ -76,10 +110,10 @@ function applyStyle(map: mapboxgl.Map) {
       try { map.setLayoutProperty(l.id, 'visibility', 'none') } catch { /* noop */ }
     }
   }
-  set('settlement-major-label', 'text-color',      '#1B2838')
-  set('settlement-minor-label', 'text-color',      '#5A6B82')
-  set('settlement-major-label', 'text-halo-color', '#FFFDF7')
-  set('settlement-minor-label', 'text-halo-color', '#FFFDF7')
+  set('settlement-major-label', 'text-color',      '#0b1f3a')
+  set('settlement-minor-label', 'text-color',      '#6f7a8a')
+  set('settlement-major-label', 'text-halo-color', '#fffcf3')
+  set('settlement-minor-label', 'text-halo-color', '#fffcf3')
 }
 
 // ── Composant ──────────────────────────────────────────────────────────────
@@ -154,22 +188,22 @@ export default function MapView({ places, onPlaceSelect }: Props) {
         id: 'clusters-shadow', type: 'circle', source: 'places',
         filter: ['has', 'point_count'],
         paint: {
-          'circle-radius': ['step', ['get', 'point_count'], 22, 30, 28, 200, 35],
-          'circle-color': 'rgba(0,0,0,0.13)',
-          'circle-translate': [2, 4],
+          'circle-radius': ['step', ['get', 'point_count'], 24, 30, 30, 200, 36],
+          'circle-color': 'rgba(11,31,58,0.18)',
+          'circle-translate': [2, 5],
+          'circle-blur': 0.4,
         },
       })
 
-      // Clusters colorés
+      // Clusters — fond navy (HTML mockup), anneau soleil
       map.addLayer({
         id: 'clusters', type: 'circle', source: 'places',
         filter: ['has', 'point_count'],
         paint: {
-          'circle-color': ['step', ['get', 'point_count'], '#FFBE0B', 30, '#FF9500', 200, '#FF6B6B'],
-          'circle-radius': ['step', ['get', 'point_count'], 20, 30, 26, 200, 33],
-          'circle-stroke-width': 3.5,
-          'circle-stroke-color': '#FFFDF7',
-          'circle-opacity': 0.95,
+          'circle-color': 'rgba(24,59,102,0.92)',
+          'circle-radius': ['step', ['get', 'point_count'], 22, 30, 27, 200, 32],
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': '#ffb703',
         },
       })
 
@@ -179,10 +213,10 @@ export default function MapView({ places, onPlaceSelect }: Props) {
         filter: ['has', 'point_count'],
         layout: {
           'text-field': ['get', 'point_count_abbreviated'],
-          'text-size': 12,
+          'text-size': 13,
           'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
         },
-        paint: { 'text-color': '#1B2838' },
+        paint: { 'text-color': '#ffffff' },
       })
 
       // Pins individuels — symbol layer GPU-accelerated

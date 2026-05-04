@@ -1,5 +1,6 @@
-// Factory DOM pour les markers Mapbox — pas de React (évite les fuites mémoire)
-// Zone tactile élargie (60×60) au-dessus du visuel (38×46) pour le mobile.
+// Factory DOM pour les markers Mapbox.
+// DA CielBleu : bleu dominant, soleil = accent uniquement aux scores 4-5.
+// Hit zone élargie (60×60) pour le tactile mobile.
 
 type Palette = {
   ring: string
@@ -9,24 +10,39 @@ type Palette = {
   badgeBg: string
   badgeColor: string
   halo: boolean
+  haloColor: string
 }
 
+// 0 = nuit (sky-900) → 5 = plein soleil (sun-500). Les scores faibles restent
+// dans la famille bleue, les scores forts virent au doré.
 const PALETTES: Record<number, Palette> = {
-  0: { ring: '#1B2838', inner: '#2C3E54', symbol: '☾', symbolColor: '#FFFDF7', badgeBg: '#1B2838', badgeColor: '#FFFDF7', halo: false },
-  1: { ring: '#B8BFCC', inner: '#E2E5EB', symbol: '☀', symbolColor: '#8D99AE', badgeBg: '#8D99AE', badgeColor: '#FFFDF7', halo: false },
-  2: { ring: '#A6AEC0', inner: '#EFF1F5', symbol: '☀', symbolColor: '#8D99AE', badgeBg: '#8D99AE', badgeColor: '#FFFDF7', halo: false },
-  3: { ring: '#FFD976', inner: '#FFF3CC', symbol: '☀', symbolColor: '#E89F00', badgeBg: '#FFBE0B', badgeColor: '#1B2838', halo: false },
-  4: { ring: '#FFBE0B', inner: '#FFE48A', symbol: '☀', symbolColor: '#B57500', badgeBg: '#FFBE0B', badgeColor: '#1B2838', halo: true },
-  5: { ring: '#FF9500', inner: '#FFD976', symbol: '☀', symbolColor: '#B85700', badgeBg: '#FF6B6B', badgeColor: '#FFFDF7', halo: true },
+  0: { ring: '#173c68', inner: '#1f4d80', symbol: '☾', symbolColor: '#eef7ff', badgeBg: '#173c68', badgeColor: '#eef7ff', halo: false, haloColor: '#173c68' },
+  1: { ring: '#7f94aa', inner: '#bfd2e5', symbol: '☁', symbolColor: '#5f7892', badgeBg: '#5f7892', badgeColor: '#ffffff', halo: false, haloColor: '#7f94aa' },
+  2: { ring: '#5ab8ff', inner: '#bfe4ff', symbol: '⛅', symbolColor: '#16324f', badgeBg: '#177fe6', badgeColor: '#ffffff', halo: false, haloColor: '#5ab8ff' },
+  3: { ring: '#2f9bff', inner: '#d9efff', symbol: '☀', symbolColor: '#177fe6', badgeBg: '#2f9bff', badgeColor: '#ffffff', halo: false, haloColor: '#2f9bff' },
+  4: { ring: '#ffd35a', inner: '#fff3c4', symbol: '☀', symbolColor: '#b57500', badgeBg: '#f59e0b', badgeColor: '#16324f', halo: true,  haloColor: '#ffbe0b' },
+  5: { ring: '#ffbe0b', inner: '#ffe082', symbol: '☀', symbolColor: '#a85a00', badgeBg: '#16324f', badgeColor: '#ffe082', halo: true,  haloColor: '#ffbe0b' },
+}
+
+const SCORE_LABEL: Record<number, string> = {
+  0: 'Nuit',
+  1: 'À l’ombre',
+  2: 'Peu ensoleillé',
+  3: 'Bon ensoleillement',
+  4: 'Très lumineux',
+  5: 'Plein soleil',
 }
 
 export function createSunPinElement(score: number, onClick: () => void): HTMLElement {
   const s = Math.max(0, Math.min(5, Math.round(score)))
   const p = PALETTES[s]
 
-  // Wrapper invisible élargi pour la zone tactile (60×60) — la pointe est au centre-bas du visuel
+  // Wrapper invisible élargi pour le tactile (60×60). Pointe = centre-bas.
   const hit = document.createElement('div')
   hit.setAttribute('data-score', String(s))
+  hit.setAttribute('role', 'button')
+  hit.setAttribute('tabindex', '0')
+  hit.setAttribute('aria-label', `${SCORE_LABEL[s]} — score soleil ${s} sur 5`)
   hit.style.cssText = `
     position: relative;
     width: 60px;
@@ -39,7 +55,6 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
     justify-content: center;
   `
 
-  // Conteneur visuel (38×46)
   const wrap = document.createElement('div')
   wrap.style.cssText = `
     position: relative;
@@ -50,7 +65,6 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
     pointer-events: none;
   `
 
-  // Halo (score >= 4 uniquement)
   if (p.halo) {
     const halo = document.createElement('div')
     halo.style.cssText = `
@@ -60,14 +74,13 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
       width: 50px;
       height: 50px;
       border-radius: 50%;
-      background: radial-gradient(circle, ${p.ring}55 0%, ${p.ring}00 70%);
+      background: radial-gradient(circle, ${p.haloColor}66 0%, ${p.haloColor}00 70%);
       pointer-events: none;
       animation: pin-halo 2.4s ease-in-out infinite;
     `
     wrap.appendChild(halo)
   }
 
-  // Cercle principal
   const circle = document.createElement('div')
   circle.style.cssText = `
     position: absolute;
@@ -77,20 +90,19 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
     height: 38px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, ${p.inner} 0%, ${p.ring} 100%);
-    border: 2px solid ${p.ring};
-    box-shadow: 0 2px 6px rgba(27,40,56,0.18), 0 8px 18px rgba(27,40,56,0.10);
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(23, 60, 104, 0.22), 0 8px 18px rgba(23, 60, 104, 0.12);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 19px;
     line-height: 1;
     color: ${p.symbolColor};
-    text-shadow: 0 1px 0 rgba(255,253,247,0.4);
   `
   circle.textContent = p.symbol
   wrap.appendChild(circle)
 
-  // Badge score (en bas-droite)
+  // Badge chiffre — assure que le score reste lisible même daltonien
   const badge = document.createElement('div')
   badge.style.cssText = `
     position: absolute;
@@ -107,8 +119,8 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid #FFFDF7;
-    box-shadow: 0 1px 3px rgba(27,40,56,0.25);
+    border: 2px solid #ffffff;
+    box-shadow: 0 1px 3px rgba(23, 60, 104, 0.30);
     line-height: 1;
   `
   badge.textContent = String(s)
@@ -126,13 +138,12 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
     border-top: 9px solid ${p.ring};
-    filter: drop-shadow(0 2px 2px rgba(27,40,56,0.18));
+    filter: drop-shadow(0 2px 2px rgba(23, 60, 104, 0.20));
   `
   wrap.appendChild(tail)
 
   hit.appendChild(wrap)
 
-  // Click via pointerdown (plus fiable sur mobile que click sur DOM marker Mapbox)
   const fire = (e: Event) => {
     e.stopPropagation()
     e.preventDefault()
@@ -140,6 +151,12 @@ export function createSunPinElement(score: number, onClick: () => void): HTMLEle
   }
   hit.addEventListener('click', fire)
   hit.addEventListener('touchend', fire, { passive: false })
+  hit.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onClick()
+    }
+  })
 
   hit.addEventListener('mouseenter', () => {
     wrap.style.transform = 'translateY(-3px) scale(1.08)'

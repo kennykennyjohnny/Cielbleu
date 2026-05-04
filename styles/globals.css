@@ -1,17 +1,80 @@
 @import "tailwindcss";
 
 @theme {
-  /* Palette CielBleu */
-  --color-soleil: #FFBE0B;
-  --color-ciel: #3A86FF;
-  --color-nuit: #1B2838;
-  --color-creme: #FFFDF7;
-  --color-corail: #FF6B6B;
-  --color-gris: #8D99AE;
+  /* ─────────── Sky (accent) ─────────── */
+  --color-sky-50:  #f4faff;
+  --color-sky-100: #e6f4ff;
+  --color-sky-200: #c7e8ff;
+  --color-sky-300: #8fd3ff;
+  --color-sky-400: #5ab4ff;
+  --color-sky-500: #4ea3ff;
+  --color-sky-600: #2d83e6;
+  --color-sky-700: #1769c2;
+  --color-sky-800: #144f8f;
 
-  /* Typos — variables injectées par next/font dans layout.tsx */
-  --font-playfair: var(--font-playfair-var), "Playfair Display", serif;
-  --font-outfit: var(--font-outfit-var), "Outfit", sans-serif;
+  /* ─────────── Navy (texte sombre / contrastes) ─────────── */
+  --color-navy-700: #183b66;
+  --color-navy-800: #102a4c;
+  --color-navy-900: #0b1f3a;
+
+  /* ─────────── Sun (signature dominante) ─────────── */
+  --color-sun-100: #fff1b8;
+  --color-sun-300: #ffd76a;
+  --color-sun-500: #ffb703;
+  --color-sun-600: #f59e0b;
+  --color-sun-700: #d97706;
+  --color-golden-500: #f77f00;
+
+  /* ─────────── Accents chauds ─────────── */
+  --color-coral-500: #ff6b5a;
+  --color-terrace-green: #4f8f65;
+
+  /* ─────────── Fonds chauds ─────────── */
+  --color-cream-50:  #fffdf7;
+  --color-cream-100: #fff8ea;
+  --color-paper:     #fffcf3;
+  --color-limestone: #e9e1d4;
+  --color-stone:     #d8d2c8;
+
+  /* ─────────── Surfaces neutres ─────────── */
+  --color-surface-0: #ffffff;
+  --color-surface-1: #fffcf3;
+  --color-surface-2: #fbf6e9;
+  --color-surface-3: #f0eadd;
+
+  /* ─────────── Texte ─────────── */
+  --color-ink:            #142033;
+  --color-text-primary:   #142033;
+  --color-text-secondary: #6f7a8a;
+  --color-text-soft:      #98a2b3;
+  --color-text-inverse:   #ffffff;
+
+  /* ─────────── Status ─────────── */
+  --color-success: #4f8f65;
+  --color-warning: #f59e0b;
+  --color-danger:  #ff6b5a;
+
+  /* ─────────── Score colors (bg / text) ─────────── */
+  --color-score-5-bg: #ffb703; --color-score-5-tx: #0b1f3a;
+  --color-score-4-bg: #ffd76a; --color-score-4-tx: #3a2700;
+  --color-score-3-bg: #f77f00; --color-score-3-tx: #ffffff;
+  --color-score-2-bg: #98a2b3; --color-score-2-tx: #ffffff;
+  --color-score-1-bg: #cbd5e1; --color-score-1-tx: #142033;
+  --color-score-0-bg: #0b1f3a; --color-score-0-tx: #ffffff;
+
+  /* ─────────── Aliases legacy ─────────── */
+  --color-ciel:   #4ea3ff;
+  --color-nuit:   #0b1f3a;
+  --color-creme:  #fffdf7;
+  --color-mist:   #f4faff;
+  --color-soleil: #ffb703;
+  --color-gris:   #98a2b3;
+  --color-corail: #ff6b5a;
+
+  /* ─────────── Typos ─────────── */
+  --font-fraunces: var(--font-fraunces-var), "Fraunces", Georgia, serif;
+  --font-playfair: var(--font-fraunces-var), "Fraunces", Georgia, serif;
+  --font-outfit:   var(--font-outfit-var),   "Outfit",   sans-serif;
 }
 
 html,
@@ -22,79 +85,80 @@ body {
 }
 
 body {
-  background-color: #FFFDF7;
-  color: #1B2838;
+  color: var(--color-ink);
   font-family: var(--font-outfit), sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background:
+    radial-gradient(circle at 14% 10%, rgba(255,183,3,0.18), transparent 28%),
+    radial-gradient(circle at 92% 6%, rgba(78,163,255,0.20), transparent 30%),
+    linear-gradient(135deg, #fffdf7 0%, #f4faff 52%, #fff8ea 100%);
+  background-attachment: fixed;
 }
 
-/* Masquer la scrollbar des filtres */
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
+.scrollbar-none::-webkit-scrollbar { display: none; }
 
-/* Pins Mapbox — reset z-index pour les markers custom */
-.mapboxgl-marker {
-  cursor: pointer;
-}
+.mapboxgl-marker { cursor: pointer; }
 
-/* Halo pulsant des pins haut-score */
 @keyframes pin-halo {
-  0%, 100% { transform: scale(1); opacity: 0.7; }
-  50%      { transform: scale(1.18); opacity: 1; }
+  0%, 100% { transform: scale(1);    opacity: 0.7; }
+  50%      { transform: scale(1.18); opacity: 1;   }
 }
 
-/* Mapbox UI — discrétion + harmonisation palette */
-.mapboxgl-ctrl-attrib {
-  background: rgba(255, 253, 247, 0.7) !important;
-  font-family: var(--font-outfit), sans-serif !important;
-  font-size: 10px !important;
+@keyframes cb-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,183,3,0.45); }
+  50%      { box-shadow: 0 0 0 8px rgba(255,183,3,0); }
 }
 
-.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl {
-  margin-bottom: 8px !important;
-}
-
-.mapboxgl-ctrl-group {
-  border-radius: 14px !important;
-  box-shadow: 0 4px 12px rgba(27, 40, 56, 0.12) !important;
-  overflow: hidden;
-  border: none !important;
-}
-
-.mapboxgl-ctrl-group button {
-  width: 36px !important;
-  height: 36px !important;
-}
-
-/* Reveal animation pour la BottomSheet */
-@keyframes sheet-up {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
-}
-
-/* Soleil 3D — rayons rotatifs (pas de translate : l'élément est positionné par width+top+left) */
 @keyframes cb-sun-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
 
-/* Soleil 3D — pulsation halo corona (garde le translate(-50%,-50%) de l'élément) */
 @keyframes cb-sun-glow {
   0%, 100% { opacity: 0.88; transform: translate(-50%, -50%) scale(1); }
-  50%       { opacity: 1;   transform: translate(-50%, -50%) scale(1.10); }
+  50%      { opacity: 1;    transform: translate(-50%, -50%) scale(1.10); }
 }
 
-/* Désactive le tap-highlight bleu mobile */
-* {
-  -webkit-tap-highlight-color: transparent;
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
 }
 
-/* Slider horaire — track invisible (on dessine notre propre piste en bg) + thumb stylé */
+.mapboxgl-ctrl-attrib {
+  background: rgba(255,253,247,0.78) !important;
+  font-family: var(--font-outfit), sans-serif !important;
+  font-size: 10px !important;
+  color: var(--color-text-soft) !important;
+}
+
+.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl { margin-bottom: 8px !important; }
+
+.mapboxgl-ctrl-group {
+  border-radius: 14px !important;
+  box-shadow: 0 4px 14px rgba(11,31,58,0.12) !important;
+  overflow: hidden;
+  border: none !important;
+  background: rgba(255,255,255,0.96) !important;
+}
+.mapboxgl-ctrl-group button {
+  width: 36px !important;
+  height: 36px !important;
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+:focus-visible {
+  outline: 2px solid var(--color-sun-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Slider horaire ─ thumb soleil sur track gradient */
 .cb-hour-slider {
   height: 28px;
   outline: none;
@@ -112,14 +176,14 @@ body {
 .cb-hour-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: #FFFDF7;
-  border: 3px solid #1B2838;
-  box-shadow: 0 4px 10px rgba(27, 40, 56, 0.25);
+  background: radial-gradient(circle at 36% 30%, #fff5a0 0%, #ffb703 60%, #f77f00 100%);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(11,31,58,0.18), 0 6px 14px rgba(255,183,3,0.45);
   cursor: grab;
-  margin-top: -9px;
+  margin-top: -10px;
   transition: transform 0.15s ease;
 }
 .cb-hour-slider::-webkit-slider-thumb:active {
@@ -127,15 +191,22 @@ body {
   transform: scale(1.15);
 }
 .cb-hour-slider::-moz-range-thumb {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: #FFFDF7;
-  border: 3px solid #1B2838;
-  box-shadow: 0 4px 10px rgba(27, 40, 56, 0.25);
+  background: radial-gradient(circle at 36% 30%, #fff5a0 0%, #ffb703 60%, #f77f00 100%);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(11,31,58,0.18), 0 6px 14px rgba(255,183,3,0.45);
   cursor: grab;
 }
 .cb-hour-slider::-moz-range-thumb:active {
   cursor: grabbing;
   transform: scale(1.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

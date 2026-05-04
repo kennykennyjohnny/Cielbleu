@@ -1,91 +1,79 @@
 ﻿'use client'
 
-/**
- * PlacePageClient — fiche complète d'un lieu.
- *
- * Layout :
- *  - Hero 3D plein-écran avec le nom du lieu en overlay
- *  - Score card avec ring de progression radiale SVG
- *  - Slider horaire + quick jumps
- *  - Timeline d'ensoleillement interactive
- *  - Lien Maps
- */
-
 import { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import {
-  ArrowLeft,
-  Star,
-  Navigation,
-  MapPin,
-  Clock,
-  TrendingUp,
-  Sun,
-  Moon,
-} from 'lucide-react'
+import { ArrowLeft, ExternalLink } from 'lucide-react'
 import type { Place } from '@/types'
 
 const Terrace3DView = dynamic(() => import('./Terrace3DView'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full" style={{
-      background: 'linear-gradient(to bottom, #2D7DD2 0%, #73B9FF 40%, #B8D8F8 75%, #E8F4FF 100%)',
-    }}>
-      <div className="absolute inset-0 flex flex-col items-end justify-end p-4">
-        <div className="w-32 h-10 rounded-2xl animate-pulse" style={{ background: 'rgba(255,255,255,0.25)' }} />
-      </div>
+    <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center',
+      background:'linear-gradient(180deg,#2D7DD2 0%,#8fd3ff 45%,#e6f4ff 100%)' }}>
+      <span style={{ fontFamily:'var(--font-outfit)', fontSize:12, color:'rgba(255,255,255,0.80)',
+        letterSpacing:'0.14em', textTransform:'uppercase' }}>Vue 3D…</span>
     </div>
   ),
 })
 
-// ── Constantes ─────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const SCORE_LABEL: Record<number, string> = {
-  0: 'Nuit',
-  1: "A l\u2019ombre",
-  2: 'Peu ensoleille',
-  3: 'Soleil intermittent',
-  4: 'Bien ensoleille',
-  5: 'Plein soleil',
+  0: 'Nuit', 1: 'À l\u2019ombre', 2: 'Peu ensoleillé',
+  3: 'Ensoleillement', 4: 'Très lumineux', 5: 'Plein soleil',
 }
 
-const SCORE_EMOJI: Record<number, string> = {
-  0: '🌙', 1: '🌥', 2: '⛅', 3: '🌤', 4: '☀️', 5: '🌞',
+const SCORE_SENTENCES: Record<number, string> = {
+  0: 'Nuit tombée — terrasse probablement fermée.',
+  1: 'La rue reste ombragée à cet horaire. Trop tôt ou trop tard.',
+  2: 'Mi-ombre pour l\u2019instant. Reste agréable avec une bière fraîche.',
+  3: 'Bon ensoleillement doux sur la terrasse.',
+  4: 'Très ensoleillée — profites-en, ça ne va pas durer !',
+  5: 'Plein soleil maintenant. C\u2019est le moment idéal.',
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  bar: 'Bar', restaurant: 'Restaurant', cafe: 'Cafe', park: 'Parc',
+  bar: 'Bar', restaurant: 'Restaurant', cafe: 'Café', park: 'Parc',
 }
 
-type ScoreTheme = {
-  pageBg: string
-  cardBg: string
-  textPrimary: string
-  textSecondary: string
-  accent: string
-  ringFill: string
-  ringBg: string
+// Timeline bar height (px, inside 28px row) and colors by score 0..5
+const BAR_PX    = [4, 8, 12, 18, 24, 28]
+const BAR_COLORS = ['#102a4c', '#98a2b3', '#98a2b3', '#f77f00', '#ffd76a', '#ffb703']
+
+// ── Style constants ────────────────────────────────────────────────────────────
+
+const MINI_BADGE: React.CSSProperties = {
+  minHeight:28, padding:'0 10px', borderRadius:999,
+  background:'#fff', color:'#102a4c',
+  fontSize:12, fontWeight:800,
+  display:'inline-flex', alignItems:'center', gap:5,
+  border:'1px solid rgba(20,32,51,0.10)',
 }
 
-const SCORE_THEME: Record<number, ScoreTheme> = {
-  0: { pageBg: '#0E1820', cardBg: '#1B2838', textPrimary: '#C8D8EA', textSecondary: '#7990A8', accent: '#4A6080', ringFill: '#4A6080', ringBg: '#263244' },
-  1: { pageBg: '#ECEEF2', cardBg: '#F5F6F8', textPrimary: '#3A4456', textSecondary: '#787E8A', accent: '#8D99AE', ringFill: '#8D99AE', ringBg: '#DDE0E7' },
-  2: { pageBg: '#EDE8DC', cardBg: '#F5F0E6', textPrimary: '#4A3E28', textSecondary: '#8C7E62', accent: '#B08B50', ringFill: '#C4A060', ringBg: '#E2D8C4' },
-  3: { pageBg: '#FFF6D4', cardBg: '#FFFDF7', textPrimary: '#5C3C00', textSecondary: '#9C7820', accent: '#FFBE0B', ringFill: '#FFBE0B', ringBg: '#FFE880' },
-  4: { pageBg: '#FFF0B0', cardBg: '#FFFCE0', textPrimary: '#4A2E00', textSecondary: '#9A6000', accent: '#FF8C00', ringFill: '#FF9500', ringBg: '#FFD060' },
-  5: { pageBg: '#FF9500', cardBg: '#FFBE0B', textPrimary: '#1B2838', textSecondary: 'rgba(27,40,56,0.6)', accent: '#1B2838', ringFill: '#1B2838', ringBg: 'rgba(27,40,56,0.22)' },
+const STAT_CARD: React.CSSProperties = {
+  minHeight:70, padding:'11px 12px', borderRadius:18,
+  background:'rgba(255,255,255,0.78)',
+  border:'1px solid rgba(20,32,51,0.09)',
 }
 
-const BAR_H = [4, 8, 16, 28, 44, 56]
-const BAR_COLORS = ['#0E1820', '#8D99AE', '#A0AABC', '#F0C844', '#FF9500', '#FFBE0B']
+const EYEBROW: React.CSSProperties = {
+  margin:0, color:'#6f7a8a', fontSize:11, fontWeight:800,
+  textTransform:'uppercase', letterSpacing:'0.12em',
+}
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+const INFO_ROW: React.CSSProperties = {
+  display:'flex', alignItems:'center', justifyContent:'space-between', gap:12,
+  padding:'12px 13px', borderRadius:18,
+  background:'rgba(255,255,255,0.68)', border:'1px solid rgba(20,32,51,0.08)',
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function halfHourToSlot(h: number): { slot: string; label: string; date: Date } {
   const hour = Math.floor(h)
-  const min = h % 1 ? 30 : 0
-  const slot = `${String(hour).padStart(2, '0')}:${min === 0 ? '00' : '30'}`
+  const min  = h % 1 ? 30 : 0
+  const slot = `${String(hour).padStart(2,'0')}:${min === 0 ? '00' : '30'}`
   const label = `${hour}h${min ? '30' : ''}`
   const d = new Date()
   d.setHours(hour, min, 0, 0)
@@ -97,38 +85,42 @@ function nowHalfHour(): number {
   return Math.max(6, Math.min(23.5, now.getHours() + (now.getMinutes() >= 30 ? 0.5 : 0)))
 }
 
-function ScoreRing({ score, theme, size = 100 }: { score: number; theme: ScoreTheme; size?: number }) {
-  const strokeW = 8
-  const r = (size - strokeW) / 2
-  const circumference = 2 * Math.PI * r
-  const arcPct = 0.75
-  const dashArray = circumference * arcPct
-  const dashOffset = dashArray * (1 - score / 5)
-  const cx = size / 2
-  const rotateAngle = -225
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible' }} aria-hidden>
-      <circle cx={cx} cy={cx} r={r} fill="none" stroke={theme.ringBg} strokeWidth={strokeW}
-        strokeDasharray={`${dashArray} ${circumference}`} strokeLinecap="round"
-        transform={`rotate(${rotateAngle} ${cx} ${cx})`} />
-      <circle cx={cx} cy={cx} r={r} fill="none" stroke={theme.ringFill} strokeWidth={strokeW}
-        strokeDasharray={`${dashArray} ${circumference}`} strokeLinecap="round" strokeDashoffset={dashOffset}
-        transform={`rotate(${rotateAngle} ${cx} ${cx})`}
-        style={{ transition: 'stroke-dashoffset 0.6s cubic-bezier(0.34,1.2,0.64,1), stroke 0.5s' }} />
-    </svg>
-  )
+function fmtSlotStart(slot: string): string {
+  const [h, m] = slot.split(':').map(Number)
+  return `${h}h${m === 0 ? '' : '30'}`
 }
 
-// ── Photo helper ─────────────────────────────────────────────────────────────
-function extractPhotoRef(url: string): string | null {
-  try {
-    return new URL(url).searchParams.get('photo_reference')
-  } catch {
-    return null
+function fmtSlotEnd(slot: string): string {
+  const [h, m] = slot.split(':').map(Number)
+  let eH = h, eM = m + 30
+  if (eM >= 60) { eM = 0; eH++ }
+  return `${eH}h${eM === 0 ? '' : '30'}`
+}
+
+function computeSunWindow(
+  scores: { time_slot: string; score: number }[]
+): { fromSlot: string; toSlot: string } | null {
+  const sorted = [...scores]
+    .filter(s => { const [hh] = s.time_slot.split(':').map(Number); return hh >= 7 && hh <= 22 })
+    .sort((a, b) => a.time_slot.localeCompare(b.time_slot))
+  let best = { start: -1, end: -1, len: 0 }
+  let cur  = { start: -1, len: 0 }
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].score >= 4) {
+      if (cur.start < 0) cur.start = i
+      cur.len++
+      if (cur.len > best.len) best = { start: cur.start, end: i, len: cur.len }
+    } else { cur = { start: -1, len: 0 } }
   }
+  if (best.len === 0 || best.start < 0) return null
+  return { fromSlot: sorted[best.start].time_slot, toSlot: sorted[best.end].time_slot }
 }
 
-// ── Composant principal ────────────────────────────────────────────────────
+function extractPhotoRef(url: string): string | null {
+  try { return new URL(url).searchParams.get('photo_reference') } catch { return null }
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
 
 interface Props {
   place: Place
@@ -137,6 +129,7 @@ interface Props {
 
 export default function PlacePageClient({ place, scores }: Props) {
   const [hour, setHour] = useState<number>(nowHalfHour)
+  const [shareToast, setShareToast] = useState(false)
 
   const scoreMap = useMemo(() => {
     const m: Record<string, number> = {}
@@ -146,295 +139,358 @@ export default function PlacePageClient({ place, scores }: Props) {
 
   const { slot, label: hourLabel, date: displayedDate } = halfHourToSlot(hour)
   const currentScore = scoreMap[slot] ?? place.currentScore ?? 3
-  const theme = SCORE_THEME[currentScore] ?? SCORE_THEME[3]
-  const isNow = Math.abs(hour - nowHalfHour()) < 0.26
+  const isNow   = Math.abs(hour - nowHalfHour()) < 0.26
+  const isSunny = currentScore >= 4
 
-  const bestSlot = useMemo(() => {
-    let best = { h: 14, score: 0 }
-    for (const [s, v] of Object.entries(scoreMap)) {
-      const [hh, mm] = s.split(':')
-      const h = parseInt(hh) + (mm === '30' ? 0.5 : 0)
-      if (h < 7 || h > 22) continue
-      if (v > best.score || (v === best.score && Math.abs(h - 14) < Math.abs(best.h - 14))) best = { h, score: v }
-    }
-    return best
-  }, [scoreMap])
+  const sunWindow = useMemo(() => computeSunWindow(scores), [scores])
 
-  const timeline = useMemo(
-    () => scores.filter((s) => { const [hh, mm] = s.time_slot.split(':'); return parseInt(hh) >= 8 && parseInt(hh) <= 22 && mm === '00' })
+  const timeline = useMemo(() =>
+    scores
+      .filter(s => {
+        const [hh] = s.time_slot.split(':').map(Number)
+        return hh >= 8 && hh <= 22 && s.time_slot.endsWith(':00')
+      })
       .sort((a, b) => a.time_slot.localeCompare(b.time_slot)),
     [scores]
   )
 
-  const currentHourSlot = `${String(Math.floor(hour)).padStart(2, '0')}:00`
-  const jumpTo = useCallback((h: number) => setHour(h), [])
+  // "now" red line position in timeline (8h-22h → 0-100%)
+  const nowLinePct = useMemo(() => {
+    const h = nowHalfHour()
+    return Math.max(0, Math.min(100, ((h - 8) / (22 - 8)) * 100))
+  }, [])
+
+  const currentHourSlot = `${String(Math.floor(hour)).padStart(2,'0')}:00`
+
+  const photoRefs = useMemo(() => {
+    if (!place.photos?.length) return []
+    return place.photos.map(extractPhotoRef).filter((r): r is string => r !== null)
+  }, [place.photos])
+
   const ordinal = place.arrondissement === 1 ? 'er' : 'e'
 
-  return (
-    <main className="min-h-dvh overflow-x-hidden" style={{ background: theme.pageBg, transition: 'background 0.6s ease' }}>
+  const sunSentence = SCORE_SENTENCES[currentScore] ?? ''
 
-      {/* ─── HERO 3D ── */}
-      <div className="relative" style={{ height: 'min(68dvh, 540px)' }}>
-        <div className="absolute inset-0">
+  // Score badge colors (hero top)
+  const scoreBadgeStyle: React.CSSProperties =
+    currentScore >= 4
+      ? { background:'rgba(255,183,3,0.94)', color:'#0b1f3a', border:'1px solid rgba(255,255,255,0.72)' }
+      : currentScore >= 2
+        ? { background:'rgba(255,255,255,0.90)', color:'#0b1f3a', border:'1px solid rgba(20,32,51,0.12)' }
+        : { background:'rgba(10,25,42,0.88)',    color:'#a8c8e8', border:'1px solid rgba(255,255,255,0.12)' }
+
+  const handleShare = useCallback(async () => {
+    const url = typeof window !== 'undefined' ? window.location.href : ''
+    if (navigator?.share) { try { await navigator.share({ title: 'CielBleu — ' + place.name, url }); return } catch { /* cancelled */ } }
+    if (navigator?.clipboard) { try { await navigator.clipboard.writeText(url); setShareToast(true); setTimeout(() => setShareToast(false), 2200) } catch { /* noop */ } }
+  }, [place.name])
+
+  return (
+    <main style={{ minHeight:'100dvh', background:'var(--color-paper)', fontFamily:'var(--font-outfit)', color:'#142033' }}>
+
+      {/* ═══════════ 1. HERO 3D + SLIDER (voir la 3D changer en direct) ═══════════ */}
+      <div style={{ position:'relative', height:280 }}>
+
+        {/* Terrace 3D map */}
+        <div style={{ position:'absolute', inset:0 }}>
           <Terrace3DView lat={place.lat} lng={place.lng} score={currentScore} date={displayedDate} />
         </div>
 
-        {/* Gradient bas */}
-        <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{
-          height: '55%',
-          background: `linear-gradient(to top, ${theme.pageBg} 0%, ${theme.pageBg}CC 30%, transparent 100%)`,
-          transition: 'background 0.6s ease',
-        }} />
+        {/* TOP: gradient + back btn + score badge + hour chip */}
+        <div style={{ position:'absolute', inset:0, zIndex:10, pointerEvents:'none',
+          background:'linear-gradient(to bottom,rgba(11,31,58,0.45) 0%,transparent 46%)' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8,
+            padding:'max(env(safe-area-inset-top,0px),14px) 14px 0' }}>
 
-        {/* Gradient top */}
-        <div className="absolute inset-x-0 top-0 pointer-events-none" style={{
-          height: 96,
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.30) 0%, transparent 100%)',
-        }} />
+            {/* Back */}
+            <Link href="/" aria-label="Retour à la carte"
+              style={{ pointerEvents:'auto', textDecoration:'none', flexShrink:0 }}>
+              <div style={{ width:38, height:38, borderRadius:'50%',
+                background:'rgba(255,255,255,0.92)', backdropFilter:'blur(10px)',
+                boxShadow:'0 4px 12px rgba(11,31,58,0.18)',
+                display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <ArrowLeft size={18} strokeWidth={2.5} style={{ color:'#0b1f3a' }} />
+              </div>
+            </Link>
 
-        {/* Bouton retour */}
-        <Link href="/" aria-label="Retour" className="absolute top-safe left-4 z-20 mt-4 w-11 h-11 rounded-full flex items-center justify-center transition-transform active:scale-90"
-          style={{ background: 'rgba(255,253,247,0.92)', backdropFilter: 'blur(14px)', boxShadow: '0 2px 12px rgba(0,0,0,0.22)' }}>
-          <ArrowLeft size={19} strokeWidth={2.5} className="text-nuit" />
-        </Link>
-
-        {/* Nom + badges en overlay bas */}
-        <div className="absolute bottom-0 inset-x-0 z-10 px-5 pb-5 flex items-end justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <span className="rounded-full px-2.5 py-0.5 text-[10px] font-outfit font-bold uppercase tracking-[0.15em]"
-                style={{ background: 'rgba(255,253,247,0.92)', color: '#1B2838', backdropFilter: 'blur(8px)' }}>
-                {TYPE_LABEL[place.type] ?? place.type}
+            {/* Score badge */}
+            <div aria-live="polite"
+              style={{ pointerEvents:'none', padding:'8px 13px', borderRadius:999,
+                display:'inline-flex', alignItems:'center', gap:6,
+                fontWeight:900, fontSize:13, backdropFilter:'blur(12px)',
+                boxShadow:'0 8px 22px rgba(11,31,58,0.18)',
+                ...scoreBadgeStyle }}>
+              <span style={{ fontSize:16 }}>
+                {isSunny ? '☀️' : currentScore >= 2 ? '⛅' : '🌑'}
               </span>
-              {place.arrondissement != null && (
-                <span className="rounded-full px-2 py-0.5 text-[10px] font-outfit flex items-center gap-1"
-                  style={{ background: 'rgba(255,253,247,0.75)', color: '#1B2838', backdropFilter: 'blur(8px)' }}>
-                  <MapPin size={9} strokeWidth={2.5} />
-                  {place.arrondissement}<sup className="text-[7px]">{ordinal}</sup>
-                </span>
-              )}
+              <span>{SCORE_LABEL[currentScore]}</span>
             </div>
-            <h1 className="font-playfair font-bold leading-tight"
-              style={{ fontSize: 'clamp(22px, 6vw, 32px)', color: '#FFFDF7', textShadow: '0 2px 12px rgba(0,0,0,0.50)' }}>
-              {place.name}
-            </h1>
-          </div>
 
-          {/* Badge heure */}
-          <div className="shrink-0 rounded-2xl px-3.5 py-2 text-center shadow-lg" style={{
-            background: isNow ? '#3A86FF' : 'rgba(255,253,247,0.92)',
-            color: isNow ? '#fff' : '#1B2838',
-            backdropFilter: 'blur(12px)',
-            transition: 'background 0.3s',
-            minWidth: 62,
-          }}>
-            <p className="text-[11px] font-outfit font-bold leading-none">{isNow ? 'Maintenant' : hourLabel}</p>
-            {isNow && <p className="text-[9px] font-outfit opacity-80 mt-0.5 leading-none">en direct</p>}
+            {/* Hour chip */}
+            <div style={{ flexShrink:0, minWidth:64, textAlign:'center',
+              background:isNow ? 'rgba(255,183,3,0.92)' : 'rgba(255,255,255,0.92)',
+              color:'#0b1f3a', borderRadius:12, padding:'6px 10px',
+              backdropFilter:'blur(10px)', boxShadow:'0 4px 12px rgba(11,31,58,0.12)' }}>
+              <p style={{ margin:0, fontSize:11, fontWeight:800, lineHeight:1 }}>
+                {isNow ? 'Maintenant' : hourLabel}
+              </p>
+              {isNow && <p style={{ margin:'2px 0 0', fontSize:8, fontWeight:700, opacity:0.70,
+                lineHeight:1, textTransform:'uppercase', letterSpacing:'0.08em' }}>en direct</p>}
+            </div>
           </div>
+        </div>
+
+        {/* BOTTOM: gradient + slider (slider remonté dans le hero = on voit la 3D changer) */}
+        <div style={{ position:'absolute', inset:'auto 0 0', zIndex:10,
+          background:'linear-gradient(transparent,rgba(8,18,36,0.84))',
+          padding:'36px 16px 14px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+            <span style={{ fontSize:10.5, fontWeight:800, color:'rgba(255,255,255,0.52)',
+              letterSpacing:'0.10em', textTransform:'uppercase' }}>☀ 6h</span>
+            <span style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.68)' }}>
+              Fais glisser pour explorer
+            </span>
+            <span style={{ fontSize:10.5, fontWeight:800, color:'rgba(255,255,255,0.52)',
+              letterSpacing:'0.10em', textTransform:'uppercase' }}>🌙 23h</span>
+          </div>
+          <input
+            type="range" min={6} max={23.5} step={0.5} value={hour}
+            onChange={e => setHour(parseFloat(e.target.value))}
+            className="cb-hour-slider w-full"
+            aria-label="Heure de la journée"
+            aria-valuetext={hourLabel}
+          />
         </div>
       </div>
 
-      {/* ── Photos Google Maps ── */}
-      {place.photos && place.photos.length > 0 && (() => {
-        const refs = place.photos.map(extractPhotoRef).filter(Boolean) as string[]
-        if (!refs.length) return null
-        return (
-          <div className="relative z-20 -mt-4 px-3">
-            <div
-              className="flex gap-3 overflow-x-auto scrollbar-none pb-0.5"
-              style={{ scrollSnapType: 'x mandatory' }}
-            >
-              {refs.map((ref, i) => (
-                <div
-                  key={i}
-                  className="shrink-0 rounded-[18px] overflow-hidden"
-                  style={{
-                    width: i === 0 ? 230 : 175,
-                    height: i === 0 ? 148 : 112,
-                    scrollSnapAlign: 'start',
-                    boxShadow: '0 6px 24px rgba(27,40,56,0.28)',
-                  }}
-                >
+      {/* ═══════════ SCROLLABLE PANEL ═══════════ */}
+      <div style={{ maxWidth:520, margin:'0 auto', padding:'0 14px',
+        paddingBottom:'max(calc(88px + env(safe-area-inset-bottom,0px)), 100px)' }}>
+
+        {/* ── PLACE HEAD ── */}
+        <div style={{ padding:'18px 0 14px' }}>
+          {/* Kicker row */}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:11 }}>
+            {isSunny && sunWindow && (
+              <span style={{ ...MINI_BADGE, background:'#fff1b8', color:'#5c3d00' }}>
+                ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
+              </span>
+            )}
+            <span style={{ ...MINI_BADGE, background:'rgba(79,143,101,0.10)', color:'#3d8554' }}>
+              ● Terrasse
+            </span>
+            <span style={{ ...MINI_BADGE }}>
+              {TYPE_LABEL[place.type] ?? place.type}
+              {place.arrondissement != null ? ` · ${place.arrondissement}${ordinal}` : ''}
+            </span>
+          </div>
+
+          {/* Title (Fraunces) */}
+          <h1 style={{ margin:0, fontFamily:'var(--font-fraunces)', fontWeight:700,
+            fontSize:'clamp(28px,8vw,36px)', lineHeight:0.95, letterSpacing:'-0.06em',
+            color:'#0b1f3a' }}>
+            {place.name}
+          </h1>
+
+          {place.address && (
+            <p style={{ margin:'10px 0 0', color:'#6f7a8a', fontSize:14, fontWeight:500, lineHeight:1.38 }}>
+              {place.address}
+            </p>
+          )}
+        </div>
+
+        {/* ── QUICK STATS (3 cols) ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:0 }}>
+          {([
+            { strong: place.google_rating != null ? place.google_rating.toFixed(1) : '—', label: 'Note' },
+            { strong: place.price_level ? '€'.repeat(place.price_level) : '—',            label: 'Prix' },
+            { strong: `${currentScore}/5`,                                                  label: 'Soleil' },
+          ] as const).map(({ strong, label }) => (
+            <div key={label} style={{ ...STAT_CARD }}>
+              <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
+                {strong}
+              </strong>
+              <span style={{ display:'block', marginTop:7, color:'#6f7a8a', fontSize:11,
+                fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* ── TIMELINE SECTION ── */}
+        <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', margin:'14px 0 0', padding:'15px 0' }}>
+          <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between',
+            gap:14, marginBottom:12 }}>
+            <div>
+              <p style={{ ...EYEBROW }}>Ensoleillement aujourd&apos;hui</p>
+              <h2 style={{ margin:'4px 0 0', color:'#0b1f3a', fontSize:16, letterSpacing:'-0.02em',
+                fontWeight:700, fontFamily:'inherit' }}>
+                La terrasse est-elle au soleil ?
+              </h2>
+            </div>
+            <small style={{ color:'#6f7a8a', fontSize:12, fontWeight:750, flexShrink:0 }}>
+              Score {currentScore}/5
+            </small>
+          </div>
+
+          {/* Timeline card with bars + now line */}
+          {timeline.length > 0 && (
+            <div style={{ position:'relative', height:74, borderRadius:22,
+              background:'rgba(255,255,255,0.78)', border:'1px solid rgba(20,32,51,0.10)',
+              padding:'14px 12px 10px', overflow:'hidden' }}>
+              {/* NOW red line */}
+              <div aria-hidden="true" style={{ position:'absolute', left:`${nowLinePct}%`,
+                top:9, height:42, borderLeft:'2px solid #ff6b5a',
+                boxShadow:'0 0 0 4px rgba(255,107,90,0.12)', zIndex:2 }} />
+              {/* Bars */}
+              <div style={{ display:'grid',
+                gridTemplateColumns:`repeat(${timeline.length}, 1fr)`,
+                gap:3, height:28, alignItems:'end' }}>
+                {timeline.map(s => {
+                  const hh = parseInt(s.time_slot.split(':')[0])
+                  const isActive = s.time_slot === currentHourSlot
+                  return (
+                    <button key={s.time_slot}
+                      onClick={() => setHour(hh)}
+                      aria-label={`${hh}h — ${SCORE_LABEL[s.score] ?? 'score ' + String(s.score)}`}
+                      aria-pressed={isActive}
+                      style={{ height: BAR_PX[s.score] ?? 8,
+                        borderRadius:'999px 999px 4px 4px',
+                        background: BAR_COLORS[s.score] ?? '#ccc',
+                        border:'none', padding:0, cursor:'pointer',
+                        opacity: isActive ? 1 : 0.65,
+                        outline: isActive ? '2px solid #ffb703' : 'none', outlineOffset:1,
+                        transition:'height 0.25s', minWidth:0 }}
+                    />
+                  )
+                })}
+              </div>
+              {/* Labels */}
+              <div style={{ display:'flex', justifyContent:'space-between', marginTop:9,
+                color:'#6f7a8a', fontSize:11, fontWeight:800 }}>
+                <span>8h</span><span>Maintenant</span><span>22h</span>
+              </div>
+            </div>
+          )}
+
+          {/* Sun sentence */}
+          <p style={{ margin:'10px 0 0', color:'#0b1f3a', fontSize:14, fontWeight:800, lineHeight:1.4 }}>
+            {sunSentence}
+          </p>
+        </div>
+
+        {/* ── PHOTOS ── */}
+        {photoRefs.length > 0 && (
+          <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
+            <p style={{ ...EYEBROW, marginBottom:10 }}>Photos</p>
+            <div className="scrollbar-none"
+              style={{ display:'flex', gap:10, overflowX:'auto', scrollSnapType:'x mandatory' }}>
+              {photoRefs.map((ref, i) => (
+                <div key={i} style={{ flexShrink:0, borderRadius:16, overflow:'hidden',
+                  width:i===0?220:160, height:i===0?138:102, scrollSnapAlign:'start',
+                  boxShadow:'0 6px 20px rgba(11,31,58,0.14)' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`/api/photo?ref=${encodeURIComponent(ref)}&w=500`}
-                    alt={`${place.name} photo ${i + 1}`}
-                    className="w-full h-full object-cover"
+                    alt={`${place.name} — photo ${i + 1}`}
+                    style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
                     loading="lazy"
                   />
                 </div>
               ))}
             </div>
           </div>
-        )
-      })()}
-
-      {/* ─── CONTENU ── */}
-      <div className="relative z-10 mx-auto max-w-xl px-3 space-y-3" style={{ paddingBottom: 'max(56px, env(safe-area-inset-bottom, 56px))' }}>
-
-        {/* Carte score */}
-        <div className="rounded-[28px] overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.14)]" style={{ background: theme.cardBg, transition: 'background 0.5s' }}>
-          <div className="px-6 pt-6 pb-4">
-            <div className="flex items-center gap-5">
-              {/* Ring radial */}
-              <div className="relative shrink-0" style={{ width: 100, height: 100 }}>
-                <ScoreRing score={currentScore} theme={theme} size={100} />
-                <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ transform: 'translateY(-2px)' }}>
-                  <span className="text-[22px] leading-none mb-0.5">{SCORE_EMOJI[currentScore]}</span>
-                  <span className="font-playfair font-bold leading-none" style={{ fontSize: 28, color: theme.textPrimary, transition: 'color 0.5s' }}>
-                    {currentScore}<span className="text-[12px] font-outfit font-medium opacity-40">/5</span>
-                  </span>
-                </div>
-              </div>
-
-              {/* Label */}
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-outfit font-bold uppercase tracking-[0.18em] mb-1" style={{ color: theme.textSecondary }}>
-                  {isNow ? 'En ce moment' : `A ${hourLabel}`}
-                </p>
-                <p className="font-playfair font-bold text-[22px] leading-snug" style={{ color: theme.textPrimary }}>
-                  {SCORE_LABEL[currentScore]}
-                </p>
-                {bestSlot.score >= 4 && (
-                  <div className="mt-2 flex items-center gap-1.5" style={{ color: theme.accent }}>
-                    <TrendingUp size={12} strokeWidth={2.5} />
-                    <p className="text-[11px] font-outfit font-semibold">
-                      Pic à {Math.floor(bestSlot.h)}h{bestSlot.h % 1 ? '30' : ''} · {bestSlot.score}/5
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Meta */}
-            {(place.google_rating != null || (place.price_level && place.price_level > 0)) && (
-              <div className="flex items-center gap-4 mt-4 pt-4" style={{ borderTop: `1px solid ${theme.textPrimary}14` }}>
-                {place.google_rating != null && (
-                  <span className="flex items-center gap-1.5 font-outfit font-semibold text-[13.5px]" style={{ color: theme.textPrimary }}>
-                    <Star size={13.5} fill="#FFBE0B" stroke="#FFBE0B" />
-                    {place.google_rating.toFixed(1)}
-                    <span style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 400 }}>
-                      {place.google_rating >= 4.5 ? 'Excellent' : place.google_rating >= 4.0 ? 'Tres bien' : 'Bien'}
-                    </span>
-                  </span>
-                )}
-                {place.price_level != null && place.price_level > 0 && (
-                  <span className="font-outfit text-[13px] font-medium" style={{ color: theme.textSecondary }}>
-                    {'€'.repeat(place.price_level)}<span style={{ opacity: 0.2 }}>{'€'.repeat(4 - place.price_level)}</span>
-                  </span>
-                )}
-                {place.address && (
-                  <span className="flex-1 text-right text-[11px] font-outfit truncate" style={{ color: theme.textSecondary }}>
-                    {place.address.split(',')[0]}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Slider */}
-          <div className="px-6 pb-6" style={{ borderTop: `1px solid ${theme.textPrimary}0C` }}>
-            <div className="flex items-center justify-between mt-4 mb-3">
-              <span className="flex items-center gap-1.5 text-[10px] font-outfit font-bold uppercase tracking-widest" style={{ color: theme.textSecondary }}>
-                <Sun size={11} strokeWidth={2.5} />6h
-              </span>
-              <p className="text-[10px] font-outfit" style={{ color: theme.textSecondary, opacity: 0.65 }}>
-                Explorer l&apos;ensoleillement
-              </p>
-              <span className="flex items-center gap-1.5 text-[10px] font-outfit font-bold uppercase tracking-widest" style={{ color: theme.textSecondary }}>
-                23h<Moon size={11} strokeWidth={2.5} />
-              </span>
-            </div>
-
-            <div className="relative mb-4">
-              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full pointer-events-none" style={{
-                background: 'linear-gradient(to right, #263244 0%, #8D99AE 12%, #F0C844 32%, #FFBE0B 52%, #FF8C00 78%, #1B2838 100%)',
-                opacity: 0.7,
-              }} />
-              <input type="range" min={6} max={23.5} step={0.5} value={hour}
-                onChange={(e) => setHour(parseFloat(e.target.value))}
-                className="cb-hour-slider relative w-full appearance-none bg-transparent cursor-pointer"
-                aria-label="Choisir l heure" />
-            </div>
-
-            <div className="grid grid-cols-4 gap-2">
-              {([8, 12, 16, 20] as const).map((h) => {
-                const s = scoreMap[`${String(h).padStart(2, '0')}:00`] ?? 3
-                const isActive = Math.floor(hour) === h
-                return (
-                  <button key={h} onClick={() => jumpTo(h)} className="rounded-2xl py-2.5 text-center transition-all active:scale-95"
-                    style={{
-                      background: isActive ? theme.accent : `${theme.textPrimary}10`,
-                      color: isActive ? (currentScore >= 5 ? '#1B2838' : '#FFFDF7') : theme.textSecondary,
-                      outline: isActive ? `2px solid ${theme.accent}` : 'none',
-                    }}>
-                    <span className="block text-[13px] font-outfit font-bold leading-none">{h}h</span>
-                    <span className="block text-[16px] mt-1">{SCORE_EMOJI[s]}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Timeline */}
-        {timeline.length > 0 && (
-          <div className="rounded-[28px] overflow-hidden shadow-sm" style={{ background: theme.cardBg, transition: 'background 0.5s' }}>
-            <div className="px-6 py-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Clock size={14} strokeWidth={2.3} style={{ color: theme.textSecondary }} />
-                <p className="text-[10px] uppercase tracking-[0.18em] font-outfit font-bold" style={{ color: theme.textSecondary }}>
-                  Ensoleillement aujourd&apos;hui
-                </p>
-              </div>
-              <div className="flex gap-[2px] items-end" style={{ height: 68 }}>
-                {timeline.map((s) => {
-                  const h = parseInt(s.time_slot.split(':')[0])
-                  const isActive = s.time_slot === currentHourSlot
-                  const barH = BAR_H[s.score] ?? 16
-                  return (
-                    <button key={s.time_slot} onClick={() => jumpTo(h)}
-                      className="flex-1 flex flex-col items-center justify-end gap-[3px]"
-                      aria-label={`${h}h score ${s.score}`} style={{ height: '100%' }}>
-                      <div className="w-full rounded-full transition-all duration-200" style={{
-                        height: barH,
-                        backgroundColor: BAR_COLORS[s.score] ?? BAR_COLORS[3],
-                        transform: isActive ? 'scaleY(1.06)' : 'scaleY(1)',
-                        boxShadow: isActive ? `0 0 8px ${BAR_COLORS[s.score] ?? '#FFBE0B'}AA` : 'none',
-                        outline: isActive ? '2px solid #3A86FF' : 'none',
-                        outlineOffset: 2,
-                      }} />
-                      {h % 4 === 0 && (
-                        <span className="text-[9px] font-outfit" style={{ color: isActive ? '#3A86FF' : theme.textSecondary, fontWeight: isActive ? 700 : 400 }}>
-                          {h}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
         )}
 
-        {/* Liens Maps */}
-        {place.google_maps_url && (
-          <div className="rounded-[28px] overflow-hidden shadow-sm" style={{ background: theme.cardBg, transition: 'background 0.5s' }}>
-            <a href={place.google_maps_url} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-4 px-6 py-4 transition-opacity active:opacity-70">
-              <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style={{ background: '#E8F0FF' }}>
-                <Navigation size={16} strokeWidth={2.3} className="text-ciel" />
-              </div>
-              <div className="flex-1">
-                <p className="font-outfit font-semibold text-[14px]" style={{ color: theme.textPrimary }}>Itineraire</p>
-                <p className="font-outfit text-[11.5px]" style={{ color: theme.textSecondary }}>
-                  {place.address ?? 'Ouvrir dans Google Maps'}
-                </p>
-              </div>
-              <span style={{ color: theme.textSecondary, opacity: 0.4, fontSize: 18 }}>›</span>
-            </a>
+        {/* ── INFO ROWS ── */}
+        {(place.google_maps_url || place.instagram_url) && (
+          <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
+            <p style={{ ...EYEBROW, marginBottom:10 }}>Décider vite</p>
+            <div style={{ display:'grid', gap:8 }}>
+              {place.google_maps_url && (
+                <a href={place.google_maps_url} target="_blank" rel="noopener noreferrer"
+                  style={{ textDecoration:'none' }}>
+                  <div style={{ ...INFO_ROW }}>
+                    <span style={{ fontSize:14, fontWeight:750, color:'#0b1f3a' }}>📍 Itinéraire</span>
+                    <span style={{ color:'#6f7a8a', fontWeight:700, fontSize:13,
+                      display:'flex', alignItems:'center', gap:4 }}>
+                      {place.address?.split(',')[0] ?? 'Ouvrir Maps'}
+                      <ExternalLink size={12} aria-hidden />
+                    </span>
+                  </div>
+                </a>
+              )}
+              {place.instagram_url && (
+                <a href={place.instagram_url} target="_blank" rel="noopener noreferrer"
+                  style={{ textDecoration:'none' }}>
+                  <div style={{ ...INFO_ROW }}>
+                    <span style={{ fontSize:14, fontWeight:750, color:'#0b1f3a' }}>📸 Instagram</span>
+                    <span style={{ color:'#6f7a8a', fontWeight:700, fontSize:13,
+                      display:'flex', alignItems:'center', gap:4 }}>
+                      Voir le compte <ExternalLink size={12} aria-hidden />
+                    </span>
+                  </div>
+                </a>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {/* ═══════════ ACTION BAR (fixed bottom) ═══════════ */}
+      <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:40,
+        paddingBottom:'max(env(safe-area-inset-bottom,0px),12px)' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 44px', gap:8,
+          margin:'0 12px', padding:'12px 12px 14px',
+          background:'rgba(255,252,243,0.94)', backdropFilter:'blur(18px)',
+          borderRadius:'24px 24px 0 0',
+          borderTop:'1px solid rgba(20,32,51,0.10)',
+          boxShadow:'0 -4px 24px rgba(11,31,58,0.12)' }}>
+
+          {/* Primary: J'y suis (gold) */}
+          <button style={{ height:46, border:'none', borderRadius:14, cursor:'pointer',
+            fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, color:'#0b1f3a',
+            background:'#ffb703', boxShadow:'0 10px 22px rgba(255,183,3,0.28)' }}>
+            ☀&nbsp;J&apos;y suis
+          </button>
+
+          {/* Secondary: Y aller */}
+          {place.google_maps_url ? (
+            <a href={place.google_maps_url} target="_blank" rel="noopener noreferrer"
+              style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                borderRadius:14, background:'var(--color-sky-100)', color:'var(--color-sky-700)',
+                fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, textDecoration:'none' }}>
+              📍&nbsp;Y aller
+            </a>
+          ) : (
+            <button disabled
+              style={{ height:46, border:'none', borderRadius:14, background:'rgba(20,32,51,0.06)',
+                color:'#98a2b3', fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, cursor:'not-allowed' }}>
+              📍&nbsp;Y aller
+            </button>
+          )}
+
+          {/* Share */}
+          <button onClick={handleShare} aria-label="Partager ce lieu"
+            style={{ height:46, border:'1px solid rgba(20,32,51,0.10)', borderRadius:14,
+              background:'#fff', cursor:'pointer', display:'flex', alignItems:'center',
+              justifyContent:'center', fontSize:18, color:'#0b1f3a' }}>
+            ↗
+          </button>
+        </div>
+      </div>
+
+      {/* Share toast */}
+      {shareToast && (
+        <div role="status" aria-live="polite"
+          style={{ position:'fixed', bottom:90, left:'50%', transform:'translateX(-50%)',
+            background:'#0b1f3a', color:'#fff', padding:'8px 18px',
+            borderRadius:999, fontSize:12, fontWeight:700, zIndex:50,
+            boxShadow:'0 6px 20px rgba(11,31,58,0.28)', whiteSpace:'nowrap' }}>
+          Lien copié !
+        </div>
+      )}
     </main>
   )
 }
