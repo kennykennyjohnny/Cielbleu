@@ -241,8 +241,10 @@ export default function HomePage() {
                 <Search size={15} strokeWidth={2.4} />
               </span>
               <input
+                id="search-places"
+                name="search"
                 type="text"
-              placeholder="Café, bar, 11e, Bastille…"
+                placeholder="Café, bar, 11e, Bastille…"
                 aria-label="Rechercher un lieu"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

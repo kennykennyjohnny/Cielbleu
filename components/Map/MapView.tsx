@@ -364,8 +364,8 @@ export default function MapView({ places, onPlaceSelect }: Props) {
   }, [geojson])
 
   return (
-    <div className="relative w-full h-full">
-      <div ref={containerRef} className="absolute inset-0" />
+    <div className="absolute inset-0">
+      <div ref={containerRef} className="w-full h-full" />
       {amenite && <FicheAmenite amenite={amenite} onClose={() => setAmenite(null)} />}
     </div>
   )
