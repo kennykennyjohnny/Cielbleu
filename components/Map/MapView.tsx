@@ -9,7 +9,6 @@
 import { useEffect, useRef, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import mapboxgl from 'mapbox-gl'
-import 'mapbox-gl/dist/mapbox-gl.css'
 import type { Place } from '@/types'
 
 const PARIS_CENTER: [number, number] = [2.3522, 48.8566]

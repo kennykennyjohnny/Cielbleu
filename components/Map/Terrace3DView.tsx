@@ -53,7 +53,8 @@ interface BldData {
   height: number
 }
 
-const STREET_OFFSET_M = 24
+// Distance depuis la façade : on se place côté rue, légèrement en recul
+const STREET_OFFSET_M = 32
 
 // ─── Composant principal ─────────────────────────────────────────────────────
 
@@ -79,12 +80,13 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
       container: containerRef.current,
       style: 'mapbox://styles/mapbox/light-v11',
       center: [lng, lat],
-      zoom: 16, pitch: 0, bearing: 0,
-      scrollZoom: false, boxZoom: false, doubleClickZoom: false,
-      dragRotate: false, dragPan: false, keyboard: false,
-      touchZoomRotate: false, touchPitch: false,
-      attributionControl: false, fadeDuration: 0,
+      zoom: 18.0, pitch: 72, bearing: 0,
+      scrollZoom: true, boxZoom: false, doubleClickZoom: false,
+      dragRotate: true, dragPan: true, keyboard: false,
+      touchZoomRotate: true, touchPitch: true,
+      attributionControl: false, fadeDuration: 150,
     })
+    map.scrollZoom.setZoomRate(0.06)
 
     let disposed = false, oriented = false
     const timers: ReturnType<typeof setTimeout>[] = []
@@ -93,10 +95,22 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
       .then(r => r.ok ? r.json() as Promise<PlaceContext> : null)
       .catch(() => null)
 
+    let clampWired = false
+
     map.on('style.load', () => {
       if (disposed) return
       styleMap(map)
       setSunLight(map, lat, lng, dateRef.current, scoreRef.current, null)
+
+      // 3D opérationnel dès l'arrivée des tuiles — slider + interactions actives
+      map.once('idle', () => {
+        if (disposed) return
+        setIsOriented(true)
+        map.setMinZoom(16.5)
+        map.setMaxZoom(20.8)
+        const s = 0.008
+        map.setMaxBounds([[lng - s, lat - s], [lng + s, lat + s]])
+      })
 
       const finalize = (result: OrientResult, tw = 9, td = 3.5) => {
         if (disposed || oriented) return
@@ -107,7 +121,7 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
 
         map.flyTo({
           center: [cLng, cLat], bearing: baseBearing,
-          zoom: 19.0, pitch: 65, speed: 1.15, curve: 1.2, essential: true,
+          zoom: 19.0, pitch: 78, speed: 1.0, curve: 1.3, essential: true,
         })
 
         trySetPaint(map, 'cb-3d-buildings', 'fill-extrusion-opacity', 0.28)
@@ -132,35 +146,20 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
 
         setResolvedScore(scoreRef.current)
 
-        map.once('moveend', () => {
-          if (disposed) return
-          setIsOriented(true)
-
-          const s = 0.005
-          map.setMaxBounds([[lng - s, lat - s], [lng + s, lat + s]])
-          map.setMinZoom(16.5)
-          map.setMaxZoom(20.5)
-
-          map.dragPan.enable()
-          map.scrollZoom.enable()
-          map.scrollZoom.setZoomRate(0.07)
-          map.touchZoomRotate.enable()
-          try {
-            (map as unknown as { touchPitch: { enable(): void } }).touchPitch.enable()
-          } catch { /* noop */ }
-
-          map.dragRotate.enable()
+        if (!clampWired) {
+          clampWired = true
           let clamping = false
+          // ±120° : on peut s'approcher de la façade depuis 120° chaque côté
           map.on('rotate', () => {
             if (clamping) return
             const delta = ((map.getBearing() - baseBearing + 540) % 360) - 180
-            if (Math.abs(delta) > 88) {
+            if (Math.abs(delta) > 120) {
               clamping = true
-              map.jumpTo({ bearing: baseBearing + (delta > 0 ? 88 : -88) })
+              map.jumpTo({ bearing: baseBearing + (delta > 0 ? 120 : -120) })
               requestAnimationFrame(() => { clamping = false })
             }
           })
-        })
+        }
       }
 
       ctxP.then(ctx => {
@@ -239,9 +238,37 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
   const relAngle   = ((azDeg - bearing + 540) % 360) - 180
   const isFrontLit = isDay && Math.abs(relAngle) < 90
 
+  const facadeState = !isDay
+    ? 'nuit, terrasse fermée'
+    : isFrontLit
+      ? `façade ensoleillée, soleil à ${Math.round(altDeg)}° au-dessus de l'horizon`
+      : `façade à l'ombre, soleil à ${Math.round(altDeg)}° au-dessus de l'horizon`
+  const ariaLabel = `Vue 3D ${name ?? 'de la terrasse'} — ${facadeState}. Utilise les flèches gauche et droite pour pivoter jusqu'à 120° autour du bâtiment.`
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const map = mapRef.current
+    if (!map || !isOriented) return
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      const step = e.shiftKey ? 30 : 15
+      const dir  = e.key === 'ArrowLeft' ? -1 : 1
+      map.easeTo({ bearing: map.getBearing() + dir * step, duration: 280 })
+    } else if (e.key === '+' || e.key === '=') {
+      e.preventDefault(); map.zoomIn({ duration: 200 })
+    } else if (e.key === '-' || e.key === '_') {
+      e.preventDefault(); map.zoomOut({ duration: 200 })
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault(); map.easeTo({ pitch: Math.min(85, map.getPitch() + 5), duration: 200 })
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault(); map.easeTo({ pitch: Math.max(40, map.getPitch() - 5), duration: 200 })
+    }
+  }
+
   return (
     <div className="relative w-full h-full overflow-hidden"
-      role="img" aria-label={`Vue 3D terrasse${name ? ` — ${name}` : ''}`}>
+      role="region" aria-label={ariaLabel} aria-busy={!isOriented}
+      tabIndex={0} onKeyDown={handleKeyDown}
+      style={{ outline: 'none' }}>
       <div className="absolute inset-0" style={{ zIndex: 0 }}>
         <SkyGradient altDeg={altDeg} isDay={isDay} />
       </div>
@@ -251,9 +278,21 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
           style={{ zIndex: 3, background: 'rgba(8,14,22,0.72)' }} />
       )}
       {isDay && <SunDisc altDeg={altDeg} relAngle={relAngle} score={resolvedScore} />}
-      <ShadowPill isFrontLit={isFrontLit} isDay={isDay} altDeg={altDeg} />
+      {/* Badge nom du lieu — coiné en bas à gauche pour identifier le bâtiment */}
+      {isOriented && name && (
+        <div className="absolute bottom-3 left-3 z-10 pointer-events-none max-w-[160px]">
+          <div className="rounded-xl px-2.5 py-1.5"
+            style={{ background: 'rgba(11,31,58,0.82)', backdropFilter: 'blur(10px)',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.30)' }}>
+            <span className="font-outfit font-bold text-[11px] leading-tight block truncate"
+              style={{ color: '#FFE580' }}>{name}</span>
+            <span className="font-outfit text-[9px] block" style={{ color: 'rgba(255,255,255,0.55)' }}>
+              ← glisser pour pivoter →
+            </span>
+          </div>
+        </div>
+      )}
       {!isOriented && <LoadingOverlay />}
-      {isOriented && <NavigationHint />}
     </div>
   )
 }
@@ -372,7 +411,7 @@ function NavigationHint() {
         style={{ background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(10px)',
           boxShadow: '0 2px 12px rgba(11,31,58,0.12)' }}>
         <span className="font-outfit text-[10px]" style={{ color: '#4A5568' }}>
-          ↔ Pivoter · ✋ Glisser · 🔍 Zoomer
+          ↔ Pivoter · ← → clavier · 🔍 Zoomer
         </span>
       </div>
     </div>
@@ -405,6 +444,7 @@ function styleMap(map: mapboxgl.Map) {
       try { map.setLayoutProperty(l.id, 'visibility', 'none') } catch { /* noop */ }
 
   if (!map.getLayer('cb-3d-buildings')) {
+    // Insérer AVANT le premier layer symbol pour que les labels passent devant
     const lblLayer = map.getStyle().layers?.find(
       l => l.type === 'symbol' && (l.layout as Record<string, unknown>)?.['text-field']
     )?.id
@@ -412,16 +452,22 @@ function styleMap(map: mapboxgl.Map) {
       id: 'cb-3d-buildings', source: 'composite', 'source-layer': 'building',
       filter: ['==', ['get', 'extrude'], 'true'], type: 'fill-extrusion', minzoom: 14,
       paint: {
+        // Palette haussmannienne contrastée — pierre de taille sombre en haut
         'fill-extrusion-color': [
           'interpolate', ['linear'], ['get', 'height'],
-          0, '#E8E2D8', 10, '#E2DAD0', 20, '#DAD2C6', 40, '#D2CABc', 70, '#C8BEB0',
+          0,  '#C8C0B0',
+          8,  '#BEB4A4',
+          16, '#B0A694',
+          30, '#A09680',
+          50, '#887860',
+          80, '#706050',
         ],
         'fill-extrusion-height':  ['get', 'height'],
         'fill-extrusion-base':    ['get', 'min_height'],
-        'fill-extrusion-opacity': 0.92,
+        'fill-extrusion-opacity': 0.96,
         'fill-extrusion-vertical-gradient': true,
-        'fill-extrusion-ambient-occlusion-intensity': 0.88,
-        'fill-extrusion-ambient-occlusion-radius': 4.5,
+        'fill-extrusion-ambient-occlusion-intensity': 0.92,
+        'fill-extrusion-ambient-occlusion-radius': 5.0,
       },
     }, lblLayer)
   }
@@ -546,7 +592,8 @@ function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFea
   if (!feature.geometry) return
   const height  = (feature.properties?.height     as number | null) ?? 20
   const minH    = (feature.properties?.min_height as number | null) ?? 0
-  const hlColor = score >= 4 ? '#FAE880' : score >= 2 ? '#F2E8C0' : '#E8DCC8'
+  // Couleur très chaude et lumineuse pour identifier clairement LE bâtiment
+  const hlColor = score >= 4 ? '#FFEC6A' : score >= 2 ? '#F5E098' : '#E8D8A8'
   const geo: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', geometry: feature.geometry as GeoJSON.Geometry, properties: {} }],
@@ -558,13 +605,21 @@ function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFea
     id: 'cb-bar-bld-hl', source: 'cb-bar-bld', type: 'fill-extrusion',
     paint: {
       'fill-extrusion-color': hlColor, 'fill-extrusion-height': height, 'fill-extrusion-base': minH,
-      'fill-extrusion-opacity': 0.97, 'fill-extrusion-vertical-gradient': false,
-      'fill-extrusion-ambient-occlusion-intensity': 0.94, 'fill-extrusion-ambient-occlusion-radius': 5.0,
+      'fill-extrusion-opacity': 1.0,
+      'fill-extrusion-vertical-gradient': true,
+      'fill-extrusion-ambient-occlusion-intensity': 0.50,
+      'fill-extrusion-ambient-occlusion-radius': 4.0,
     },
   })
+  // Anneau lumineux autour du bâtiment cible
   map.addLayer({
     id: 'cb-bar-glow', source: 'cb-bar-bld', type: 'line',
-    paint: { 'line-color': score >= 4 ? '#C8A000' : '#8A8060', 'line-width': 3.5, 'line-blur': 3, 'line-opacity': 0.80 },
+    paint: {
+      'line-color': score >= 4 ? '#E8A000' : '#A09060',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 16, 2.5, 19, 5.0],
+      'line-blur': 4,
+      'line-opacity': 0.95,
+    },
   })
 }
 

@@ -193,7 +193,7 @@ export default function PlacePageClient({ place, scores }: Props) {
 
         {/* Terrace 3D map */}
         <div style={{ position:'absolute', inset:0 }}>
-          <Terrace3DView lat={place.lat} lng={place.lng} score={currentScore} date={displayedDate} />
+          <Terrace3DView lat={place.lat} lng={place.lng} score={currentScore} date={displayedDate} name={place.name} />
         </div>
 
         {/* TOP: gradient + back btn + score badge + hour chip */}

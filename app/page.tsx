@@ -80,8 +80,28 @@ export default function HomePage() {
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      result = result.filter((p) => p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q))
+      const q = searchQuery.trim().toLowerCase()
+      // Cherche par nom, adresse, arrondissement (ex: "11e", "11ème", "11") ou type
+      const typeMatch: Record<string, string[]> = {
+        bar:        ['bar', 'bars', 'bistrot', 'bistro', 'brasserie'],
+        restaurant: ['restaurant', 'resto', 'restos', 'restau', 'manger'],
+        cafe:       ['café', 'cafe', 'cafés', 'coffee', 'brunch'],
+        park:       ['parc', 'parcs', 'jardin', 'jardins', 'square'],
+      }
+      const matchedType = Object.entries(typeMatch).find(([, synonyms]) =>
+        synonyms.some(s => q.includes(s))
+      )?.[0]
+      if (matchedType) {
+        result = result.filter(p => p.type === matchedType)
+      } else {
+        const arrMatch = q.match(/^(\d{1,2})(?:e|er|ème|ère)?$/)
+        const arrNum = arrMatch ? parseInt(arrMatch[1]) : null
+        result = result.filter((p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.address.toLowerCase().includes(q) ||
+          (arrNum !== null && p.arrondissement === arrNum)
+        )
+      }
     }
     return result
   }, [places, activeFilters, searchQuery])
@@ -104,7 +124,7 @@ export default function HomePage() {
   return (
     <main className="relative h-dvh w-full overflow-hidden">
       {/* Carte plein écran */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0" role="application" aria-label="Carte des terrasses ensoleillées à Paris">
         <MapView places={displayedPlaces} onPlaceSelect={handlePlaceSelect} />
       </div>
 
@@ -226,7 +246,7 @@ export default function HomePage() {
               </span>
               <input
                 type="text"
-                placeholder="Chercher un café, un quartier…"
+              placeholder="Café, bar, 11e, Bastille…"
                 aria-label="Rechercher un lieu"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
