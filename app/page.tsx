@@ -11,12 +11,8 @@ import type { Place, FilterType } from '@/types'
 const MapView = dynamic(() => import('@/components/Map/MapView'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
-        <span className="text-5xl animate-spin text-sun-500" style={{ animationDuration: '2.4s' }}>☀</span>
-        <span className="text-sm text-text-soft font-outfit tracking-wide">Le ciel se découvre…</span>
-      </div>
-    </div>
+    // Fond neutre crème pendant le chargement JS du bundle — disparaît vite
+    <div className="absolute inset-0" style={{ background: '#fffcf3' }} />
   ),
 })
 
