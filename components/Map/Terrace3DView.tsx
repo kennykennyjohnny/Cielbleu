@@ -124,7 +124,7 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
           zoom: 19.0, pitch: 78, speed: 1.0, curve: 1.3, essential: true,
         })
 
-        trySetPaint(map, 'cb-3d-buildings', 'fill-extrusion-opacity', 0.28)
+        trySetPaint(map, 'cb-3d-buildings', 'fill-extrusion-opacity', 0.14)
 
         setBearing(baseBearing)
         highlightBuilding(map, result.feature, scoreRef.current)
@@ -149,15 +149,21 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
         if (!clampWired) {
           clampWired = true
           let clamping = false
-          // ±120° : on peut s'approcher de la façade depuis 120° chaque côté
+          // ±90° : arc de 180° devant le bâtiment
           map.on('rotate', () => {
             if (clamping) return
             const delta = ((map.getBearing() - baseBearing + 540) % 360) - 180
-            if (Math.abs(delta) > 120) {
+            if (Math.abs(delta) > 90) {
               clamping = true
-              map.jumpTo({ bearing: baseBearing + (delta > 0 ? 120 : -120) })
+              map.jumpTo({ bearing: baseBearing + (delta > 0 ? 90 : -90) })
               requestAnimationFrame(() => { clamping = false })
             }
+          })
+          // Orbit : après un glissement, recentre la caméra face au bâtiment
+          map.on('rotateend', () => {
+            if (clamping) return
+            const [ncLng, ncLat] = offsetCenter(lat, lng, map.getBearing(), -STREET_OFFSET_M)
+            map.easeTo({ center: [ncLng, ncLat], duration: 380 })
           })
         }
       }
@@ -250,9 +256,13 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
     if (!map || !isOriented) return
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault()
-      const step = e.shiftKey ? 30 : 15
+      const step = e.shiftKey ? 24 : 12
       const dir  = e.key === 'ArrowLeft' ? -1 : 1
-      map.easeTo({ bearing: map.getBearing() + dir * step, duration: 280 })
+      const raw  = map.getBearing() + dir * step
+      const delta = ((raw - bearing + 540) % 360) - 180
+      const newBrg = Math.abs(delta) > 90 ? bearing + (delta > 0 ? 90 : -90) : raw
+      const [ncLng, ncLat] = offsetCenter(lat, lng, newBrg, -STREET_OFFSET_M)
+      map.easeTo({ bearing: newBrg, center: [ncLng, ncLat], duration: 280 })
     } else if (e.key === '+' || e.key === '=') {
       e.preventDefault(); map.zoomIn({ duration: 200 })
     } else if (e.key === '-' || e.key === '_') {
@@ -268,15 +278,18 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
     <div className="relative w-full h-full overflow-hidden"
       role="region" aria-label={ariaLabel} aria-busy={!isOriented}
       tabIndex={0} onKeyDown={handleKeyDown}
-      style={{ outline: 'none' }}>
+      style={{ outline: 'none' }}
+      onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,183,3,0.80)' }}
+      onBlur={e  => { e.currentTarget.style.boxShadow = '' }}>
       <div className="absolute inset-0" style={{ zIndex: 0 }}>
         <SkyGradient altDeg={altDeg} isDay={isDay} />
       </div>
-      <div ref={containerRef} className="absolute inset-0" style={{ zIndex: 1 }} />
+      <div ref={containerRef} className="w-full h-full" style={{ zIndex: 1 }} />
       {!isDay && (
         <div className="absolute inset-0 pointer-events-none"
           style={{ zIndex: 3, background: 'rgba(8,14,22,0.72)' }} />
       )}
+      <ShadowPill isFrontLit={isFrontLit} isDay={isDay} altDeg={altDeg} />
       {isDay && <SunDisc altDeg={altDeg} relAngle={relAngle} score={resolvedScore} />}
       {/* Badge nom du lieu — coiné en bas à gauche pour identifier le bâtiment */}
       {isOriented && name && (
@@ -357,22 +370,23 @@ function SunDisc({ altDeg, relAngle, score }: { altDeg: number; relAngle: number
 
 function ShadowPill({ isFrontLit, isDay, altDeg }: { isFrontLit: boolean; isDay: boolean; altDeg: number }) {
   const lowSun = isDay && altDeg < 10
+  const cls = 'absolute top-3 right-3 z-10 pointer-events-none'
   if (!isDay) return (
-    <div className="absolute top-3 left-3 z-10 pointer-events-none">
+    <div className={cls}>
       <div className="rounded-full px-3 py-1.5 flex items-center gap-2"
-        style={{ background: 'rgba(8,14,22,0.88)', backdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <span className="text-[13px]">🌙</span>
+        style={{ background: 'rgba(8,14,22,0.88)', backdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.10)' }}>
+        <span className="text-[13px]" aria-hidden="true">🌙</span>
         <span className="font-outfit font-bold text-[11px]" style={{ color: '#8abbe0' }}>Nuit</span>
       </div>
     </div>
   )
   if (isFrontLit) return (
-    <div className="absolute top-3 left-3 z-10 pointer-events-none">
+    <div className={cls}>
       <div className="rounded-full px-3 py-1.5 flex items-center gap-2"
-        style={{ background: lowSun ? 'rgba(255,140,0,0.92)' : 'rgba(255,183,3,0.92)',
-          backdropFilter: 'blur(10px)', boxShadow: '0 4px 18px rgba(255,160,0,0.45)',
-          border: '1px solid rgba(255,255,255,0.25)' }}>
-        <span className="text-[13px]">☀️</span>
+        style={{ background: lowSun ? 'rgba(255,140,0,0.95)' : 'rgba(255,183,3,0.95)',
+          backdropFilter: 'blur(10px)', boxShadow: '0 4px 22px rgba(255,160,0,0.55)',
+          border: '1px solid rgba(255,255,255,0.30)' }}>
+        <span className="text-[13px]" aria-hidden="true">☀️</span>
         <span className="font-outfit font-black text-[11px]" style={{ color: '#0b1f3a' }}>
           {lowSun ? 'Soleil rasant' : 'Terrasse ensoleillée'}
         </span>
@@ -380,10 +394,10 @@ function ShadowPill({ isFrontLit, isDay, altDeg }: { isFrontLit: boolean; isDay:
     </div>
   )
   return (
-    <div className="absolute top-3 left-3 z-10 pointer-events-none">
+    <div className={cls}>
       <div className="rounded-full px-3 py-1.5 flex items-center gap-2"
-        style={{ background: 'rgba(20,40,70,0.88)', backdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <span className="text-[13px]">🌑</span>
+        style={{ background: 'rgba(20,40,70,0.88)', backdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.10)' }}>
+        <span className="text-[13px]" aria-hidden="true">🌑</span>
         <span className="font-outfit font-bold text-[11px]" style={{ color: '#8abbe0' }}>Terrasse à l&apos;ombre</span>
       </div>
     </div>
@@ -450,7 +464,7 @@ function styleMap(map: mapboxgl.Map) {
     )?.id
     map.addLayer({
       id: 'cb-3d-buildings', source: 'composite', 'source-layer': 'building',
-      filter: ['==', ['get', 'extrude'], 'true'], type: 'fill-extrusion', minzoom: 14,
+      filter: ['any', ['==', ['get', 'extrude'], 'true'], ['==', ['get', 'extrude'], true]], type: 'fill-extrusion', minzoom: 14,
       paint: {
         // Palette haussmannienne contrastée — pierre de taille sombre en haut
         'fill-extrusion-color': [
@@ -553,7 +567,7 @@ function addGroundShadow(
   const hull = convexHull([...ring.map(v => [v[0], v[1]] as [number, number]), ...projected])
   if (hull.length < 3) return
   hull.push(hull[0])
-  const opacity = Math.min(0.50, Math.max(0.10, 0.18 + 0.45 * Math.cos(sunAltDeg * Math.PI / 180)))
+  const opacity = Math.min(0.72, Math.max(0.18, 0.68 - sunAltDeg * 0.007))
   const geoData: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hull] }, properties: {} }],
@@ -593,7 +607,7 @@ function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFea
   const height  = (feature.properties?.height     as number | null) ?? 20
   const minH    = (feature.properties?.min_height as number | null) ?? 0
   // Couleur très chaude et lumineuse pour identifier clairement LE bâtiment
-  const hlColor = score >= 4 ? '#FFEC6A' : score >= 2 ? '#F5E098' : '#E8D8A8'
+  const hlColor = score >= 4 ? '#FFD600' : score >= 2 ? '#FFEC8A' : '#EDD898'
   const geo: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', geometry: feature.geometry as GeoJSON.Geometry, properties: {} }],
@@ -611,14 +625,23 @@ function highlightBuilding(map: mapboxgl.Map, feature: mapboxgl.MapboxGeoJSONFea
       'fill-extrusion-ambient-occlusion-radius': 4.0,
     },
   })
-  // Anneau lumineux autour du bâtiment cible
+  // Anneau lumineux large + halo flou autour du bâtiment cible
+  map.addLayer({
+    id: 'cb-bar-glow-outer', source: 'cb-bar-bld', type: 'line',
+    paint: {
+      'line-color': score >= 4 ? '#FFB700' : '#B89840',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 16, 8.0, 19, 16.0],
+      'line-blur': 10,
+      'line-opacity': 0.75,
+    },
+  })
   map.addLayer({
     id: 'cb-bar-glow', source: 'cb-bar-bld', type: 'line',
     paint: {
-      'line-color': score >= 4 ? '#E8A000' : '#A09060',
-      'line-width': ['interpolate', ['linear'], ['zoom'], 16, 2.5, 19, 5.0],
-      'line-blur': 4,
-      'line-opacity': 0.95,
+      'line-color': score >= 4 ? '#FFFFFF' : '#FFF0C8',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 16, 2.0, 19, 3.5],
+      'line-blur': 0.5,
+      'line-opacity': 0.88,
     },
   })
 }
