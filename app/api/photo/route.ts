@@ -11,8 +11,9 @@ export async function GET(req: NextRequest) {
 
   if (!ref) return new NextResponse('Missing ref', { status: 400 })
 
-  // Validation: photo_reference Google est alphanum + tirets/underscores, 20-500 chars
-  if (!/^[A-Za-z0-9_\-]{10,600}$/.test(ref)) {
+  // Validation: photo_reference Google peut contenir des caractères alphanum, tirets,
+  // underscores, slashes, plus, égal (format base64url ou path encodé)
+  if (!/^[A-Za-z0-9_\-\/\+\=\.]{10,800}$/.test(ref)) {
     return new NextResponse('Invalid ref', { status: 400 })
   }
 

@@ -541,6 +541,13 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'text-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0, 16.5, 0.8] as mapboxgl.Expression,
           'text-halo-color': '#ffffff', 'text-halo-width': 1 },
       })
+
+      // Force-sync : si Supabase a répondu avant que le style finisse de charger,
+      // geojsonRef.current contient déjà les places — on les injecte maintenant.
+      const placesSource = map.getSource('places') as mapboxgl.GeoJSONSource | undefined
+      if (placesSource && geojsonRef.current.features.length > 0) {
+        placesSource.setData(geojsonRef.current)
+      }
     })
 
     // Clic fond → déselection
@@ -623,8 +630,11 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
+    // IMPORTANT : utiliser geojsonRef.current (pas la closure `geojson`) pour éviter
+    // le bug de closure périmée — quand once('style.load') fire, la ref a
+    // toujours la valeur la plus récente même si le closure date d'un rendu antérieur.
     const update = () => {
-      (map.getSource('places') as mapboxgl.GeoJSONSource | undefined)?.setData(geojson)
+      (map.getSource('places') as mapboxgl.GeoJSONSource | undefined)?.setData(geojsonRef.current)
     }
     if (map.isStyleLoaded()) update()
     else map.once('style.load', update)

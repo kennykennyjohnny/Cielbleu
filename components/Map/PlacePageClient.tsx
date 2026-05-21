@@ -410,24 +410,33 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                 </a>
               )}
 
-              {/* Street View */}
+              {/* Street View — miniature cliquable */}
               <a
                 href={`https://maps.google.com/?cbll=${place.lat},${place.lng}&cbp=12,0,0,0,0&layer=c`}
                 target="_blank" rel="noopener noreferrer"
-                style={{ textDecoration:'none', display:'block',
-                  borderRadius:18, overflow:'hidden',
-                  background:'linear-gradient(135deg,#f0faf4 0%,#c6f0d8 100%)',
-                  border:'1px solid rgba(5,150,105,0.25)',
-                  boxShadow:'0 4px 16px rgba(5,150,105,0.12)' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px' }}>
-                  <span style={{ fontSize:28, flexShrink:0 }}>🧍</span>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ margin:0, fontWeight:900, fontSize:14, color:'#065f46' }}>Street View</p>
-                    <p style={{ margin:'2px 0 0', fontSize:12, color:'#059669', fontWeight:600 }}>
+                style={{ textDecoration:'none', display:'block', borderRadius:18, overflow:'hidden',
+                  boxShadow:'0 4px 16px rgba(5,150,105,0.14)',
+                  border:'1px solid rgba(5,150,105,0.22)', position:'relative' }}>
+                {/* Thumbnail Street View */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/streetview?lat=${place.lat}&lng=${place.lng}&w=560&h=180&fov=90`}
+                  alt={`Street View — ${place.name}`}
+                  style={{ width:'100%', height:130, objectFit:'cover', display:'block' }}
+                  loading="lazy"
+                />
+                {/* Overlay label */}
+                <div style={{ position:'absolute', bottom:0, left:0, right:0,
+                  background:'linear-gradient(to top, rgba(4,30,16,0.70) 0%, transparent 100%)',
+                  padding:'20px 14px 10px',
+                  display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <div>
+                    <p style={{ margin:0, fontWeight:900, fontSize:13, color:'#fff' }}>🧍 Street View</p>
+                    <p style={{ margin:'1px 0 0', fontSize:11, color:'rgba(255,255,255,0.78)', fontWeight:600 }}>
                       Voir la terrasse depuis la rue
                     </p>
                   </div>
-                  <span style={{ fontSize:18, flexShrink:0 }}>→</span>
+                  <span style={{ fontSize:18, color:'#fff' }}>→</span>
                 </div>
               </a>
 

@@ -19,16 +19,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Grille 10×10 — couvre Paris + petite couronne (92/93/94) à rayon 900m
-// ~100 × 5 types × 60 résultats max théorique, avec radius réduit pour mieux capter
-// la densité dans les zones chargées (Bastille, Marais, Champs-Élysées...)
+// Grille 14×14 + hotspots dense Paris — couvre Paris + petite couronne (92/93/94/95)
+// 196 points grille + 40 points "chauds" dans les quartiers de bar = 236 points × 5 types
 const PARIS_GRID = (() => {
   const points: { lat: number; lng: number }[] = []
-  // Bornes Paris + petite couronne : lat 48.80→48.94, lng 2.21→2.49
-  // 10 lignes lat, 10 colonnes lng (= 100 points, couvre mieux 92/93/94)
-  const LAT_MIN = 48.800, LAT_MAX = 48.942
-  const LNG_MIN = 2.210, LNG_MAX = 2.490
-  const ROWS = 10, COLS = 10
+
+  // Grille 14×14 — lat 48.78→48.96, lng 2.19→2.51
+  const LAT_MIN = 48.780, LAT_MAX = 48.958
+  const LNG_MIN = 2.190, LNG_MAX = 2.510
+  const ROWS = 14, COLS = 14
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       points.push({
@@ -37,12 +36,70 @@ const PARIS_GRID = (() => {
       })
     }
   }
+
+  // Hotspots : quartiers de bars/restos denses Paris + 1ère/2ème couronne nord
+  const HOTSPOTS: { lat: number; lng: number }[] = [
+    // Paris intra-muros (denses)
+    { lat: 48.8533, lng: 2.3692 }, // Bastille
+    { lat: 48.8567, lng: 2.3541 }, // Marais Nord
+    { lat: 48.8550, lng: 2.3620 }, // Marais Sud
+    { lat: 48.8835, lng: 2.3371 }, // Pigalle / Montmartre
+    { lat: 48.8820, lng: 2.3450 }, // Abbesses
+    { lat: 48.8637, lng: 2.3735 }, // Oberkampf
+    { lat: 48.8673, lng: 2.3643 }, // République
+    { lat: 48.8618, lng: 2.3485 }, // Temple / Arts et Métiers
+    { lat: 48.8790, lng: 2.3582 }, // Montmartre bas
+    { lat: 48.8546, lng: 2.3331 }, // Saint-Germain-des-Prés
+    { lat: 48.8519, lng: 2.3472 }, // Quartier Latin / Saint-Michel
+    { lat: 48.8501, lng: 2.3370 }, // Odéon
+    { lat: 48.8713, lng: 2.3625 }, // Canal Saint-Martin
+    { lat: 48.8681, lng: 2.3482 }, // Strasbourg-Saint-Denis
+    { lat: 48.8758, lng: 2.3290 }, // Batignolles
+    { lat: 48.8775, lng: 2.3511 }, // Montmartre Est
+    { lat: 48.8605, lng: 2.3355 }, // Opéra / Grands Boulevards
+    { lat: 48.8488, lng: 2.3540 }, // Mouffetard
+    { lat: 48.8462, lng: 2.3730 }, // Alésia / Denfert
+    { lat: 48.8503, lng: 2.3831 }, // Nation / Voltaire
+    { lat: 48.8580, lng: 2.3918 }, // Charonne / Père-Lachaise
+    { lat: 48.8650, lng: 2.3856 }, // Ménilmontant
+    { lat: 48.8720, lng: 2.3820 }, // Belleville
+    { lat: 48.8744, lng: 2.3720 }, // Jourdain
+    { lat: 48.8445, lng: 2.3453 }, // Montparnasse
+    { lat: 48.8490, lng: 2.3254 }, // Saint-Sulpice / Luxembourg
+    { lat: 48.8725, lng: 2.3120 }, // Wagram / Monceau
+    { lat: 48.8669, lng: 2.3100 }, // Ternes
+    { lat: 48.8604, lng: 2.2985 }, // Étoile / Victor Hugo
+    { lat: 48.8540, lng: 2.2810 }, // Auteuil / Passy
+    // Petite couronne Nord (93) — Saint-Denis, Saint-Ouen, Aubervilliers
+    { lat: 48.9361, lng: 2.3540 }, // Saint-Denis centre
+    { lat: 48.9105, lng: 2.3350 }, // Saint-Ouen marché
+    { lat: 48.9170, lng: 2.3820 }, // Aubervilliers
+    { lat: 48.8980, lng: 2.3708 }, // La Courneuve / Le Bourget zone
+    // 92 — Boulogne, Issy, Levallois, Clichy
+    { lat: 48.8350, lng: 2.2431 }, // Boulogne centre
+    { lat: 48.8254, lng: 2.2740 }, // Issy-les-Moulineaux
+    { lat: 48.8944, lng: 2.2880 }, // Levallois-Perret
+    { lat: 48.9026, lng: 2.3070 }, // Clichy centre
+    // 94 — Vincennes, Saint-Mandé, Charenton, Ivry
+    { lat: 48.8474, lng: 2.4397 }, // Vincennes centre
+    { lat: 48.8381, lng: 2.4113 }, // Saint-Mandé / Bel-Air
+    { lat: 48.8236, lng: 2.4100 }, // Charenton / Alfortville
+    { lat: 48.8140, lng: 2.3840 }, // Ivry-sur-Seine
+  ]
+
+  // Évite les doublons exacts avec la grille
+  const grid = new Set(points.map(p => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`))
+  for (const h of HOTSPOTS) {
+    const key = `${h.lat.toFixed(4)},${h.lng.toFixed(4)}`
+    if (!grid.has(key)) points.push(h)
+  }
+
   return points
 })()
 
 // Types : bar + restaurant + cafe + park + night_club
 const PLACE_TYPES = ['bar', 'restaurant', 'cafe', 'park', 'night_club'] as const
-const SEARCH_RADIUS = 900 // mètres — radius plus serré = moins de places ratées sous le cap 60
+const SEARCH_RADIUS = 750 // mètres — réduit l'overlap, plus de places uniques
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
