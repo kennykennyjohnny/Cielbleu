@@ -19,22 +19,30 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Grille 4×4 — couvre Paris intra-muros à rayon 1500m (densité x3 vs ancienne grille 9pts/3km)
-// ~16 × 5 types × 60 résultats max = jusqu'à 4800 lieux potentiels
-const PARIS_GRID = [
-  // Ligne Nord
-  { lat: 48.878, lng: 2.295 }, { lat: 48.878, lng: 2.332 }, { lat: 48.878, lng: 2.369 }, { lat: 48.878, lng: 2.406 },
-  // Ligne Centre-Nord  
-  { lat: 48.860, lng: 2.295 }, { lat: 48.860, lng: 2.332 }, { lat: 48.860, lng: 2.369 }, { lat: 48.860, lng: 2.406 },
-  // Ligne Centre-Sud
-  { lat: 48.843, lng: 2.295 }, { lat: 48.843, lng: 2.332 }, { lat: 48.843, lng: 2.369 }, { lat: 48.843, lng: 2.406 },
-  // Ligne Sud
-  { lat: 48.826, lng: 2.295 }, { lat: 48.826, lng: 2.332 }, { lat: 48.826, lng: 2.369 }, { lat: 48.826, lng: 2.406 },
-]
+// Grille 8×8 — couvre Paris + petite couronne (92/93/94) à rayon 900m
+// ~64 × 5 types × 60 résultats max théorique, avec radius réduit pour mieux capter
+// la densité dans les zones chargées (Bastille, Marais, Champs-Élysées...)
+const PARIS_GRID = (() => {
+  const points: { lat: number; lng: number }[] = []
+  // Bornes Paris + petite couronne : lat 48.80→48.92, lng 2.22→2.48
+  // 8 lignes lat, 8 colonnes lng (= 64 points, ~1.7km entre chaque)
+  const LAT_MIN = 48.805, LAT_MAX = 48.918
+  const LNG_MIN = 2.224, LNG_MAX = 2.480
+  const ROWS = 8, COLS = 8
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      points.push({
+        lat: LAT_MIN + (LAT_MAX - LAT_MIN) * r / (ROWS - 1),
+        lng: LNG_MIN + (LNG_MAX - LNG_MIN) * c / (COLS - 1),
+      })
+    }
+  }
+  return points
+})()
 
 // Types : bar + restaurant + cafe + park + night_club
 const PLACE_TYPES = ['bar', 'restaurant', 'cafe', 'park', 'night_club'] as const
-const SEARCH_RADIUS = 1500 // mètres — maillage plus fin = moins de doublons, plus de précision
+const SEARCH_RADIUS = 900 // mètres — radius plus serré = moins de places ratées sous le cap 60
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))

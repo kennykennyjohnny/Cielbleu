@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import { getSunPosition } from '@/lib/suncalc'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ interface PlaceContext {
     longueur: number | null
     largeur: number | null
     typologie: string | null
+    geo_point_2d: { lat: number; lon: number } | null
   } | null
 }
 
@@ -54,7 +56,7 @@ interface BldData {
 }
 
 // Distance depuis la façade : on se place côté rue, légèrement en recul
-const STREET_OFFSET_M = 32
+const STREET_OFFSET_M = 26  // distance caméra ↔ terrasse, façade bien cadrée à pitch 76°
 
 // ─── Composant principal ─────────────────────────────────────────────────────
 
@@ -78,9 +80,9 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/light-v11',
+      style: 'mapbox://styles/kennykenny99/cmpd46pyv001801r65bnugkd3',
       center: [lng, lat],
-      zoom: 18.0, pitch: 72, bearing: 0,
+      zoom: 18.4, pitch: 38, bearing: 0,
       scrollZoom: true, boxZoom: false, doubleClickZoom: false,
       dragRotate: true, dragPan: true, keyboard: false,
       touchZoomRotate: true, touchPitch: true,
@@ -103,32 +105,52 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
       setSunLight(map, lat, lng, dateRef.current, scoreRef.current, null)
 
       // 3D opérationnel dès l'arrivée des tuiles — slider + interactions actives
-      map.once('idle', () => {
-        if (disposed) return
+      let readyFired = false
+      const markReady = () => {
+        if (readyFired || disposed) return
+        readyFired = true
         setIsOriented(true)
         map.setMinZoom(16.5)
         map.setMaxZoom(20.8)
         const s = 0.008
         map.setMaxBounds([[lng - s, lat - s], [lng + s, lat + s]])
-      })
+      }
+      map.once('idle', markReady)
+      // Fallback : si idle tarde (animation continue), on libère après 1.4 s max
+      timers.push(setTimeout(markReady, 1400))
 
-      const finalize = (result: OrientResult, tw = 9, td = 3.5) => {
+      const finalize = (
+        result: OrientResult,
+        tw = 9, td = 3.5,
+        terraceLat = lat, terraceLng = lng,
+      ) => {
         if (disposed || oriented) return
         oriented = true
 
         const baseBearing = result.bearing
-        const [cLng, cLat] = offsetCenter(lat, lng, baseBearing, -STREET_OFFSET_M)
+        // Mapbox positionne automatiquement la caméra ~50 m derrière le centre
+        // (à pitch 76°, zoom 19). Le centre doit donc être SUR la terrasse, légèrement
+        // décalé vers le bâtiment (+5 m), pour que :
+        //   - la caméra atterrisse pile dans la rue, face à la terrasse
+        //   - la terrasse occupe le 1/3 inférieur de l'écran
+        //   - la façade du bâtiment occupe le 2/3 supérieur
+        const [cLng, cLat] = offsetCenter(terraceLat, terraceLng, baseBearing, +5)
 
         map.flyTo({
           center: [cLng, cLat], bearing: baseBearing,
-          zoom: 19.0, pitch: 78, speed: 1.0, curve: 1.3, essential: true,
+          zoom: 18.6, pitch: 38, speed: 1.0, curve: 1.3, essential: true,
         })
 
-        trySetPaint(map, 'cb-3d-buildings', 'fill-extrusion-opacity', 0.14)
+        // Voisins en sourdine pour que le bar saute aux yeux (style Street View focalisé)
+        trySetPaint(map, 'cb-3d-buildings', 'fill-extrusion-opacity', 0.32)
+        trySetPaint(map, 'cb-3d-buildings', 'fill-extrusion-color', [
+          'interpolate', ['linear'], ['get', 'height'],
+          0, '#C9C0AE', 10, '#B5AC97', 20, '#9F9783', 40, '#85806C', 70, '#69654F',
+        ])
 
         setBearing(baseBearing)
         highlightBuilding(map, result.feature, scoreRef.current)
-        addTerraceZone(map, lat, lng, baseBearing, scoreRef.current, tw, td)
+        addTerraceZone(map, terraceLat, terraceLng, baseBearing, scoreRef.current, tw, td)
 
         const geom = result.feature.geometry
         const ring: number[][] | null =
@@ -159,10 +181,10 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
               requestAnimationFrame(() => { clamping = false })
             }
           })
-          // Orbit : après un glissement, recentre la caméra face au bâtiment
+          // Orbit : après un glissement, recentre la caméra face à la terrasse
           map.on('rotateend', () => {
             if (clamping) return
-            const [ncLng, ncLat] = offsetCenter(lat, lng, map.getBearing(), -STREET_OFFSET_M)
+            const [ncLng, ncLat] = offsetCenter(terraceLat, terraceLng, map.getBearing(), +5)
             map.easeTo({ center: [ncLng, ncLat], duration: 380 })
           })
         }
@@ -174,12 +196,36 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
         if (!shape) return
         const poly = normalizeToPolygon(shape)
         if (!poly) return
-        const b = bearingFromPolygon(poly, lat, lng)
+
+        // Position RÉELLE de la terrasse (Paris Open Data) — sinon fallback sur point bar
+        const tCoord = ctx.terrace?.geo_point_2d as { lat?: number; lon?: number } | undefined
+        const tLat = (tCoord?.lat ?? lat)
+        const tLng = (tCoord?.lon ?? lng)
+
+        // Bearing = direction TERRASSE → arête de façade la plus proche.
+        // L'arête la plus proche de la terrasse donne la façade qui borde la terrasse,
+        // donc la normale perpendiculaire = direction "face au bar".
+        let b: number | null = bearingFromPolygon(poly, tLat, tLng)
+        // Fallback ultime : vecteur terrasse → bar
+        if (b === null && tCoord && (Math.abs(tLat - lat) > 1e-7 || Math.abs(tLng - lng) > 1e-7)) {
+          const cosLat = Math.cos(lat * Math.PI / 180)
+          const dy = lat - tLat
+          const dx = (lng - tLng) * cosLat
+          b = ((Math.atan2(dx, dy) * 180 / Math.PI) + 360) % 360
+        }
+        if (b === null) b = bearingFromPolygon(poly, lat, lng)
         if (b === null) return
-        const nbPl   = ctx.building?.nb_pl ?? 0
-        const height = Math.max(8, Math.round(nbPl * 3 + 2))
-        const tw     = ctx.terrace?.longueur ?? 9
-        const td     = ctx.terrace?.largeur  ?? 3.5
+
+        // Hauteur : préférer h_et_max (m, Paris OD) sinon nb_pl × 3.1 + RDC.
+        // Si rien n'est connu → 18 m (~6 étages, défaut haussmannien parisien).
+        const hMaxRaw = (ctx.building as Record<string, unknown> | null)?.h_et_max
+        const hMax    = typeof hMaxRaw === 'number' && hMaxRaw > 3 ? hMaxRaw : null
+        const nbPlRaw = ctx.building?.nb_pl
+        const nbPl    = typeof nbPlRaw === 'number' && nbPlRaw > 0 ? nbPlRaw : null
+        const height  = Math.max(12, hMax ?? (nbPl ? nbPl * 3.1 + 3 : 18))
+
+        const tw = (ctx.terrace?.longueur as number | null) ?? 9
+        const td = (ctx.terrace?.largeur  as number | null) ?? 3.5
 
         const geoData: GeoJSON.FeatureCollection = {
           type: 'FeatureCollection',
@@ -198,7 +244,7 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
             },
           })
         }
-        finalize({ bearing: b, distM: 0, feature: makeFeature(poly, height) }, tw, td)
+        finalize({ bearing: b, distM: 0, feature: makeFeature(poly, height) }, tw, td, tLat, tLng)
       })
 
       const tryTiles = () => {
@@ -281,29 +327,15 @@ export default function Terrace3DView({ lat, lng, score, date, name }: Props) {
       style={{ outline: 'none' }}
       onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,183,3,0.80)' }}
       onBlur={e  => { e.currentTarget.style.boxShadow = '' }}>
-      <div className="absolute inset-0" style={{ zIndex: 0 }}>
-        <SkyGradient altDeg={altDeg} isDay={isDay} />
-      </div>
+      {/* Fond chaud derrière la carte (visible si tuiles transparentes) */}
+      <div className="absolute inset-0"
+        style={{ zIndex: 0, background: isDay ? '#EFE7D6' : '#1B2840' }} />
       <div ref={containerRef} className="w-full h-full" style={{ zIndex: 1 }} />
+      {/* Voile nuit léger : on garde la carte lisible mais on donne le mood */}
       {!isDay && (
         <div className="absolute inset-0 pointer-events-none"
-          style={{ zIndex: 3, background: 'rgba(8,14,22,0.72)' }} />
-      )}
-      <ShadowPill isFrontLit={isFrontLit} isDay={isDay} altDeg={altDeg} />
-      {isDay && <SunDisc altDeg={altDeg} relAngle={relAngle} score={resolvedScore} />}
-      {/* Badge nom du lieu — coiné en bas à gauche pour identifier le bâtiment */}
-      {isOriented && name && (
-        <div className="absolute bottom-3 left-3 z-10 pointer-events-none max-w-[160px]">
-          <div className="rounded-xl px-2.5 py-1.5"
-            style={{ background: 'rgba(11,31,58,0.82)', backdropFilter: 'blur(10px)',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.30)' }}>
-            <span className="font-outfit font-bold text-[11px] leading-tight block truncate"
-              style={{ color: '#FFE580' }}>{name}</span>
-            <span className="font-outfit text-[9px] block" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              ← glisser pour pivoter →
-            </span>
-          </div>
-        </div>
+          style={{ zIndex: 3,
+            background: 'linear-gradient(180deg, rgba(11,31,58,0.18) 0%, rgba(11,31,58,0.32) 100%)' }} />
       )}
       {!isOriented && <LoadingOverlay />}
     </div>
@@ -444,20 +476,13 @@ function buildPin(): HTMLElement {
 // ─── Style Mapbox ─────────────────────────────────────────────────────────────
 
 function styleMap(map: mapboxgl.Map) {
-  const set = (id: string, prop: string, val: unknown) => trySetPaint(map, id, prop, val)
-  set('background', 'background-color', '#EDE5D6')
-  set('water', 'fill-color', '#A8C8DC')
-  set('waterway', 'line-color', '#A8C8DC')
-  for (const r of ['road-primary','road-secondary-tertiary','road-street','road-minor',
-                   'road-motorway','road-path','road-pedestrian'])
-    set(r, 'line-color', '#F2E8D4')
-  for (const g of ['landuse','park','national-park','pitch','grass'])
-    set(g, 'fill-color', '#C4DCA0')
-  for (const l of map.getStyle().layers ?? [])
-    if (l.type === 'symbol' || l.id.includes('poi') || l.id.includes('label') || l.id.includes('transit'))
-      try { map.setLayoutProperty(l.id, 'visibility', 'none') } catch { /* noop */ }
-
-  if (!map.getLayer('cb-3d-buildings')) {
+  // Le style custom Mapbox de l'utilisateur (cmpd46pyv001801r65bnugkd3) fournit
+  // déjà les bâtiments 3D, la palette, les routes. On ne touche à rien — on
+  // ajoute juste un layer 3D buildings de secours si le style n'en a pas.
+  const hasExtrusion = (map.getStyle().layers ?? []).some(
+    l => l.type === 'fill-extrusion'
+  )
+  if (!hasExtrusion && !map.getLayer('cb-3d-buildings')) {
     // Insérer AVANT le premier layer symbol pour que les labels passent devant
     const lblLayer = map.getStyle().layers?.find(
       l => l.type === 'symbol' && (l.layout as Record<string, unknown>)?.['text-field']
@@ -485,14 +510,6 @@ function styleMap(map: mapboxgl.Map) {
       },
     }, lblLayer)
   }
-  set('building', 'fill-color', '#E0D8CA')
-  set('building', 'fill-opacity', 0.45)
-  try {
-    map.setFog({
-      color: '#EAE2D2', 'high-color': '#D4C8B4',
-      'horizon-blend': 0.04, 'space-color': '#101828', range: [0.8, 14],
-    } as Parameters<typeof map.setFog>[0])
-  } catch { /* noop */ }
 }
 
 // ─── Éclairage solaire (v3 setLights + fallback setLight) ────────────────────

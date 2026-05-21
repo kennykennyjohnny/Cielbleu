@@ -18,22 +18,22 @@ const outfit = Outfit({
 })
 
 export const metadata: Metadata = {
-  title: 'CielBleu — Trouve ta terrasse au soleil à Paris',
+  title: 'HopSoleil — Trouve ta terrasse au soleil à Paris',
   description:
     'Le radar des terrasses ensoleillées à Paris. Score soleil temps réel, vue 3D, fenêtre d’ensoleillement.',
-  metadataBase: new URL('https://cielbleu.fr'),
+  metadataBase: new URL('https://hopsoleil.fr'),
   openGraph: {
-    title: 'CielBleu ☀',
+    title: 'HopSoleil ☀',
     description: 'Le radar des terrasses ensoleillées à Paris.',
-    url: 'https://cielbleu.fr',
-    siteName: 'CielBleu',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'CielBleu' }],
+    url: 'https://hopsoleil.fr',
+    siteName: 'HopSoleil',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'HopSoleil' }],
     locale: 'fr_FR',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'CielBleu ☀',
+    title: 'HopSoleil ☀',
     description: 'Le radar des terrasses ensoleillées à Paris.',
     images: ['/og-image.png'],
   },

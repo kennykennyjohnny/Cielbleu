@@ -2,20 +2,8 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import type { Place } from '@/types'
-
-const Terrace3DView = dynamic(() => import('./Terrace3DView'), {
-  ssr: false,
-  loading: () => (
-    <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center',
-      background:'linear-gradient(180deg,#2D7DD2 0%,#8fd3ff 45%,#e6f4ff 100%)' }}>
-      <span style={{ fontFamily:'var(--font-outfit)', fontSize:12, color:'rgba(255,255,255,0.80)',
-        letterSpacing:'0.14em', textTransform:'uppercase' }}>Vue 3D…</span>
-    </div>
-  ),
-})
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -125,10 +113,15 @@ function extractPhotoRef(url: string): string | null {
 interface Props {
   place: Place
   scores: { time_slot: string; score: number }[]
+  hour: number
+  onHourChange: (h: number) => void
+  // Quand fourni (page d'accueil inline), le bouton retour appelle onClose
+  // au lieu de naviguer vers "/".
+  onClose?: () => void
 }
 
-export default function PlacePageClient({ place, scores }: Props) {
-  const [hour, setHour] = useState<number>(nowHalfHour)
+export default function PlacePageClient({ place, scores, hour, onHourChange, onClose }: Props) {
+  const setHour = onHourChange
   const [shareToast, setShareToast] = useState(false)
 
   const scoreMap = useMemo(() => {
@@ -137,7 +130,7 @@ export default function PlacePageClient({ place, scores }: Props) {
     return m
   }, [scores])
 
-  const { slot, label: hourLabel, date: displayedDate } = halfHourToSlot(hour)
+  const { slot, label: hourLabel } = halfHourToSlot(hour)
   const currentScore = scoreMap[slot] ?? place.currentScore ?? 3
   const isNow   = Math.abs(hour - nowHalfHour()) < 0.26
   const isSunny = currentScore >= 4
@@ -181,86 +174,73 @@ export default function PlacePageClient({ place, scores }: Props) {
 
   const handleShare = useCallback(async () => {
     const url = typeof window !== 'undefined' ? window.location.href : ''
-    if (navigator?.share) { try { await navigator.share({ title: 'CielBleu — ' + place.name, url }); return } catch { /* cancelled */ } }
+    if (navigator?.share) { try { await navigator.share({ title: 'HopSoleil — ' + place.name, url }); return } catch { /* cancelled */ } }
     if (navigator?.clipboard) { try { await navigator.clipboard.writeText(url); setShareToast(true); setTimeout(() => setShareToast(false), 2200) } catch { /* noop */ } }
   }, [place.name])
 
   return (
-    <main style={{ minHeight:'100dvh', background:'var(--color-paper)', fontFamily:'var(--font-outfit)', color:'#142033' }}>
+    <div style={{ background:'transparent', fontFamily:'var(--font-outfit)', color:'#142033' }}>
 
-      {/* ═══════════ 1. HERO 3D + SLIDER (voir la 3D changer en direct) ═══════════ */}
-      <div style={{ position:'relative', height:280 }}>
-
-        {/* Terrace 3D map */}
-        <div style={{ position:'absolute', inset:0 }}>
-          <Terrace3DView lat={place.lat} lng={place.lng} score={currentScore} date={displayedDate} name={place.name} />
-        </div>
-
-        {/* TOP: gradient + back btn + score badge + hour chip */}
-        <div style={{ position:'absolute', inset:0, zIndex:10, pointerEvents:'none',
-          background:'linear-gradient(to bottom,rgba(11,31,58,0.45) 0%,transparent 46%)' }}>
-          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8,
-            padding:'max(env(safe-area-inset-top,0px),14px) 14px 0' }}>
-
-            {/* Back */}
-            <Link href="/" aria-label="Retour à la carte"
-              style={{ pointerEvents:'auto', textDecoration:'none', flexShrink:0 }}>
-              <div style={{ width:38, height:38, borderRadius:'50%',
-                background:'rgba(255,255,255,0.92)', backdropFilter:'blur(10px)',
-                boxShadow:'0 4px 12px rgba(11,31,58,0.18)',
-                display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <ArrowLeft size={18} strokeWidth={2.5} style={{ color:'#0b1f3a' }} />
-              </div>
-            </Link>
-
-            {/* Score badge */}
-            <div aria-live="polite"
-              style={{ pointerEvents:'none', padding:'8px 13px', borderRadius:999,
-                display:'inline-flex', alignItems:'center', gap:6,
-                fontWeight:900, fontSize:13, backdropFilter:'blur(12px)',
-                boxShadow:'0 8px 22px rgba(11,31,58,0.18)',
-                ...scoreBadgeStyle }}>
-              <span style={{ fontSize:16 }}>
-                {isSunny ? '☀️' : currentScore >= 2 ? '⛅' : '🌑'}
-              </span>
-              <span>{SCORE_LABEL[currentScore]}</span>
+      {/* ═══════════ HEADER COMPACT : score badge + heure + back ═══════════ */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px 12px' }}>
+        {onClose ? (
+          <button onClick={onClose} aria-label="Fermer" style={{ textDecoration:'none', flexShrink:0, background:'none', border:'none', padding:0, cursor:'pointer' }}>
+            <div style={{ width:34, height:34, borderRadius:'50%',
+              background:'rgba(20,32,51,0.07)',
+              display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <ArrowLeft size={16} strokeWidth={2.5} style={{ color:'#0b1f3a' }} />
             </div>
-
-            {/* Hour chip */}
-            <div style={{ flexShrink:0, minWidth:64, textAlign:'center',
-              background:isNow ? 'rgba(255,183,3,0.92)' : 'rgba(255,255,255,0.92)',
-              color:'#0b1f3a', borderRadius:12, padding:'6px 10px',
-              backdropFilter:'blur(10px)', boxShadow:'0 4px 12px rgba(11,31,58,0.12)' }}>
-              <p style={{ margin:0, fontSize:11, fontWeight:800, lineHeight:1 }}>
-                {isNow ? 'Maintenant' : hourLabel}
-              </p>
-              {isNow && <p style={{ margin:'2px 0 0', fontSize:8, fontWeight:700, opacity:0.70,
-                lineHeight:1, textTransform:'uppercase', letterSpacing:'0.08em' }}>en direct</p>}
+          </button>
+        ) : (
+          <Link href="/" aria-label="Retour à la carte"
+            style={{ textDecoration:'none', flexShrink:0 }}>
+            <div style={{ width:34, height:34, borderRadius:'50%',
+              background:'rgba(20,32,51,0.07)',
+              display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <ArrowLeft size={16} strokeWidth={2.5} style={{ color:'#0b1f3a' }} />
             </div>
-          </div>
+          </Link>
+        )}
+
+        <div aria-live="polite"
+          style={{ padding:'7px 12px', borderRadius:999,
+            display:'inline-flex', alignItems:'center', gap:6,
+            fontWeight:900, fontSize:12.5, ...scoreBadgeStyle }}>
+          <span style={{ fontSize:14 }}>
+            {isSunny ? '☀️' : currentScore >= 2 ? '⛅' : '🌑'}
+          </span>
+          <span>{SCORE_LABEL[currentScore]}</span>
         </div>
 
-        {/* BOTTOM: gradient + slider (slider remonté dans le hero = on voit la 3D changer) */}
-        <div style={{ position:'absolute', inset:'auto 0 0', zIndex:10,
-          background:'linear-gradient(transparent,rgba(8,18,36,0.84))',
-          padding:'36px 16px 14px' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
-            <span style={{ fontSize:10.5, fontWeight:800, color:'rgba(255,255,255,0.52)',
-              letterSpacing:'0.10em', textTransform:'uppercase' }}>☀ 6h</span>
-            <span style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.68)' }}>
-              Fais glisser pour explorer
-            </span>
-            <span style={{ fontSize:10.5, fontWeight:800, color:'rgba(255,255,255,0.52)',
-              letterSpacing:'0.10em', textTransform:'uppercase' }}>🌙 23h</span>
-          </div>
-          <input
-            type="range" min={6} max={23.5} step={0.5} value={hour}
-            onChange={e => setHour(parseFloat(e.target.value))}
-            className="cb-hour-slider w-full"
-            aria-label="Heure de la journée"
-            aria-valuetext={hourLabel}
-          />
+        <div style={{ flex:1 }} />
+
+        <div style={{ flexShrink:0, minWidth:60, textAlign:'center',
+          background:isNow ? 'rgba(255,183,3,0.92)' : 'rgba(20,32,51,0.06)',
+          color:'#0b1f3a', borderRadius:10, padding:'5px 10px' }}>
+          <p style={{ margin:0, fontSize:11, fontWeight:800, lineHeight:1 }}>
+            {isNow ? 'Maintenant' : hourLabel}
+          </p>
         </div>
+      </div>
+
+      {/* ═══════════ SLIDER HEURE — la carte derrière s'éclaire en direct ═══════════ */}
+      <div style={{ padding:'0 16px 14px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+          <span style={{ fontSize:10, fontWeight:800, color:'#98a2b3',
+            letterSpacing:'0.10em', textTransform:'uppercase' }}>☀ 6h</span>
+          <span style={{ fontSize:10.5, fontWeight:700, color:'#6f7a8a' }}>
+            Glisse pour voir le soleil changer
+          </span>
+          <span style={{ fontSize:10, fontWeight:800, color:'#98a2b3',
+            letterSpacing:'0.10em', textTransform:'uppercase' }}>🌙 23h</span>
+        </div>
+        <input
+          type="range" min={6} max={23.5} step={0.5} value={hour}
+          onChange={e => setHour(parseFloat(e.target.value))}
+          className="cb-hour-slider w-full"
+          aria-label="Heure de la journée"
+          aria-valuetext={hourLabel}
+        />
       </div>
 
       {/* ═══════════ SCROLLABLE PANEL ═══════════ */}
@@ -438,8 +418,8 @@ export default function PlacePageClient({ place, scores }: Props) {
         )}
       </div>
 
-      {/* ═══════════ ACTION BAR (fixed bottom) ═══════════ */}
-      <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:40,
+      {/* ═══════════ ACTION BAR (sticky bottom dans le panel) ═══════════ */}
+      <div style={{ position:'sticky', bottom:0, zIndex:40,
         paddingBottom:'max(env(safe-area-inset-bottom,0px),12px)' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 44px', gap:8,
           margin:'0 12px', padding:'12px 12px 14px',
@@ -491,6 +471,6 @@ export default function PlacePageClient({ place, scores }: Props) {
           Lien copié !
         </div>
       )}
-    </main>
+    </div>
   )
 }

@@ -1,4 +1,4 @@
-# CielBleu ☀
+# HopSoleil ☀
 
 Carte des terrasses ensoleillées à Paris en temps réel.
 

@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import type { Place } from '@/types'
+import { getSunPosition } from '@/lib/suncalc'
 
 const PARIS_CENTER: [number, number] = [2.3522, 48.8566]
 
@@ -93,33 +94,183 @@ function drawPinImage(score: number): { width: number; height: number; data: Uin
 }
 
 // ── Style CielBleu ─────────────────────────────────────────────────────────
-function applyStyle(map: mapboxgl.Map) {
-  const set = (id: string, prop: string, val: unknown) => {
-    if (map.getLayer(id)) try { map.setPaintProperty(id, prop as never, val as never) } catch { /* noop */ }
-  }
-  // Carte papier-crème CielBleu : fond chaud, eau bleu ciel, bâtiments calcaire
-  set('background', 'background-color', '#fffcf3')          // paper
-  set('water',      'fill-color',       '#c7e8ff')          // sky-200
-  set('waterway',   'line-color',       '#8fd3ff')          // sky-300
-  set('building',   'fill-color',       '#e9e1d4')          // limestone
-  set('building',   'fill-opacity',     0.72)
-  set('building-outline', 'line-color', '#d8d2c8')
-  for (const id of ['landuse', 'national-park', 'park', 'pitch']) set(id, 'fill-color', '#e6efd9')
-  for (const id of ['road-primary', 'road-secondary-tertiary', 'road-street', 'road-trunk', 'road-motorway']) {
-    set(id, 'line-color', '#ffffff')
-  }
-  set('road-minor', 'line-color', '#fff8ea')
+// Catégories de POIs Mapbox qu'on garde : nourriture (bar/resto/café),
+// parcs/jardins, métro/RER/tram. Tout le reste (hôtels, shops, banques,
+// gymnases, écoles, etc.) est filtré.
+const ALLOWED_POI_CLASSES = [
+  'food_and_drink',
+  'food_and_drink_stores',
+  'park_like',
+  'park',
+  'rail',
+  'transit',
+]
+const ALLOWED_POI_MAKI = [
+  'bar', 'beer', 'restaurant', 'fast-food', 'cafe', 'pub', 'wine', 'ice-cream',
+  'park', 'garden', 'playground', 'park-alt1',
+  'rail-metro', 'rail-light', 'rail', 'tram', 'entrance',
+]
 
-  // Masque POI et labels parasites
-  for (const l of map.getStyle().layers ?? []) {
-    if (l.id.includes('poi') || l.id.includes('transit-label') || l.id.startsWith('road-label') || l.id.startsWith('road-number')) {
-      try { map.setLayoutProperty(l.id, 'visibility', 'none') } catch { /* noop */ }
-    }
+/**
+ * Active des ombres RÉALISTES, calculées heure par heure depuis la vraie
+ * position du soleil (suncalc). On combine :
+ *   1) `lightPreset` Standard pour le mood chromatique (couleurs ciel/sol)
+ *   2) `setLights()` pour la direction PRÉCISE du soleil (azimut/altitude réels)
+ *   3) `setPaintProperty('2d-building', 'fill-extrusion-cast-shadows', true)`
+ *      pour que les bâtiments PROJETTENT leurs ombres au sol
+ */
+function applySunLightingByHour(map: mapboxgl.Map, lat: number, lng: number, h: number) {
+  // Date construite depuis l'heure du slider (résolution 1 min)
+  const d = new Date()
+  d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0)
+
+  const sun     = getSunPosition(d, lat, lng)
+  const azNorth = ((sun.azimuth * 180) / Math.PI + 180) % 360
+  const altDeg  = (sun.altitude * 180) / Math.PI
+  const isDay   = altDeg > -2
+  // polar = angle depuis la verticale ; soleil bas → grande polar → ombres longues
+  const polar   = Math.min(86, Math.max(20, 90 - Math.max(altDeg, 4)))
+
+  // 1) lightPreset Standard : mood chromatique (dawn/day/dusk/night)
+  let preset: 'dawn' | 'day' | 'dusk' | 'night'
+  if      (altDeg < -3)            preset = 'night'
+  else if (altDeg < 8 && h < 12)   preset = 'dawn'
+  else if (altDeg < 8 && h >= 12)  preset = 'dusk'
+  else                             preset = 'day'
+
+  const setConfig = (map as unknown as {
+    setConfigProperty?: (importId: string, name: string, value: unknown) => void
+  }).setConfigProperty
+  if (typeof setConfig === 'function') {
+    try { setConfig.call(map, 'basemap', 'lightPreset', preset) } catch { /* noop */ }
   }
-  set('settlement-major-label', 'text-color',      '#0b1f3a')
-  set('settlement-minor-label', 'text-color',      '#6f7a8a')
-  set('settlement-major-label', 'text-halo-color', '#fffcf3')
-  set('settlement-minor-label', 'text-halo-color', '#fffcf3')
+
+  // Mapbox Standard a déjà `fill-extrusion-cast-shadows: true` par défaut
+  // sur ses layers building — pas besoin de le forcer.
+
+  // 2) setLights avec direction solaire RÉELLE — réagit au pixel près au slider
+  const setLightsFn = (map as unknown as { setLights?: (l: unknown[]) => void }).setLights
+  if (typeof setLightsFn !== 'function') return
+
+  if (isDay) {
+    const lightColor = altDeg < 8  ? '#FFCC9A'   // lumière chaude rasante
+                    : altDeg < 20 ? '#FFE8BC'
+                                  : '#FFF8E8'
+    const intensity = Math.min(0.95, Math.max(0.40, 0.45 + altDeg / 80))
+    const ambInt    = Math.max(0.16, 0.34 - altDeg / 130)
+    const shadowInt = Math.min(0.92, Math.max(0.55, 0.55 + altDeg / 100))
+    try {
+      setLightsFn.call(map, [
+        { id: 'cb-amb', type: 'ambient',     properties: { color: '#FFEED8', intensity: ambInt } },
+        { id: 'cb-sun', type: 'directional', properties: {
+          color: lightColor, intensity,
+          direction: [azNorth, polar],
+          'cast-shadows': altDeg > 2,
+          'shadow-intensity': shadowInt,
+          'shadow-quality': 0.85,
+        }},
+      ])
+    } catch { /* noop */ }
+  } else {
+    try {
+      setLightsFn.call(map, [
+        { id: 'cb-amb', type: 'ambient',     properties: { color: '#1A2840', intensity: 0.18 } },
+        { id: 'cb-sun', type: 'directional', properties: {
+          color: '#2A3C58', intensity: 0.05,
+          direction: [0, 88], 'cast-shadows': false,
+        }},
+      ])
+    } catch { /* noop */ }
+  }
+}
+
+/**
+ * Calcule le bearing (en degrés compass) pointant du point (lat,lng) vers
+ * la façade la plus proche du polygone de bâtiment. Sert à positionner
+ * la caméra "en face de la façade".
+ */
+function bearingFromBuildingPoly(
+  shape: { type?: string; coordinates?: unknown },
+  lat: number, lng: number,
+): number | null {
+  if (!shape?.type) return null
+  let ring: number[][] | null = null
+  if (shape.type === 'Polygon') {
+    ring = (shape as { coordinates: number[][][] }).coordinates[0]
+  } else if (shape.type === 'MultiPolygon') {
+    const coords = (shape as { coordinates: number[][][][] }).coordinates
+    if (coords?.length) ring = coords[0][0]
+  }
+  if (!ring || ring.length < 3) return null
+
+  const cosLat = Math.cos(lat * Math.PI / 180)
+  let bestDist = Infinity
+  let bestBearing: number | null = null
+
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [ax, ay] = ring[i]
+    const [bx, by] = ring[i + 1]
+    // Midpoint relatif (en m)
+    const mx = ((ax + bx) / 2 - lng) * 111320 * cosLat
+    const my = ((ay + by) / 2 - lat) * 111320
+    const d = Math.sqrt(mx * mx + my * my)
+    if (d > 80 || d < 1) continue
+    // Vecteur arête + normale
+    const ex = (bx - ax) * 111320 * cosLat
+    const ey = (by - ay) * 111320
+    const el = Math.sqrt(ex * ex + ey * ey)
+    if (el < 0.5) continue
+    const n1x = ey / el, n1y = -ex / el
+    const dot = n1x * (-mx) + n1y * (-my)
+    // Normale orientée VERS le bar (le pin)
+    const nx = dot > 0 ? n1x : -n1x
+    const ny = dot > 0 ? n1y : -n1y
+    // Compass bearing du vecteur (-nx, -ny) : direction du bar VERS la façade
+    const cb = ((Math.atan2(-nx, -ny) * 180 / Math.PI) + 360) % 360
+    if (d < bestDist) { bestDist = d; bestBearing = cb }
+  }
+  return bestBearing
+}
+
+function applyStyle(map: mapboxgl.Map) {
+  // Le style custom Mapbox a ses propres POIs avec un schéma qu'on ne connaît pas
+  // d'avance. Stratégie en 3 étapes :
+  //   1) Tenter un setFilter sur chaque layer POI (filtre standard class/maki/type)
+  //   2) Sur chaque feature affichée, vérifier des propriétés permissives
+  //   3) Si même après filter, on voit que des features non voulues sortent, fallback
+  //      sur hide visibility pour les layers à fort risque (lodging-only, shop-only…)
+  const HIDE_KEYWORDS = ['lodging', 'hotel', 'shop', 'office', 'school', 'hospital',
+    'bank', 'atm', 'lawyer', 'cemetery', 'religious', 'industrial', 'fuel',
+    'parking', 'pharmacy', 'cosmetic', 'health', 'sport', 'attraction', 'museum',
+    'monument', 'historic', 'entertainment', 'cinema', 'theatre', 'gym']
+
+  for (const l of map.getStyle().layers ?? []) {
+    if (l.type !== 'symbol') continue
+    if (!l.id.includes('poi') && !l.id.includes('label')) continue
+
+    // Heuristique 1 : si l'id du layer contient un mot-clé "à cacher", on masque tout
+    if (HIDE_KEYWORDS.some(kw => l.id.toLowerCase().includes(kw))) {
+      try { map.setLayoutProperty(l.id, 'visibility', 'none') } catch { /* noop */ }
+      continue
+    }
+
+    // Heuristique 2 : tenter un filter strict
+    if (!l.id.includes('poi')) continue
+    try {
+      const existing = (l as { filter?: unknown }).filter
+      const restrict: unknown = ['any',
+        ['in', ['get', 'class'],    ['literal', ALLOWED_POI_CLASSES]],
+        ['in', ['get', 'maki'],     ['literal', ALLOWED_POI_MAKI]],
+        ['in', ['get', 'type'],     ['literal', ALLOWED_POI_MAKI]],
+        ['in', ['get', 'category'], ['literal', ALLOWED_POI_CLASSES]],
+        ['in', ['get', 'subclass'], ['literal', ALLOWED_POI_MAKI]],
+      ]
+      const combined = existing
+        ? ['all', existing, restrict]
+        : restrict
+      map.setFilter(l.id, combined as Parameters<typeof map.setFilter>[1])
+    } catch { /* noop */ }
+  }
 }
 
 // ── Composant ──────────────────────────────────────────────────────────────
@@ -127,20 +278,38 @@ function applyStyle(map: mapboxgl.Map) {
 interface Props {
   places: Place[]
   onPlaceSelect: (place: Place | null) => void
+  initialCenter?: [number, number]
+  initialZoom?: number
+  highlightPlaceId?: string
+  // Active la séquence d'arrivée immersive : carte démarre dézoomée,
+  // puis flyTo vers (lng,lat) avec pitch+bearing calculés depuis la façade.
+  cinematicFocus?: { lng: number; lat: number } | null
+  // Zoom doux sur un lieu sélectionné (page d'accueil). Quand null → retour
+  // à la caméra précédente. Ne recrée PAS la carte, économise les tiles.
+  focusPlace?: { lng: number; lat: number } | null
+  // Heure solaire (0..24) — pilote `lightPreset` de Mapbox Standard pour
+  // changer dawn/day/dusk/night en direct avec le slider. Passer un nombre
+  // évite les problèmes de référence d'objet Date dans les deps useEffect.
+  sunHour?: number
 }
 
 interface AmeniteInfo {
   type: 'fontaine' | 'sanisette'
   props: Record<string, unknown>
+  lat: number
+  lng: number
 }
 
-export default function MapView({ places, onPlaceSelect }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
   const onSelectRef   = useRef(onPlaceSelect)
   placesRef.current   = places
   onSelectRef.current = onPlaceSelect
+
+  // Sauvegarde la caméra avant le zoom focusPlace pour pouvoir revenir
+  const returnCameraRef = useRef<{ center: [number, number]; zoom: number; pitch: number; bearing: number } | null>(null)
 
   const [amenite, setAmenite] = useState<AmeniteInfo | null>(null)
 
@@ -159,15 +328,24 @@ export default function MapView({ places, onPlaceSelect }: Props) {
     if (mapRef.current || !containerRef.current) return
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
 
+    // Si on a un cinematicFocus, on démarre EN GRAND PLAN (zoom 14)
+    // pour que le flyTo qui suit donne une vraie sensation de "plongée"
+    // (vue aérienne, pitch léger, pas Street View)
+    const startCenter: [number, number] = cinematicFocus
+      ? [cinematicFocus.lng, cinematicFocus.lat]
+      : (initialCenter ?? PARIS_CENTER)
+    const startZoom  = cinematicFocus ? 14.2 : (initialZoom ?? 12.4)
+    const startPitch = cinematicFocus ? 0 : (initialZoom && initialZoom >= 15 ? 45 : 0)
+
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/light-v11',
-      center: PARIS_CENTER,
-      zoom: 12.4,
+      style: 'mapbox://styles/kennykenny99/cmpd46pyv001801r65bnugkd3',
+      center: startCenter,
+      zoom: startZoom,
       minZoom: 11,
-      maxZoom: 19,
+      maxZoom: 20,
       attributionControl: false,
-      pitch: 0,
+      pitch: startPitch,
       maxBounds: [[2.10, 48.74], [2.55, 49.00]],
     })
 
@@ -309,12 +487,20 @@ export default function MapView({ places, onPlaceSelect }: Props) {
       map.on('click', 'fontaines-layer', (e) => {
         e.originalEvent.stopPropagation()
         const f = e.features?.[0]
-        if (f) setAmenite({ type: 'fontaine', props: f.properties ?? {} })
+        if (f) {
+          const g = f.geometry as { type: string; coordinates: [number, number] }
+          const [lng, lat] = g.coordinates
+          setAmenite({ type: 'fontaine', props: f.properties ?? {}, lat, lng })
+        }
       })
       map.on('click', 'sanisettes-layer', (e) => {
         e.originalEvent.stopPropagation()
         const f = e.features?.[0]
-        if (f) setAmenite({ type: 'sanisette', props: f.properties ?? {} })
+        if (f) {
+          const g = f.geometry as { type: string; coordinates: [number, number] }
+          const [lng, lat] = g.coordinates
+          setAmenite({ type: 'sanisette', props: f.properties ?? {}, lat, lng })
+        }
       })
 
       // Labels EAU / WC au zoom 16+
@@ -349,6 +535,70 @@ export default function MapView({ places, onPlaceSelect }: Props) {
     })
 
     mapRef.current = map
+    // DEBUG : expose la carte pour inspection console
+    ;(window as unknown as { _cbMap?: mapboxgl.Map })._cbMap = map
+
+    // ── Séquence cinématique : flyTo "en face du bar" après chargement ──
+    if (cinematicFocus) {
+      const { lng, lat } = cinematicFocus
+      let disposed = false
+      const sequence = async () => {
+        // 1) Récupère le polygone du bâtiment et la terrasse via Paris OD
+        let bearing = 0
+        let targetLng = lng
+        let targetLat = lat
+        try {
+          const r = await fetch(`/api/place-context?lat=${lat}&lng=${lng}`, {
+            signal: AbortSignal.timeout(4000),
+          })
+          if (r.ok) {
+            const ctx = await r.json()
+            const shape = ctx?.building?.geo_shape
+            const tCoord = ctx?.terrace?.geo_point_2d as { lat?: number; lon?: number } | undefined
+            // Position cible = terrasse si dispo, sinon le bar
+            const tLat = tCoord?.lat ?? lat
+            const tLng = tCoord?.lon ?? lng
+            targetLat = tLat
+            targetLng = tLng
+            // Bearing = vecteur terrasse → bar (perpendiculaire à la façade)
+            if (tCoord && (Math.abs(tLat - lat) > 1e-7 || Math.abs(tLng - lng) > 1e-7)) {
+              const cosLat = Math.cos(lat * Math.PI / 180)
+              const dy = lat - tLat
+              const dx = (lng - tLng) * cosLat
+              bearing = ((Math.atan2(dx, dy) * 180 / Math.PI) + 360) % 360
+            } else if (shape) {
+              bearing = bearingFromBuildingPoly(shape, lat, lng) ?? 0
+            }
+          }
+        } catch { /* on continue avec le bearing par défaut */ }
+        if (disposed) return
+
+        // 2) flyTo aérien : pitch léger (32°), padding bas pour le bottom sheet
+        // → la cible apparaît dans la moitié haute, visible au-dessus du panel
+        const isMobile = window.matchMedia('(max-width: 899px)').matches
+        const paddingBottom = isMobile ? window.innerHeight * 0.55 : 0
+        const paddingRight  = isMobile ? 0 : 420  // panel desktop = 420px
+        map.flyTo({
+          center: [targetLng, targetLat],
+          zoom: 19.0,
+          pitch: 32,
+          bearing,
+          duration: 2000,
+          curve: 1.5,
+          essential: true,
+          padding: { top: 20, bottom: paddingBottom, left: 20, right: paddingRight },
+        })
+
+        // Plus de polygone de terrasse au sol — l'utilisateur trouvait ça moche.
+        // Le pin du bar suffit pour situer le lieu.
+      }
+      // Attendre que le style soit chargé avant la séquence
+      if (map.isStyleLoaded()) sequence()
+      else map.once('style.load', sequence)
+
+      return () => { disposed = true; map.remove(); mapRef.current = null }
+    }
+
     return () => { map.remove(); mapRef.current = null }
   }, []) // eslint-disable-line
 
@@ -363,17 +613,101 @@ export default function MapView({ places, onPlaceSelect }: Props) {
     else map.once('style.load', update)
   }, [geojson])
 
+  // ── Zoom doux sur un lieu sélectionné (page d'accueil) ───────────────
+  // focusPlace set → sauvegarde caméra + flyTo
+  // focusPlace null → retour à la caméra sauvegardée
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (focusPlace) {
+      const c = map.getCenter()
+      returnCameraRef.current = {
+        center:  [c.lng, c.lat],
+        zoom:    map.getZoom(),
+        pitch:   map.getPitch(),
+        bearing: map.getBearing(),
+      }
+      const isMobile = window.matchMedia('(max-width: 899px)').matches
+      map.flyTo({
+        center:  [focusPlace.lng, focusPlace.lat],
+        zoom:    16.5,
+        pitch:   40,
+        bearing: 0,
+        duration: 1200,
+        essential: true,
+        padding: {
+          top: 20,
+          bottom: isMobile ? Math.round(window.innerHeight * 0.52) : 20,
+          left:   20,
+          right:  isMobile ? 20 : 430,
+        },
+      })
+    } else if (returnCameraRef.current) {
+      const rc = returnCameraRef.current
+      map.flyTo({
+        center:   rc.center,
+        zoom:     rc.zoom,
+        pitch:    rc.pitch,
+        bearing:  rc.bearing,
+        duration: 1000,
+        essential: true,
+        padding:  { top: 0, bottom: 0, left: 0, right: 0 },
+      })
+      returnCameraRef.current = null
+    }
+  }, [focusPlace]) // eslint-disable-line
+
+  // ── Soleil + ombres réalistes : suit `sunHour` heure par heure ────────
+  // On utilise lat/lng du cinematicFocus (ou Paris par défaut) pour la
+  // position solaire — Paris est petite, l'écart de soleil entre 2 points
+  // est négligeable.
+  const sunLat = cinematicFocus?.lat ?? PARIS_CENTER[1]
+  const sunLng = cinematicFocus?.lng ?? PARIS_CENTER[0]
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || sunHour == null) return
+    const apply = () => applySunLightingByHour(map, sunLat, sunLng, sunHour)
+    // setConfigProperty est safe même si le style charge encore — il met
+    // simplement en file d'attente. On NE GATE PAS sur isStyleLoaded car
+    // l'event style.load ne re-fire pas après le 1er chargement.
+    apply()
+  }, [sunHour, sunLat, sunLng])
+
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="w-full h-full" />
-      {amenite && <FicheAmenite amenite={amenite} onClose={() => setAmenite(null)} />}
+      {amenite && (
+        <FicheAmenite
+          amenite={amenite}
+          map={mapRef.current}
+          onClose={() => setAmenite(null)}
+        />
+      )}
     </div>
   )
 }
 
 // ─── FicheAmenite ─────────────────────────────────────────────────────────────
 
-function FicheAmenite({ amenite, onClose }: { amenite: AmeniteInfo; onClose: () => void }) {
+function FicheAmenite({ amenite, map, onClose }: {
+  amenite: AmeniteInfo
+  map: mapboxgl.Map | null
+  onClose: () => void
+}) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    if (!map) return
+    const update = () => {
+      const p = map.project([amenite.lng, amenite.lat])
+      setPos({ x: p.x, y: p.y })
+    }
+    update()
+    map.on('move', update)
+    map.on('zoom', update)
+    return () => { map.off('move', update); map.off('zoom', update) }
+  }, [map, amenite.lng, amenite.lat])
+
   const p          = amenite.props
   const isFontaine = amenite.type === 'fontaine'
   const status     = isFontaine
@@ -384,31 +718,89 @@ function FicheAmenite({ amenite, onClose }: { amenite: AmeniteInfo; onClose: () 
   const pmr      = !isFontaine && p.acces_pmr ? (String(p.acces_pmr).toLowerCase() === 'oui' ? 'Accessible PMR' : null) : null
   const horaire  = !isFontaine && p.horaire_ouverture ? String(p.horaire_ouverture) : null
   const model    = isFontaine && p.modele ? String(p.modele) : null
+  const adresse  = !isFontaine && p.adresse ? String(p.adresse) : null
+
+  const title       = isFontaine ? 'Fontaine à boire' : 'Sanisette'
+  const themeColor  = isFontaine ? '#3A86FF' : '#4F8F65'
+  const themeBgSoft = isFontaine ? 'rgba(58,134,255,0.10)' : 'rgba(79,143,101,0.10)'
+  const gmapsUrl    = `https://www.google.com/maps/dir/?api=1&destination=${amenite.lat},${amenite.lng}&travelmode=walking`
+
+  if (!pos) return null
 
   return (
-    <div className="absolute bottom-4 left-4 z-20 pointer-events-auto" style={{ maxWidth: 320 }}>
-      <div className="rounded-2xl overflow-hidden"
+    <div
+      className="pointer-events-auto"
+      role="dialog" aria-label={title}
+      style={{
+        position: 'absolute',
+        left: pos.x, top: pos.y,
+        transform: 'translate(-50%, calc(-100% - 18px))',
+        maxWidth: 280, width: 'calc(100vw - 28px)',
+        zIndex: 25,
+      }}
+    >
+      <div className="rounded-3xl overflow-hidden"
         style={{ background: 'rgba(255,253,247,0.97)', backdropFilter: 'blur(20px)',
-          boxShadow: '0 8px 32px rgba(11,31,58,0.18), 0 2px 8px rgba(11,31,58,0.10)' }}>
-        <div className="px-4 pt-4 pb-3 flex items-center gap-3"
-          style={{ borderBottom: '1px solid rgba(11,31,58,0.08)' }}>
-          <span className="text-2xl">{isFontaine ? '💧' : '🚻'}</span>
-          <div className="flex-1 min-w-0">
-            <p className="font-playfair text-[15px] font-bold" style={{ color: '#0b1f3a' }}>
-              {isFontaine ? 'Fontaine à boire' : 'Sanisette'}
-            </p>
-          </div>
+          boxShadow: '0 18px 40px rgba(11,31,58,0.20), 0 2px 10px rgba(11,31,58,0.10)',
+          border: '1px solid rgba(20,32,51,0.08)' }}>
+
+        {/* Bandeau illustré */}
+        <div className="relative flex items-center justify-center"
+          style={{
+            height: 96,
+            background: `linear-gradient(135deg, ${themeBgSoft} 0%, ${themeColor}24 100%)`,
+          }}>
+          <span aria-hidden="true" style={{ fontSize: 56, lineHeight: 1 }}>
+            {isFontaine ? '💧' : '🚻'}
+          </span>
           <button onClick={onClose}
-            className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[13px]"
-            style={{ background: 'rgba(11,31,58,0.08)', color: '#1B2838' }}
+            className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center text-[13px]"
+            style={{ background: 'rgba(255,253,247,0.92)', color: '#1B2838',
+              boxShadow: '0 2px 8px rgba(11,31,58,0.18)' }}
             aria-label="Fermer">✕</button>
         </div>
-        <div className="px-4 py-3 flex flex-wrap gap-2">
-          <Chip color={statusOk ? '#3D9A70' : '#E05252'}>{status}</Chip>
-          {potable && <Chip color="#3A86FF">💧 {potable}</Chip>}
-          {pmr     && <Chip color="#7B61FF">♿ {pmr}</Chip>}
-          {horaire && <Chip color="#F77F00">🕐 {horaire}</Chip>}
-          {model   && <Chip color="#8D99AE">{model}</Chip>}
+
+        {/* Corps */}
+        <div className="px-4 pt-3 pb-4">
+          <p className="font-fraunces text-[18px] font-bold leading-tight"
+            style={{ color: '#0b1f3a', letterSpacing: '-0.02em' }}>
+            {title}
+          </p>
+          {adresse && (
+            <p className="font-outfit text-[12px] mt-1 leading-snug"
+              style={{ color: '#6f7a8a' }}>
+              {adresse}
+            </p>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <Chip color={statusOk ? '#3D9A70' : '#E05252'}>
+              {statusOk ? '● ' : '◯ '}{status}
+            </Chip>
+            {potable && <Chip color="#3A86FF">💧 {potable}</Chip>}
+            {pmr     && <Chip color="#7B61FF">♿ {pmr}</Chip>}
+            {horaire && <Chip color="#F77F00">🕐 {horaire}</Chip>}
+            {model   && <Chip color="#8D99AE">{model}</Chip>}
+          </div>
+
+          {/* CTA Y aller */}
+          <a
+            href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+            className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl"
+            style={{
+              height: 42,
+              background: statusOk ? themeColor : 'rgba(20,32,51,0.08)',
+              color: statusOk ? '#ffffff' : '#98a2b3',
+              fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 13,
+              textDecoration: 'none',
+              boxShadow: statusOk ? `0 8px 18px ${themeColor}40` : 'none',
+              pointerEvents: statusOk ? 'auto' : 'none',
+            }}
+            aria-disabled={!statusOk}
+          >
+            <span aria-hidden="true">📍</span>
+            <span>{statusOk ? 'Y aller à pied' : 'Indisponible'}</span>
+          </a>
         </div>
       </div>
     </div>

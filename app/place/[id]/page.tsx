@@ -1,6 +1,6 @@
 ﻿import { notFound } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
-import PlacePageClient from '@/components/Map/PlacePageClient'
+import PlacePageShell from '@/components/Map/PlacePageShell'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +37,7 @@ export default async function PlacePage({ params }: PageProps) {
   const currentScore = scores?.find((s) => s.time_slot === timeSlot)?.score ?? 3
 
   return (
-    <PlacePageClient
+    <PlacePageShell
       place={{ ...place, currentScore }}
       scores={scores ?? []}
     />

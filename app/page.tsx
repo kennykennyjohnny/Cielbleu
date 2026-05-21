@@ -1,12 +1,20 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { Search, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Filters from '@/components/Map/Filters'
+import PlacePageClient from '@/components/Map/PlacePageClient'
 import type { Place, FilterType } from '@/types'
+
+type SheetMode = 'peek' | 'half' | 'full'
+const SHEET_HEIGHTS: Record<SheetMode, string> = { peek: '20vh', half: '58vh', full: '92dvh' }
+
+function nowHalfHour(): number {
+  const now = new Date()
+  return Math.max(6, Math.min(23.5, now.getHours() + (now.getMinutes() >= 30 ? 0.5 : 0)))
+}
 
 const MapView = dynamic(() => import('@/components/Map/MapView'), {
   ssr: false,
@@ -22,11 +30,26 @@ const TODAY_LABEL = (() => {
 })()
 
 export default function HomePage() {
-  const router = useRouter()
   const [places, setPlaces] = useState<Place[]>([])
   const [activeFilters, setActiveFilters] = useState<FilterType[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
+
+  // ── Lieu sélectionné (inline, sans navigation) ─────────────────────────
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
+  const [selectedScores, setSelectedScores] = useState<{ time_slot: string; score: number }[]>([])
+  const [hour, setHour] = useState<number>(nowHalfHour)
+  const [sheetMode, setSheetMode] = useState<SheetMode>('half')
+  const [isDesktop, setIsDesktop] = useState(false)
+  const dragRef = useRef<{ y: number; mode: SheetMode } | null>(null)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 900px)')
+    const update = () => setIsDesktop(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
 
   useEffect(() => {
     async function loadPlaces() {
@@ -77,30 +100,70 @@ export default function HomePage() {
 
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
-      // Cherche par nom, adresse, arrondissement (ex: "11e", "11ème", "11") ou type
-      const typeMatch: Record<string, string[]> = {
-        bar:        ['bar', 'bars', 'bistrot', 'bistro', 'brasserie'],
+      const typeSyns: Record<string, string[]> = {
+        bar:        ['bar', 'bars', 'bistrot', 'bistro', 'brasserie', 'pub'],
         restaurant: ['restaurant', 'resto', 'restos', 'restau', 'manger'],
-        cafe:       ['café', 'cafe', 'cafés', 'coffee', 'brunch'],
+        cafe:       ['café', 'cafe', 'cafés', 'coffee', 'brunch', 'salon de thé'],
         park:       ['parc', 'parcs', 'jardin', 'jardins', 'square'],
       }
-      const matchedType = Object.entries(typeMatch).find(([, synonyms]) =>
-        synonyms.some(s => q.includes(s))
+      const sunSyns     = ['soleil', 'ensoleillé', 'ensoleillée', 'sunny']
+      const terrassSyns = ['terrasse', 'terrasses', 'extérieur', 'exterieur', 'dehors']
+
+      const matchedType = Object.entries(typeSyns).find(([, syns]) =>
+        syns.some(s => q.includes(s))
       )?.[0]
-      if (matchedType) {
-        result = result.filter(p => p.type === matchedType)
-      } else {
-        const arrMatch = q.match(/^(\d{1,2})(?:e|er|ème|ère)?$/)
-        const arrNum = arrMatch ? parseInt(arrMatch[1]) : null
-        result = result.filter((p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.address.toLowerCase().includes(q) ||
-          (arrNum !== null && p.arrondissement === arrNum)
-        )
+      const wantsTerrasse = terrassSyns.some(s => q.includes(s))
+      const wantsSun      = sunSyns.some(s => q.includes(s))
+
+      // Retire les mots-clés "structure" pour ne garder que la partie nom/quartier
+      let textQ = q
+      for (const syns of [...Object.values(typeSyns), sunSyns, terrassSyns]) {
+        for (const s of syns) textQ = textQ.replace(s, ' ')
+      }
+      textQ = textQ.replace(/\s+/g, ' ').trim()
+
+      if (matchedType)   result = result.filter(p => p.type === matchedType)
+      if (wantsTerrasse) result = result.filter(p => p.has_terrace !== false)
+      if (wantsSun)      result = result.filter(p => (p.currentScore ?? 0) >= 4)
+
+      if (textQ) {
+        // Détecte un numéro d'arrondissement écrit "11", "11e", "11ème"…
+        const arrMatch = textQ.match(/^(\d{1,2})(?:e|er|ème|ère)?$/)
+        const arrNum   = arrMatch ? parseInt(arrMatch[1]) : null
+        result = result.filter((p) => {
+          if (p.name.toLowerCase().includes(textQ)) return true
+          if (p.address.toLowerCase().includes(textQ)) return true
+          if (arrNum !== null) {
+            if (p.arrondissement === arrNum) return true
+            // Fallback : extraire l'arrondissement du code postal 750XX
+            const cp = p.address.match(/\b75(\d{3})\b/)
+            if (cp) {
+              const arr = parseInt(cp[1])
+              if (arr === arrNum) return true
+            }
+          }
+          return false
+        })
       }
     }
     return result
   }, [places, activeFilters, searchQuery])
+
+  // Suggestions : top 6 lieux pour le dropdown sous la search
+  const suggestions = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const q = searchQuery.trim().toLowerCase()
+    // Trie : matches sur le nom > matches sur l'adresse, puis par note Google
+    return [...displayedPlaces]
+      .map((p) => {
+        const nameMatch = p.name.toLowerCase().includes(q) ? 100 : 0
+        const rating    = (p.google_rating ?? 0) * 5
+        return { p, score: nameMatch + rating }
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((x) => x.p)
+  }, [displayedPlaces, searchQuery])
 
   const sunnyCount = useMemo(
     () => displayedPlaces.filter((p) => (p.currentScore ?? 0) >= 4).length,
@@ -113,15 +176,47 @@ export default function HomePage() {
     )
   }, [])
 
-  const handlePlaceSelect = useCallback((place: Place | null) => {
-    if (place) router.push(`/place/${place.id}`)
-  }, [router])
+  const handlePlaceSelect = useCallback(async (place: Place | null) => {
+    if (!place) { setSelectedPlace(null); return }
+    setSelectedPlace(place)
+    setSheetMode('half')
+    const now = new Date()
+    const month = now.getMonth() + 1
+    const { data } = await supabase
+      .from('sun_scores').select('time_slot, score')
+      .eq('place_id', place.id).eq('month', month)
+      .order('time_slot')
+    setSelectedScores(data ?? [])
+  }, [])
+
+  const handleClose = useCallback(() => {
+    setSelectedPlace(null)
+  }, [])
+
+  // Drag handle (bottom sheet mobile)
+  const onPointerDown = (e: React.PointerEvent) => {
+    dragRef.current = { y: e.clientY, mode: sheetMode }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragRef.current) return
+    const dy = e.clientY - dragRef.current.y
+    if (dy > 40)       setSheetMode(dragRef.current.mode === 'full' ? 'half' : 'peek')
+    else if (dy < -40) setSheetMode(dragRef.current.mode === 'peek' ? 'half' : 'full')
+  }
+  const onPointerUp = () => { dragRef.current = null }
 
   return (
     <main className="relative h-dvh w-full overflow-hidden">
       {/* Carte plein écran */}
       <div className="absolute inset-0" role="application" aria-label="Carte des terrasses ensoleillées à Paris">
-        <MapView places={displayedPlaces} onPlaceSelect={handlePlaceSelect} />
+        <MapView
+          places={displayedPlaces}
+          onPlaceSelect={handlePlaceSelect}
+          highlightPlaceId={selectedPlace?.id}
+          focusPlace={selectedPlace ? { lng: selectedPlace.lng, lat: selectedPlace.lat } : null}
+          sunHour={hour}
+        />
       </div>
 
       {/* ─── Top bar : brand-pill (gauche) + radar count (droite) ─── */}
@@ -133,7 +228,7 @@ export default function HomePage() {
           {/* Brand pill */}
           <div
             className="pointer-events-auto inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full"
-            aria-label="CielBleu"
+            aria-label="HopSoleil"
             style={{
               background: 'rgba(255,255,255,0.86)',
               border: '1px solid rgba(20,32,51,0.10)',
@@ -151,7 +246,7 @@ export default function HomePage() {
               aria-hidden="true"
             >☀</span>
             <span className="font-fraunces font-extrabold text-[19px] tracking-[-0.04em] leading-none text-navy-900">
-              CielBleu
+              HopSoleil
             </span>
           </div>
 
@@ -204,7 +299,8 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ─── Floating bottom card : filtres + search ─── */}
+      {/* ─── Floating bottom card : filtres + search (masqué si lieu sélectionné) ─── */}
+      {!selectedPlace && (
       <div
         className="absolute bottom-0 inset-x-0 z-20 pointer-events-none"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
@@ -244,7 +340,7 @@ export default function HomePage() {
                 id="search-places"
                 name="search"
                 type="text"
-                placeholder="Café, bar, 11e, Bastille…"
+                placeholder="Bar terrasse, café au soleil, 11e…"
                 aria-label="Rechercher un lieu"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -260,6 +356,44 @@ export default function HomePage() {
                 </button>
               )}
             </div>
+
+            {/* Dropdown suggestions */}
+            {searchQuery.trim() && suggestions.length > 0 && (
+              <ul
+                role="listbox"
+                aria-label="Lieux suggérés"
+                className="mt-2 max-h-[260px] overflow-y-auto rounded-2xl bg-white"
+                style={{ border: '1px solid rgba(20,32,51,0.10)', boxShadow: '0 8px 24px rgba(11,31,58,0.10)' }}
+              >
+                {suggestions.map((p) => {
+                  const cp = p.address.match(/\b75(\d{3})\b/)
+                  const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
+                  const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
+                  const sunny = (p.currentScore ?? 0) >= 4
+                  return (
+                    <li key={p.id} role="option">
+                      <button
+                        onClick={() => handlePlaceSelect(p)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-2 transition"
+                      >
+                        <span aria-hidden="true" className="text-[18px] shrink-0">{icon}</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block font-outfit font-bold text-[13.5px] text-text-primary truncate">
+                            {p.name}
+                          </span>
+                          <span className="block font-outfit text-[11.5px] text-text-soft truncate">
+                            {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
+                          </span>
+                        </span>
+                        {sunny && (
+                          <span aria-label="Au soleil" className="text-[14px] shrink-0">☀️</span>
+                        )}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </div>
         </div>
       </div>
