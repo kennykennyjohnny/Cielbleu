@@ -1,0 +1,5 @@
+node_modules
+.next
+scripts
+data/source/volumesbatisparis.geojson
+data/source/terrasses-autorisations.geojson
