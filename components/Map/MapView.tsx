@@ -14,79 +14,104 @@ import { getSunPosition } from '@/lib/suncalc'
 
 const PARIS_CENTER: [number, number] = [2.3522, 48.8566]
 
-// Couleurs (bg/text) par score 0..5 — dominante chaude pour 5/4/3.
-const SCORE_BG = ['#0b1f3a', '#cbd5e1', '#98a2b3', '#f77f00', '#ffd76a', '#ffb703']
-const SCORE_TX = ['#ffffff', '#142033', '#ffffff', '#ffffff', '#3a2700', '#0b1f3a']
+// Couleurs DA v2
+const NAVY = '#1F3A5F'
+const GOLD = '#EDC145'
+const WHITE = 'rgba(255,255,255,0.95)'
 
-// ── Diamond pin — border-radius:50% 50% 50% 12px rotate(-45deg) ──────────────
-// Matches the HTML mockup's .pin shape exactly.
+// ── DA v2 Circular pins ───────────────────────────────────────────────────────
+// Score 5: gold circle + 8 rays (4 cardinal 0.6, 4 diag 0.4)
+// Score 4: gold circle + 4 cardinal rays 0.4
+// Score 3: gold circle 75% opacity, no rays
+// Score 2: navy 25% opacity, navy text
+// Score 1: navy 40% opacity, white text
+// Score 0: navy 70% opacity + moon icon
 function drawPinImage(score: number): { width: number; height: number; data: Uint8Array } {
-  const W = 54, H = 60
+  const W = 60, H = 60
   const canvas = document.createElement('canvas')
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')!
+  const CX = W / 2, CY = H / 2
 
-  const bg = SCORE_BG[score] ?? SCORE_BG[3]
-  const tx = SCORE_TX[score] ?? SCORE_TX[3]
-
-  // Square size (pre-rotation). After -45° rotation, the bottom-left corner
-  // (small radius = point) becomes the bottom-most tip of the diamond.
-  const SIZE = 30
-  const CX = W / 2        // horizontal center
-  const CY = H / 2 - 1   // vertical center of the square
-
-  // Radii: top-left=50%, top-right=50%, bottom-right=50%, bottom-left=12px equiv
-  const r50 = SIZE / 2          // 15px
-  const r12 = Math.round(SIZE * 12 / 46)  // ≈ 8px
-
-  // Drop shadow
-  ctx.save()
-  ctx.shadowColor   = 'rgba(11,31,58,0.34)'
-  ctx.shadowBlur    = 14
-  ctx.shadowOffsetX = 0
-  ctx.shadowOffsetY = 6
-
-  // Draw rounded square rotated -45°
-  ctx.translate(CX, CY)
-  ctx.rotate(-Math.PI / 4)
-  ctx.beginPath()
-  const rr = ctx as CanvasRenderingContext2D & { roundRect?: (...a: unknown[]) => void }
-  if (rr.roundRect) {
-    rr.roundRect(-SIZE / 2, -SIZE / 2, SIZE, SIZE, [r50, r50, r50, r12])
-  } else {
-    ctx.arc(0, 0, SIZE / 2, 0, Math.PI * 2)
+  const drawRays = (numRays: number, rayLen: number, rayGap: number, sw: number, alpha: number, diagonal = false) => {
+    ctx.save()
+    ctx.strokeStyle = GOLD
+    ctx.lineWidth = sw
+    ctx.lineCap = 'round'
+    ctx.globalAlpha = alpha
+    for (let i = 0; i < numRays; i++) {
+      const angleDeg = diagonal
+        ? (45 + i * 90)                // 45°, 135°, 225°, 315°
+        : (i * (360 / numRays))        // 0°, 90°, 180°, 270° or 8 directions
+      const angle = (angleDeg - 90) * Math.PI / 180
+      ctx.beginPath()
+      ctx.moveTo(CX + Math.cos(angle) * rayGap, CY + Math.sin(angle) * rayGap)
+      ctx.lineTo(CX + Math.cos(angle) * (rayGap + rayLen), CY + Math.sin(angle) * (rayGap + rayLen))
+      ctx.stroke()
+    }
+    ctx.restore()
   }
-  ctx.fillStyle = bg
+
+  // ── Rays behind circle ─────────────────────────────────────────────────────
+  if (score === 5) {
+    drawRays(4, 6, 20, 2.5, 0.65)           // cardinal: N, E, S, W
+    drawRays(4, 5, 20, 2.0, 0.40, true)     // diagonal: NE, SE, SW, NW
+  } else if (score === 4) {
+    drawRays(4, 5, 19, 2.0, 0.45)           // 4 cardinal, shorter
+  }
+
+  // Radius per score (score 5/4 = slightly larger for rays)
+  const R = score >= 4 ? 17 : 16
+
+  // ── Drop shadow ─────────────────────────────────────────────────────────────
+  ctx.save()
+  ctx.shadowColor = 'rgba(31,58,95,0.28)'
+  ctx.shadowBlur = 10
+  ctx.shadowOffsetY = 3
+
+  // ── Circle fill ─────────────────────────────────────────────────────────────
+  ctx.beginPath()
+  ctx.arc(CX, CY, R, 0, Math.PI * 2)
+  if (score >= 3) {
+    ctx.fillStyle = GOLD
+    ctx.globalAlpha = score === 3 ? 0.75 : 1.0
+  } else if (score === 2) {
+    ctx.fillStyle = 'rgba(31,58,95,0.25)'
+  } else if (score === 1) {
+    ctx.fillStyle = 'rgba(31,58,95,0.40)'
+  } else {
+    ctx.fillStyle = NAVY
+    ctx.globalAlpha = 0.70
+  }
   ctx.fill()
   ctx.restore()
 
-  // White border (no shadow, same transform)
+  // ── White border ────────────────────────────────────────────────────────────
   ctx.save()
-  ctx.translate(CX, CY)
-  ctx.rotate(-Math.PI / 4)
   ctx.beginPath()
-  if (rr.roundRect) {
-    rr.roundRect(-SIZE / 2, -SIZE / 2, SIZE, SIZE, [r50, r50, r50, r12])
-  } else {
-    ctx.arc(0, 0, SIZE / 2, 0, Math.PI * 2)
-  }
-  ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+  ctx.arc(CX, CY, R, 0, Math.PI * 2)
+  ctx.strokeStyle = WHITE
   ctx.lineWidth = 2.5
   ctx.stroke()
   ctx.restore()
 
-  // icon + score — drawn at normal orientation (center CX, CY)
-  ctx.fillStyle = tx
+  // ── Text / icon ─────────────────────────────────────────────────────────────
+  let textColor: string
+  if (score >= 4)      textColor = NAVY
+  else if (score === 3) textColor = '#3a2700'
+  else if (score === 1) textColor = '#ffffff'
+  else if (score === 0) textColor = 'rgba(255,255,255,0.85)'
+  else                  textColor = NAVY
+
+  ctx.fillStyle = textColor
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   if (score === 0) {
-    ctx.font = '16px system-ui'
+    ctx.font = '15px system-ui'
     ctx.fillText('🌙', CX, CY + 1)
   } else {
-    ctx.font = 'bold 10px system-ui, sans-serif'
-    ctx.fillText('☀', CX, CY - 5.5)
-    ctx.font = 'bold 13px system-ui, sans-serif'
-    ctx.fillText(String(score), CX, CY + 6)
+    ctx.font = `bold 15px system-ui, sans-serif`
+    ctx.fillText(String(score), CX, CY + 1)
   }
 
   return { width: W, height: H, data: new Uint8Array(ctx.getImageData(0, 0, W, H).data.buffer) }
@@ -396,21 +421,21 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         filter: ['has', 'point_count'],
         paint: {
           'circle-radius': ['step', ['get', 'point_count'], 24, 30, 30, 200, 36],
-          'circle-color': 'rgba(11,31,58,0.18)',
+          'circle-color': 'rgba(31,58,95,0.15)',
           'circle-translate': [2, 5],
           'circle-blur': 0.4,
         },
       })
 
-      // Clusters — fond navy (HTML mockup), anneau soleil
+      // Clusters — DA v2 : navy, white ring, white count
       map.addLayer({
         id: 'clusters', type: 'circle', source: 'places',
         filter: ['has', 'point_count'],
         paint: {
-          'circle-color': 'rgba(24,59,102,0.92)',
+          'circle-color': '#1F3A5F',
           'circle-radius': ['step', ['get', 'point_count'], 22, 30, 27, 200, 32],
-          'circle-stroke-width': 2.5,
-          'circle-stroke-color': '#ffb703',
+          'circle-stroke-width': 3,
+          'circle-stroke-color': 'rgba(255,255,255,0.25)',
         },
       })
 
@@ -447,15 +472,15 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         filter: ['!', ['has', 'point_count']],
         layout: {
           'icon-image': ['match', ['get', 'score'], 0, 'pin-0', 1, 'pin-1', 2, 'pin-2', 3, 'pin-3', 4, 'pin-4', 5, 'pin-5', 'pin-3'],
-          'icon-anchor': 'bottom',
+          'icon-anchor': 'center',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.60, 14, 0.88, 16, 1.05, 18, 1.25],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.55, 14, 0.80, 16, 0.95, 18, 1.15],
         },
       })
 
-      // ── Fontaines à boire — cachées par défaut, filtre 💧 les affiche ────────
-      map.addSource('fontaines', { type: 'geojson', data: '/api/geo/fontaines' })
+      // ── Fontaines à boire — static asset public/geo/fontaines.geojson ───────
+      map.addSource('fontaines', { type: 'geojson', data: '/geo/fontaines.geojson' })
       map.addLayer({
         id: 'fontaines-layer', type: 'circle', source: 'fontaines',
         filter: ['==', ['get', 'dispo'], 'OUI'],
@@ -469,8 +494,8 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         },
       })
 
-      // ── Sanisettes — cachées par défaut, filtre 🚻 les affiche ───────────────
-      map.addSource('sanisettes', { type: 'geojson', data: '/api/geo/sanisettes' })
+      // ── Sanisettes — static asset public/geo/sanisettes.geojson ─────────────
+      map.addSource('sanisettes', { type: 'geojson', data: '/geo/sanisettes.geojson' })
       map.addLayer({
         id: 'sanisettes-layer', type: 'circle', source: 'sanisettes',
         filter: ['==', ['get', 'statut'], 'En service'],

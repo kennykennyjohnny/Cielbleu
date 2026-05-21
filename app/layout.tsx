@@ -20,8 +20,12 @@ export const metadata: Metadata = {
   title: 'HopSoleil — Trouve ta terrasse au soleil à Paris',
   description:
     'Le radar des terrasses ensoleillées à Paris. Score soleil temps réel, vue 3D, fenêtre d’ensoleillement.',
-  metadataBase: new URL('https://hopsoleil.fr'),
-  openGraph: {
+  metadataBase: new URL('https://hopsoleil.fr'),  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico' },
+    ],
+  },  openGraph: {
     title: 'HopSoleil ☀',
     description: 'Le radar des terrasses ensoleillées à Paris.',
     url: 'https://hopsoleil.fr',
@@ -42,7 +46,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#2f9bff',
+  themeColor: '#1F3A5F',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

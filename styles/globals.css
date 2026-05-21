@@ -62,12 +62,18 @@
   --color-score-1-bg: #cbd5e1; --color-score-1-tx: #142033;
   --color-score-0-bg: #0b1f3a; --color-score-0-tx: #ffffff;
 
+  /* ─────────── DA v2 — 4 couleurs core ─────────── */
+  --color-navy:   #1F3A5F;   /* structure, texte, clusters, nav */
+  --color-gold:   #EDC145;   /* CTA, accents, markers soleil, slider */
+  --color-blanc:  #FFFFFF;   /* cards, panels, surfaces élevées */
+  --color-open:   #34A853;   /* seule exception sémantique : "ouvert" */
+
   /* ─────────── Aliases legacy ─────────── */
   --color-ciel:   #4ea3ff;
-  --color-nuit:   #0b1f3a;
-  --color-creme:  #fffdf7;
+  --color-nuit:   #1F3A5F;   /* mis à jour → DA v2 navy */
+  --color-creme:  #FFF8EC;   /* mis à jour → DA v2 cream */
   --color-mist:   #f4faff;
-  --color-soleil: #ffb703;
+  --color-soleil: #EDC145;   /* mis à jour → DA v2 gold */
   --color-gris:   #98a2b3;
   --color-corail: #ff6b5a;
 
@@ -180,9 +186,9 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: radial-gradient(circle at 36% 30%, #fff5a0 0%, #ffb703 60%, #f77f00 100%);
+  background: #EDC145;
   border: 3px solid #ffffff;
-  box-shadow: 0 0 0 1px rgba(11,31,58,0.18), 0 6px 14px rgba(255,183,3,0.45);
+  box-shadow: 0 0 0 1px rgba(31,58,95,0.18), 0 5px 12px rgba(237,193,69,0.45);
   cursor: grab;
   margin-top: -10px;
   transition: transform 0.15s ease;
@@ -195,9 +201,9 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: radial-gradient(circle at 36% 30%, #fff5a0 0%, #ffb703 60%, #f77f00 100%);
+  background: #EDC145;
   border: 3px solid #ffffff;
-  box-shadow: 0 0 0 1px rgba(11,31,58,0.18), 0 6px 14px rgba(255,183,3,0.45);
+  box-shadow: 0 0 0 1px rgba(31,58,95,0.18), 0 5px 12px rgba(237,193,69,0.45);
   cursor: grab;
 }
 .cb-hour-slider::-moz-range-thumb:active {

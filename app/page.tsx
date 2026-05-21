@@ -294,59 +294,93 @@ export default function HomePage() {
         style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)' }}
       >
         <div className="px-3 flex items-start justify-between gap-2 pointer-events-none">
-          {/* Brand pill */}
-          <div
-            className="pointer-events-auto inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full cursor-pointer"
-            aria-label="Home — HopSoleil"
-            role="button"
-            tabIndex={0}
-            onClick={() => { handleClose(); setHomeViewCount(c => c + 1) }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { handleClose(); setHomeViewCount(c => c + 1) } }}
-            style={{
-              background: 'rgba(255,255,255,0.86)',
-              border: '1px solid rgba(20,32,51,0.10)',
-              boxShadow: '0 6px 22px rgba(11,31,58,0.10)',
-              backdropFilter: 'blur(16px)',
-            }}
-          >
-            <span className="grid place-items-center w-7 h-7 rounded-full text-[14px]"
-              style={{
-                background: 'radial-gradient(circle at 36% 30%, #fff5a0 0%, #ffb703 60%, #f77f00 100%)',
-                boxShadow: '0 6px 14px rgba(255,183,3,0.35)',
-                color: '#0b1f3a',
-              }}
-              aria-hidden="true"
-            >☀</span>
-            <span className="font-extrabold text-[20px] leading-none"
-              style={{ fontFamily: 'var(--font-bricolage)', fontVariationSettings: "'wdth' 75", letterSpacing: '-0.03em', color: '#0b1f3a' }}>
-              HopSoleil
-            </span>
-          </div>
 
-          {/* Heure + Maintenant + count pill */}
-          <div
-            className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shrink-0"
-            style={{
-              background: 'rgba(255,255,255,0.86)',
-              border: '1px solid rgba(20,32,51,0.10)',
-              boxShadow: '0 6px 22px rgba(11,31,58,0.10)',
-              backdropFilter: 'blur(16px)',
-            }}
-          >
-            {/* Météo à GAUCHE du slider, liée à l'heure sélectionnée */}
+          {/* ── Colonne gauche : logo + widget météo ── */}
+          <div className="pointer-events-none flex flex-col gap-2">
+
+            {/* Brand pill — DA v2 navy/gold */}
+            <div
+              className="pointer-events-auto inline-flex items-center gap-1.5 pl-1 pr-3 py-1 rounded-full cursor-pointer"
+              aria-label="Home — HopSoleil"
+              role="button"
+              tabIndex={0}
+              onClick={() => { handleClose(); setHomeViewCount(c => c + 1) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { handleClose(); setHomeViewCount(c => c + 1) } }}
+              style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(31,58,95,0.12)',
+                boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
+              }}
+            >
+              {/* Icône soleil DA v2 */}
+              <span
+                className="grid place-items-center w-8 h-8 rounded-full shrink-0"
+                style={{ background: '#EDC145', boxShadow: '0 3px 10px rgba(237,193,69,0.40)' }}
+                aria-hidden="true"
+              >
+                <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
+                  <line x1="12" y1="3" x2="12" y2="6" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
+                  <line x1="12" y1="18" x2="12" y2="21" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
+                  <line x1="3" y1="12" x2="6" y2="12" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
+                  <line x1="18" y1="12" x2="21" y2="12" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
+                  <line x1="5.6" y1="5.6" x2="7.8" y2="7.8" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
+                  <line x1="16.2" y1="16.2" x2="18.4" y2="18.4" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
+                  <line x1="18.4" y1="5.6" x2="16.2" y2="7.8" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
+                  <line x1="7.8" y1="16.2" x2="5.6" y2="18.4" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
+                  <circle cx="12" cy="12" r="4" fill="#1F3A5F"/>
+                </svg>
+              </span>
+              <span
+                className="font-extrabold text-[18px] leading-none"
+                style={{ fontFamily: 'var(--font-bricolage)', fontVariationSettings: "'wdth' 75", letterSpacing: '-0.03em', color: '#1F3A5F' }}
+              >
+                Hop<span style={{ color: '#EDC145' }}>Soleil</span>
+              </span>
+            </div>
+
+            {/* Widget météo — indépendant du slider, plus détaillé */}
             {weatherForHour && (
               <a
                 href="https://meteofrance.com/previsions-meteo-france/paris/75000"
                 target="_blank" rel="noopener noreferrer"
-                title={weatherForHour.description}
-                className="inline-flex items-center gap-0.5 shrink-0 font-outfit"
-                style={{ textDecoration: 'none', color: '#0b1f3a', fontSize: 11, fontWeight: 900 }}
                 aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
+                className="pointer-events-auto inline-flex items-center gap-2.5 font-outfit"
+                style={{
+                  textDecoration: 'none',
+                  background: '#FFFFFF',
+                  border: '1.5px solid rgba(31,58,95,0.12)',
+                  boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
+                  borderRadius: 16,
+                  padding: '8px 12px',
+                }}
               >
-                <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>{owmIconToEmoji(weatherForHour.icon)}</span>
-                <span>{weatherForHour.temp}°</span>
+                <span aria-hidden="true" style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>
+                  {owmIconToEmoji(weatherForHour.icon)}
+                </span>
+                <span>
+                  <span style={{ display: 'block', fontSize: 17, fontWeight: 800, color: '#1F3A5F', lineHeight: 1 }}>
+                    {weatherForHour.temp}°
+                  </span>
+                  <span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'rgba(31,58,95,0.50)', lineHeight: 1.3, marginTop: 2, maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {weatherForHour.description}
+                  </span>
+                </span>
+                <span aria-hidden="true" style={{ fontSize: 9, fontWeight: 700, color: 'rgba(31,58,95,0.30)', alignSelf: 'flex-end', paddingBottom: 1 }}>
+                  Paris · {String(Math.floor(hour)).padStart(2,'0')}h
+                </span>
               </a>
             )}
+          </div>
+
+          {/* ── Slider heure + Maintenant + count — DA v2, SANS météo ── */}
+          <div
+            className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shrink-0"
+            style={{
+              background: '#FFFFFF',
+              border: '1.5px solid rgba(31,58,95,0.12)',
+              boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
+            }}
+          >
             <input
               type="range" min={6} max={23.5} step={0.5}
               value={hour}
@@ -356,7 +390,7 @@ export default function HomePage() {
               aria-label="Heure du soleil"
             />
             {/* Heure sélectionnée */}
-            <span className="font-outfit shrink-0" style={{ fontSize: 10, fontWeight: 800, color: '#0b1f3a', minWidth: 26 }}>
+            <span className="font-outfit shrink-0" style={{ fontSize: 10, fontWeight: 800, color: '#1F3A5F', minWidth: 26 }}>
               {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
             </span>
             <button
@@ -366,12 +400,10 @@ export default function HomePage() {
               className="shrink-0 inline-flex items-center gap-1 font-bold rounded-full transition-all duration-150 active:scale-[0.95]"
               style={{
                 fontSize: 10.5, paddingLeft: 7, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
-                background: Math.abs(hour - nowHalfHour()) < 0.3
-                  ? 'linear-gradient(145deg,#ffe566 0%,#ffb703 100%)'
-                  : 'rgba(20,32,51,0.07)',
-                color: Math.abs(hour - nowHalfHour()) < 0.3 ? '#6b3d00' : '#0b1f3a',
-                border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(255,183,3,0.50)' : 'transparent'}`,
-                boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(255,183,3,0.30)' : 'none',
+                background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.07)',
+                color: Math.abs(hour - nowHalfHour()) < 0.3 ? '#1F3A5F' : '#1F3A5F',
+                border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.50)' : 'transparent'}`,
+                boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.35)' : 'none',
               }}
             >
               <Clock size={10} strokeWidth={2.5} />
@@ -379,13 +411,13 @@ export default function HomePage() {
             </button>
             {!loading && displayedPlaces.length > 0 && (
               <>
-                <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(20,32,51,0.15)' }} />
-                <span className="font-bold text-[13px] leading-none" style={{ color: '#0b1f3a' }}>
+                <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(31,58,95,0.15)' }} />
+                <span className="font-bold text-[13px] leading-none" style={{ color: '#1F3A5F' }}>
                   {displayedPlaces.length}
                 </span>
                 {sunnyCount > 0 && (
                   <span className="font-bold text-[11px] leading-none flex items-center gap-0.5"
-                    style={{ color: '#f77f00' }}>
+                    style={{ color: '#EDC145' }}>
                     <span aria-hidden="true">☀</span>{sunnyCount}
                   </span>
                 )}
@@ -395,7 +427,8 @@ export default function HomePage() {
         </div>
 
         {/* Date subtile sous le brand pill */}
-        <p className="mt-1.5 px-4 font-outfit text-[10px] uppercase tracking-[0.22em] text-text-soft pointer-events-none">
+        <p className="mt-0.5 px-4 font-outfit text-[10px] uppercase tracking-[0.22em] pointer-events-none"
+          style={{ color: 'rgba(31,58,95,0.40)' }}>
           {TODAY_LABEL}
         </p>
       </header>
@@ -421,8 +454,8 @@ export default function HomePage() {
         <div className="absolute inset-x-0 z-10 pointer-events-none flex justify-center px-6"
           style={{ top: 'calc(max(env(safe-area-inset-top,0px),12px) + 70px)' }}>
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-outfit text-xs font-bold"
-            style={{ background: 'rgba(255,252,243,0.95)', border: '1px solid rgba(20,32,51,0.10)',
-              boxShadow: '0 4px 18px rgba(11,31,58,0.12)', color: '#1B2838' }}>
+            style={{ background: '#FFFFFF', border: '1.5px solid rgba(31,58,95,0.12)',
+              boxShadow: '0 4px 16px rgba(31,58,95,0.08)', color: '#1F3A5F' }}>
             {activeFilters.includes('fontaine') && <span>💧</span>}
             {activeFilters.includes('sanisette') && <span>🚺</span>}
             <span>Zoome pour voir les points d&apos;eau et sanitaires</span>
@@ -430,38 +463,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ─── Badge météo flottant (bottom-left, au-dessus de la barre filtre) ─── */}
-      {weatherForHour && !selectedPlace && !selectedAmenite && (
-        <a
-          href="https://meteofrance.com/previsions-meteo-france/paris/75000"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C — voir sur Météo France`}
-          className="absolute z-20 flex items-center gap-2 font-outfit"
-          style={{
-            left: 12,
-            bottom: isDesktop ? 20 : 'calc(max(env(safe-area-inset-bottom, 0px), 10px) + 130px)',
-            textDecoration: 'none',
-            background: 'rgba(255,252,243,0.97)',
-            border: '1px solid rgba(20,32,51,0.09)',
-            backdropFilter: 'blur(20px)',
-            borderRadius: 999,
-            padding: '7px 14px',
-            boxShadow: '0 4px 18px rgba(11,31,58,0.14)',
-            color: '#1B2838',
-          }}
-        >
-          <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1 }}>
-            {owmIconToEmoji(weatherForHour.icon)}
-          </span>
-          <span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1 }}>
-            {weatherForHour.temp}°
-          </span>
-          <span style={{ fontSize: 11, fontWeight: 500, color: '#8D99AE', lineHeight: 1.2, maxWidth: 110 }}>
-            {weatherForHour.description}
-          </span>
-        </a>
-      )}
+      {/* Badge météo supprimé — le widget météo est maintenant dans le header (colonne gauche) */}
 
       {/* ─── Barre flottante compact : search + filtres + slider heure ─── */}
       {!selectedPlace && !selectedAmenite && (
@@ -472,10 +474,10 @@ export default function HomePage() {
         <div
           className="pointer-events-auto mx-3 rounded-2xl overflow-hidden"
           style={{
-            background: 'rgba(255,252,243,0.97)',
-            border: '1px solid rgba(20,32,51,0.09)',
+            background: 'rgba(255,255,255,0.97)',
+            border: '1.5px solid rgba(31,58,95,0.10)',
             backdropFilter: 'blur(24px)',
-            boxShadow: '0 10px 40px rgba(11,31,58,0.15)',
+            boxShadow: '0 8px 32px rgba(31,58,95,0.10)',
           }}
         >
           {/* Suggestions */}
@@ -483,7 +485,7 @@ export default function HomePage() {
             <ul
               role="listbox" aria-label="Lieux suggérés"
               className="overflow-y-auto bg-white/90"
-              style={{ maxHeight: 200, borderBottom: '1px solid rgba(20,32,51,0.07)' }}
+              style={{ maxHeight: 200, borderBottom: '1px solid rgba(31,58,95,0.07)' }}
             >
               {suggestions.map((p) => {
                 const cp = p.address.match(/\b75(\d{3})\b/)
@@ -510,10 +512,10 @@ export default function HomePage() {
             </ul>
           )}
 
-          {/* ── Recherche : centrée, max 280px ── */}
+          {/* ── Recherche : centrée, compacte ── */}
           <div className="flex justify-center px-3 pt-2 pb-1">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full w-full"
-              style={{ maxWidth: 280, background: 'rgba(255,255,255,0.5)', border: '1px solid rgba(20,32,51,0.08)' }}>
+              style={{ maxWidth: 220, background: 'rgba(31,58,95,0.05)', border: '1px solid rgba(31,58,95,0.10)' }}>
               <Search size={13} strokeWidth={2.5} className="shrink-0 text-text-soft" />
               <input
                 id="search-places" type="text"
@@ -548,10 +550,10 @@ export default function HomePage() {
           className="absolute top-0 right-0 z-30 h-dvh overflow-y-auto"
           style={{
             width: 420,
-            background: 'rgba(255,252,243,0.97)',
+            background: '#FFFFFF',
             backdropFilter: 'blur(22px)',
-            borderLeft: '1px solid rgba(20,32,51,0.10)',
-            boxShadow: '-18px 0 48px rgba(11,31,58,0.18)',
+            borderLeft: '1.5px solid rgba(31,58,95,0.10)',
+            boxShadow: '-16px 0 40px rgba(31,58,95,0.12)',
           }}
           role="complementary" aria-label="Détails du point d'intérêt"
         >
@@ -567,11 +569,11 @@ export default function HomePage() {
           className="absolute bottom-0 inset-x-0 z-30"
           style={{
             height: '62vh',
-            background: 'rgba(255,252,243,0.97)',
+            background: '#FFFFFF',
             backdropFilter: 'blur(22px)',
             borderTopLeftRadius: 22, borderTopRightRadius: 22,
-            borderTop: '1px solid rgba(20,32,51,0.10)',
-            boxShadow: '0 -16px 42px rgba(11,31,58,0.20)',
+            borderTop: '1.5px solid rgba(31,58,95,0.10)',
+            boxShadow: '0 -12px 36px rgba(31,58,95,0.14)',
             overflow: 'hidden',
           }}
           role="dialog" aria-label="Détails du point d'intérêt"

@@ -2,28 +2,33 @@
 
 import type { FilterType } from '@/types'
 
-type Tone = 'sun' | 'green' | 'navy' | 'amber' | 'emerald' | 'violet' | 'cyan' | 'teal'
-
-const FILTERS: { id: FilterType; label: string; icon: string; tone: Tone }[] = [
-  { id: 'sun',        label: 'Au soleil', icon: '☀️', tone: 'sun'      },
-  { id: 'open',       label: 'Ouvert',    icon: '🟢', tone: 'green'    },
-  { id: 'bar',        label: 'Bars',      icon: '🍺', tone: 'navy'     },
-  { id: 'restaurant', label: 'Restos',    icon: '🍽️', tone: 'amber'    },
-  { id: 'cafe',       label: 'Cafés',     icon: '☕', tone: 'amber'    },
-  { id: 'park',       label: 'Parcs',     icon: '🌳', tone: 'emerald'  },
-  { id: 'fontaine',   label: 'Eau',       icon: '💧', tone: 'cyan'     },
-  { id: 'sanisette',  label: 'WC',        icon: '🚻', tone: 'teal'     },
+const FILTERS: { id: FilterType; label: string; icon: string }[] = [
+  { id: 'sun',        label: 'Au soleil', icon: '☀️' },
+  { id: 'open',       label: 'Ouvert',    icon: '🟢' },
+  { id: 'bar',        label: 'Bars',      icon: '🍺' },
+  { id: 'restaurant', label: 'Restos',    icon: '🍽️' },
+  { id: 'cafe',       label: 'Cafés',     icon: '☕' },
+  { id: 'park',       label: 'Parcs',     icon: '🌳' },
+  { id: 'fontaine',   label: 'Eau',       icon: '💧' },
+  { id: 'sanisette',  label: 'WC',        icon: '🚻' },
 ]
 
-const ACTIVE_STYLES: Record<Tone, { bg: string; color: string; border: string; shadow: string }> = {
-  sun:     { bg: 'linear-gradient(145deg,#ffe566 0%,#ffb703 100%)', color: '#6b3d00', border: 'rgba(255,183,3,0.50)', shadow: '0 3px 10px rgba(255,183,3,0.30)' },
-  green:   { bg: 'linear-gradient(145deg,#b7f5c2 0%,#3ec95d 100%)', color: '#0d4a1e', border: 'rgba(62,201,93,0.45)',  shadow: '0 3px 10px rgba(62,201,93,0.22)' },
-  navy:    { bg: 'linear-gradient(145deg,#3d6be4 0%,#1a3fa7 100%)', color: '#ffffff', border: 'rgba(58,107,228,0.35)', shadow: '0 3px 10px rgba(26,63,167,0.24)' },
-  amber:   { bg: 'linear-gradient(145deg,#ffe8b2 0%,#f59e0b 100%)', color: '#5c3500', border: 'rgba(245,158,11,0.45)', shadow: '0 3px 10px rgba(245,158,11,0.22)' },
-  emerald: { bg: 'linear-gradient(145deg,#a7f3d0 0%,#059669 100%)', color: '#022c22', border: 'rgba(5,150,105,0.40)',  shadow: '0 3px 10px rgba(5,150,105,0.22)' },
-  violet:  { bg: 'linear-gradient(145deg,#ddd6fe 0%,#7c3aed 100%)', color: '#ffffff', border: 'rgba(124,58,237,0.35)', shadow: '0 3px 10px rgba(124,58,237,0.22)' },
-  cyan:    { bg: 'linear-gradient(145deg,#bae6fd 0%,#0ea5e9 100%)', color: '#0c3f5c', border: 'rgba(14,165,233,0.45)',  shadow: '0 3px 10px rgba(14,165,233,0.22)' },
-  teal:    { bg: 'linear-gradient(145deg,#99f6e4 0%,#0d9488 100%)', color: '#042f2e', border: 'rgba(13,148,136,0.40)',  shadow: '0 3px 10px rgba(13,148,136,0.22)' },
+// DA v2 — 2 états actifs seulement
+// "Au soleil" → on-gold (gold-15 bg + gold border + navy text)
+// Tous les autres → on-navy (navy bg + white text)
+function activeStyle(id: FilterType) {
+  if (id === 'sun') return {
+    background: 'rgba(237,193,69,0.15)',
+    color: '#1F3A5F',
+    border: '1.5px solid rgba(237,193,69,0.55)',
+    boxShadow: '0 3px 10px rgba(237,193,69,0.22)',
+  }
+  return {
+    background: '#1F3A5F',
+    color: '#ffffff',
+    border: '1.5px solid #1F3A5F',
+    boxShadow: '0 3px 10px rgba(31,58,95,0.22)',
+  }
 }
 
 interface FiltersProps {
@@ -40,9 +45,9 @@ export default function Filters({ activeFilters, onToggle, compact = false }: Fi
       style={{ paddingLeft: compact ? 10 : 12, paddingRight: compact ? 10 : 12 }}
     >
       <div className="flex items-center min-w-max" style={{ gap: compact ? 6 : 8 }}>
-        {FILTERS.map(({ id, label, icon, tone }) => {
+        {FILTERS.map(({ id, label, icon }) => {
           const isActive = activeFilters.includes(id)
-          const s = ACTIVE_STYLES[tone]
+          const s = isActive ? activeStyle(id) : null
           return (
             <button
               key={id}
@@ -58,10 +63,10 @@ export default function Filters({ activeFilters, onToggle, compact = false }: Fi
                 borderRadius: 999,
                 fontSize: compact ? 11.5 : 12.5,
                 fontWeight: 700,
-                color: isActive ? s.color : '#4a5568',
-                background: isActive ? s.bg : 'rgba(255,255,255,0.90)',
-                border: `1.5px solid ${isActive ? s.border : 'rgba(20,32,51,0.11)'}`,
-                boxShadow: isActive ? s.shadow : '0 1px 3px rgba(11,31,58,0.07)',
+                color: isActive ? s!.color : 'rgba(31,58,95,0.60)',
+                background: isActive ? s!.background : 'rgba(255,255,255,0.90)',
+                border: isActive ? s!.border : '1.5px solid rgba(31,58,95,0.12)',
+                boxShadow: isActive ? s!.boxShadow : '0 1px 3px rgba(31,58,95,0.07)',
               }}
             >
               <span aria-hidden="true" style={{ fontSize: compact ? 12 : 14, lineHeight: 1 }}>{icon}</span>

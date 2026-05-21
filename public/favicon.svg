@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Navy background -->
+  <circle cx="32" cy="32" r="32" fill="#1F3A5F"/>
+  <!-- Gold sun rays -->
+  <line x1="32" y1="4" x2="32" y2="13" stroke="#EDC145" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <line x1="32" y1="51" x2="32" y2="60" stroke="#EDC145" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <line x1="4" y1="32" x2="13" y2="32" stroke="#EDC145" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <line x1="51" y1="32" x2="60" y2="32" stroke="#EDC145" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <line x1="12" y1="12" x2="18.5" y2="18.5" stroke="#EDC145" stroke-width="2.5" stroke-linecap="round" opacity="0.55"/>
+  <line x1="45.5" y1="45.5" x2="52" y2="52" stroke="#EDC145" stroke-width="2.5" stroke-linecap="round" opacity="0.55"/>
+  <line x1="52" y1="12" x2="45.5" y2="18.5" stroke="#EDC145" stroke-width="2.5" stroke-linecap="round" opacity="0.55"/>
+  <line x1="18.5" y1="45.5" x2="12" y2="52" stroke="#EDC145" stroke-width="2.5" stroke-linecap="round" opacity="0.55"/>
+  <!-- Gold sun circle -->
+  <circle cx="32" cy="32" r="14" fill="#EDC145"/>
+  <!-- Person at table silhouette (simplified) -->
+  <circle cx="32" cy="27" r="3.5" fill="#1F3A5F"/>
+  <path d="M27 33 Q32 36 37 33 L38 40 H26 Z" fill="#1F3A5F"/>
+  <line x1="24" y1="37" x2="40" y2="37" stroke="#1F3A5F" stroke-width="1.5"/>
+</svg>
