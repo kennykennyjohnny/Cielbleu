@@ -291,6 +291,8 @@ interface Props {
   // changer dawn/day/dusk/night en direct avec le slider. Passer un nombre
   // évite les problèmes de référence d'objet Date dans les deps useEffect.
   sunHour?: number
+  // Incrémenter ce compteur depuis l'extérieur provoque un flyTo vers le centre Paris (retour à la vue de base)
+  homeView?: number
 }
 
 interface AmeniteInfo {
@@ -300,7 +302,7 @@ interface AmeniteInfo {
   lng: number
 }
 
-export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
@@ -663,7 +665,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         center:   rc.center,
         zoom:     rc.zoom,
         pitch:    rc.pitch,
-        bearing:  rc.bearing,
+        bearing:  0, // Toujours Nord en haut au retour
         duration: 1000,
         essential: true,
         padding:  { top: 0, bottom: 0, left: 0, right: 0 },
@@ -671,6 +673,23 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       returnCameraRef.current = null
     }
   }, [focusPlace]) // eslint-disable-line
+
+  // ── Vue de base Paris (clic logo HopSoleil) ────────────────────────────
+  useEffect(() => {
+    if (!homeView) return // valeur initiale 0 = pas de trigger
+    const map = mapRef.current
+    if (!map) return
+    returnCameraRef.current = null // invalide tout retour en attente
+    map.flyTo({
+      center:   PARIS_CENTER,
+      zoom:     12.4,
+      pitch:    0,
+      bearing:  0,
+      duration: 1200,
+      essential: true,
+      padding:  { top: 0, bottom: 0, left: 0, right: 0 },
+    })
+  }, [homeView]) // eslint-disable-line
 
   // ── Soleil + ombres réalistes : suit `sunHour` heure par heure ────────
   // On utilise lat/lng du cinematicFocus (ou Paris par défaut) pour la

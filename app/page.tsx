@@ -41,7 +41,16 @@ export default function HomePage() {
   const [hour, setHour] = useState<number>(nowHalfHour)
   const [sheetMode, setSheetMode] = useState<SheetMode>('half')
   const [isDesktop, setIsDesktop] = useState(false)
+  const [homeViewCount, setHomeViewCount] = useState(0)
   const dragRef = useRef<{ y: number; mode: SheetMode } | null>(null)
+
+  // focusPlace mémoisé pour éviter de re-déclencher le flyTo de la carte
+  // à chaque rendu (ex. quand l'heure change dans le slider)
+  const mapFocusPlace = useMemo(
+    () => selectedPlace ? { lng: selectedPlace.lng, lat: selectedPlace.lat } : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedPlace?.id],
+  )
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 900px)')
@@ -215,8 +224,9 @@ export default function HomePage() {
           places={displayedPlaces}
           onPlaceSelect={handlePlaceSelect}
           highlightPlaceId={selectedPlace?.id}
-          focusPlace={selectedPlace ? { lng: selectedPlace.lng, lat: selectedPlace.lat } : null}
+          focusPlace={mapFocusPlace}
           sunHour={hour}
+          homeView={homeViewCount}
         />
       </div>
 
@@ -228,8 +238,12 @@ export default function HomePage() {
         <div className="px-3 flex items-start justify-between gap-2 pointer-events-none">
           {/* Brand pill */}
           <div
-            className="pointer-events-auto inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full"
-            aria-label="HopSoleil"
+            className="pointer-events-auto inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full cursor-pointer"
+            aria-label="Home — HopSoleil"
+            role="button"
+            tabIndex={0}
+            onClick={() => { handleClose(); setHomeViewCount(c => c + 1) }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { handleClose(); setHomeViewCount(c => c + 1) } }}
             style={{
               background: 'rgba(255,255,255,0.86)',
               border: '1px solid rgba(20,32,51,0.10)',

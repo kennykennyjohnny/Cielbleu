@@ -108,7 +108,7 @@ async function upsertPlaces(places: GooglePlace[], type: string) {
         type: mapPlaceType(p.types),
         google_rating: p.rating ?? null,
         price_level: p.price_level ?? null,
-        photos: p.photos?.slice(0, 3).map((ph) => {
+        photos: p.photos?.slice(0, 5).map((ph) => {
           const ref = ph.photo_reference
           return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${ref}&key=${process.env.GOOGLE_PLACES_API_KEY}`
         }) ?? [],

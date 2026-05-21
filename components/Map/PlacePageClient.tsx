@@ -365,17 +365,17 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
             <p style={{ ...EYEBROW, marginBottom:10 }}>Photos</p>
             <div className="scrollbar-none"
-              style={{ display:'flex', gap:10, overflowX:'auto', scrollSnapType:'x mandatory' }}>
+              style={{ display:'flex', gap:8, overflowX:'auto', scrollSnapType:'x mandatory' }}>
               {photoRefs.map((ref, i) => (
                 <div key={i} style={{ flexShrink:0, borderRadius:16, overflow:'hidden',
-                  width:i===0?220:160, height:i===0?138:102, scrollSnapAlign:'start',
+                  width:i===0?240:170, height:i===0?156:116, scrollSnapAlign:'start',
                   boxShadow:'0 6px 20px rgba(11,31,58,0.14)' }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/api/photo?ref=${encodeURIComponent(ref)}&w=500`}
+                    src={`/api/photo?ref=${encodeURIComponent(ref)}&w=600`}
                     alt={`${place.name} — photo ${i + 1}`}
                     style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
-                    loading="lazy"
+                    loading={i === 0 ? 'eager' : 'lazy'}
                   />
                 </div>
               ))}
@@ -383,33 +383,67 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           </div>
         )}
 
-        {/* ── INFO ROWS ── */}
-        {(place.google_maps_url || place.instagram_url) && (
+        {/* ── MAPS + STREET VIEW ── */}
+        {place.lat && place.lng && (
           <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
-            <p style={{ ...EYEBROW, marginBottom:10 }}>Décider vite</p>
+            <p style={{ ...EYEBROW, marginBottom:10 }}>Voir le lieu</p>
             <div style={{ display:'grid', gap:8 }}>
+
+              {/* Google Maps — Itinéraire + avis */}
               {place.google_maps_url && (
                 <a href={place.google_maps_url} target="_blank" rel="noopener noreferrer"
-                  style={{ textDecoration:'none' }}>
-                  <div style={{ ...INFO_ROW }}>
-                    <span style={{ fontSize:14, fontWeight:750, color:'#0b1f3a' }}>📍 Itinéraire</span>
-                    <span style={{ color:'#6f7a8a', fontWeight:700, fontSize:13,
-                      display:'flex', alignItems:'center', gap:4 }}>
-                      {place.address?.split(',')[0] ?? 'Ouvrir Maps'}
-                      <ExternalLink size={12} aria-hidden />
-                    </span>
+                  style={{ textDecoration:'none', display:'block',
+                    borderRadius:18, overflow:'hidden',
+                    background:'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)',
+                    border:'1px solid rgba(66,133,244,0.25)',
+                    boxShadow:'0 4px 16px rgba(66,133,244,0.15)' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px' }}>
+                    <span style={{ fontSize:28, flexShrink:0 }}>🗺️</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ margin:0, fontWeight:900, fontSize:14, color:'#1a3fa7' }}>Ouvrir dans Google Maps</p>
+                      <p style={{ margin:'2px 0 0', fontSize:12, color:'#3d6be4', fontWeight:600 }}>
+                        Itinéraire · Horaires · Avis
+                      </p>
+                    </div>
+                    <span style={{ fontSize:18, flexShrink:0 }}>→</span>
                   </div>
                 </a>
               )}
+
+              {/* Street View */}
+              <a
+                href={`https://maps.google.com/?cbll=${place.lat},${place.lng}&cbp=12,0,0,0,0&layer=c`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ textDecoration:'none', display:'block',
+                  borderRadius:18, overflow:'hidden',
+                  background:'linear-gradient(135deg,#f0faf4 0%,#c6f0d8 100%)',
+                  border:'1px solid rgba(5,150,105,0.25)',
+                  boxShadow:'0 4px 16px rgba(5,150,105,0.12)' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px' }}>
+                  <span style={{ fontSize:28, flexShrink:0 }}>🧍</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontWeight:900, fontSize:14, color:'#065f46' }}>Street View</p>
+                    <p style={{ margin:'2px 0 0', fontSize:12, color:'#059669', fontWeight:600 }}>
+                      Voir la terrasse depuis la rue
+                    </p>
+                  </div>
+                  <span style={{ fontSize:18, flexShrink:0 }}>→</span>
+                </div>
+              </a>
+
               {place.instagram_url && (
                 <a href={place.instagram_url} target="_blank" rel="noopener noreferrer"
-                  style={{ textDecoration:'none' }}>
-                  <div style={{ ...INFO_ROW }}>
-                    <span style={{ fontSize:14, fontWeight:750, color:'#0b1f3a' }}>📸 Instagram</span>
-                    <span style={{ color:'#6f7a8a', fontWeight:700, fontSize:13,
-                      display:'flex', alignItems:'center', gap:4 }}>
-                      Voir le compte <ExternalLink size={12} aria-hidden />
-                    </span>
+                  style={{ textDecoration:'none', display:'block', borderRadius:18,
+                    background:'linear-gradient(135deg,#fdf0f9 0%,#f9c6e9 100%)',
+                    border:'1px solid rgba(180,60,150,0.20)',
+                    boxShadow:'0 4px 16px rgba(180,60,150,0.10)' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px' }}>
+                    <span style={{ fontSize:28, flexShrink:0 }}>📸</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ margin:0, fontWeight:900, fontSize:14, color:'#7e1d6a' }}>Instagram</p>
+                      <p style={{ margin:'2px 0 0', fontSize:12, color:'#b43c96', fontWeight:600 }}>Voir le compte</p>
+                    </div>
+                    <span style={{ fontSize:18, flexShrink:0 }}>→</span>
                   </div>
                 </a>
               )}
