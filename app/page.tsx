@@ -397,6 +397,67 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* ─── Panel lieu sélectionné (desktop : côté droit, mobile : bottom sheet) ─── */}
+      {selectedPlace && isDesktop && (
+        <aside
+          className="absolute top-0 right-0 z-30 h-dvh overflow-y-auto"
+          style={{
+            width: 420,
+            background: 'rgba(255,252,243,0.97)',
+            backdropFilter: 'blur(22px)',
+            borderLeft: '1px solid rgba(20,32,51,0.10)',
+            boxShadow: '-18px 0 48px rgba(11,31,58,0.18)',
+          }}
+          role="complementary" aria-label={`Détails de ${selectedPlace.name}`}
+        >
+          <PlacePageClient
+            place={selectedPlace}
+            scores={selectedScores}
+            hour={hour}
+            onHourChange={setHour}
+            onClose={handleClose}
+          />
+        </aside>
+      )}
+
+      {selectedPlace && !isDesktop && (
+        <section
+          className="absolute bottom-0 inset-x-0 z-30"
+          style={{
+            height: SHEET_HEIGHTS[sheetMode],
+            transition: 'height 280ms cubic-bezier(0.2,0.8,0.2,1)',
+            background: 'rgba(255,252,243,0.97)',
+            backdropFilter: 'blur(22px)',
+            borderTopLeftRadius: 22, borderTopRightRadius: 22,
+            borderTop: '1px solid rgba(20,32,51,0.10)',
+            boxShadow: '0 -16px 42px rgba(11,31,58,0.20)',
+            overflow: 'hidden',
+          }}
+          role="dialog" aria-label={`Détails de ${selectedPlace.name}`}
+        >
+          <div
+            onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+            role="separator" aria-label="Redimensionner (glisser haut/bas)"
+            className="flex items-center justify-center cursor-grab active:cursor-grabbing"
+            style={{ height: 22, touchAction: 'none' }}
+          >
+            <span aria-hidden="true"
+              style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)' }} />
+          </div>
+          <div className="overflow-y-auto" style={{ height: 'calc(100% - 22px)' }}>
+            <PlacePageClient
+              place={selectedPlace}
+              scores={selectedScores}
+              hour={hour}
+              onHourChange={setHour}
+              onClose={handleClose}
+            />
+          </div>
+        </section>
+      )}
     </main>
   )
 }
