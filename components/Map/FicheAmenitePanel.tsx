@@ -35,7 +35,8 @@ export default function FicheAmenitePanel({ amenite, onClose }: Props) {
 
   const title       = isFontaine ? 'Fontaine à boire' : 'Sanisette'
   const emoji       = isFontaine ? '💧' : '🚻'
-  const themeColor  = isFontaine ? '#3A86FF' : '#4F8F65'
+  const themeColor  = isFontaine ? '#1F3A5F' : '#1F3A5F'  // DA v2 — navy pour les deux
+  const accentColor  = isFontaine ? '#3A86FF' : '#34A853'  // bleu eau / vert WC pour les chips seulmt
 
   const status    = isFontaine
     ? (p.dispo === 'OUI' ? 'Disponible' : 'Indisponible')
@@ -64,12 +65,14 @@ export default function FicheAmenitePanel({ amenite, onClose }: Props) {
           </div>
         </button>
 
-        {/* Status badge */}
+      {/* ── STATUS BADGE ── */}
         <div style={{
           padding: '7px 13px', borderRadius: 999,
-          background: statusOk ? (themeColor + '18') : 'rgba(224,82,82,0.12)',
-          color: statusOk ? themeColor : '#E05252',
-          border: `1px solid ${statusOk ? themeColor + '30' : '#E0525230'}`,
+          background: statusOk
+            ? (isFontaine ? 'rgba(58,134,255,0.12)' : 'rgba(52,168,83,0.12)')
+            : 'rgba(224,82,82,0.12)',
+          color: statusOk ? (isFontaine ? '#3A86FF' : '#34A853') : '#E05252',
+          border: `1px solid ${statusOk ? (isFontaine ? 'rgba(58,134,255,0.25)' : 'rgba(52,168,83,0.25)') : '#E0525230'}`,
           fontSize: 12.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6,
         }}>
           <span style={{ fontSize: 15 }}>{emoji}</span>
@@ -111,7 +114,7 @@ export default function FicheAmenitePanel({ amenite, onClose }: Props) {
         {horaire && (
           <div style={{
             borderRadius: 18, padding: '14px 16px', marginBottom: 14,
-            background: 'rgba(255,255,255,0.78)', border: '1px solid rgba(20,32,51,0.08)',
+            background: 'rgba(31,58,95,0.05)', border: '1px solid rgba(31,58,95,0.08)',
           }}>
             <p style={{ margin: 0, fontSize: 10.5, fontWeight: 800, color: '#8D99AE',
               letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 5 }}>
@@ -178,7 +181,7 @@ export default function FicheAmenitePanel({ amenite, onClose }: Props) {
         {/* ── INFO COMPLÉMENTAIRE : lat/lng + description ── */}
         <div style={{
           borderRadius: 18, padding: '14px 16px', marginBottom: 14,
-          background: 'rgba(255,255,255,0.68)', border: '1px solid rgba(20,32,51,0.08)',
+          background: 'rgba(31,58,95,0.05)', border: '1px solid rgba(31,58,95,0.08)',
         }}>
           <p style={{ margin: 0, fontSize: 10.5, fontWeight: 800, color: '#8D99AE',
             letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>
@@ -198,43 +201,42 @@ export default function FicheAmenitePanel({ amenite, onClose }: Props) {
         </div>
       </div>
 
-      {/* ── ACTION BAR STICKY ── */}
+      {/* ── ACTION BAR STICKY — DA v2 ── */}
       <div style={{ position: 'sticky', bottom: 0, zIndex: 40,
         paddingBottom: 'max(env(safe-area-inset-bottom,0px),12px)' }}>
         <div style={{
           display: 'grid', gridTemplateColumns: '1fr 48px', gap: 8,
           margin: '0 12px', padding: '12px 12px 14px',
-          background: 'rgba(255,252,243,0.94)', backdropFilter: 'blur(18px)',
+          background: 'rgba(255,248,236,0.96)', backdropFilter: 'blur(18px)',
           borderRadius: '24px 24px 0 0',
-          borderTop: '1px solid rgba(20,32,51,0.10)',
-          boxShadow: '0 -4px 24px rgba(11,31,58,0.12)',
+          borderTop: '1px solid rgba(31,58,95,0.10)',
+          boxShadow: '0 -4px 24px rgba(31,58,95,0.10)',
         }}>
+          {/* Itinéraire Google Maps — fonctionne sur iOS/Android/desktop */}
           <a
-            href={gmapsUrl}
+            href={`https://www.google.com/maps/dir/?api=1&destination=${amenite.lat},${amenite.lng}&travelmode=walking`}
             target="_blank" rel="noopener noreferrer"
             style={{
               height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               borderRadius: 14, textDecoration: 'none',
               fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 14,
-              background: statusOk ? themeColor : 'rgba(20,32,51,0.08)',
-              color: statusOk ? '#fff' : '#98a2b3',
-              boxShadow: statusOk ? `0 8px 20px ${themeColor}40` : 'none',
-              pointerEvents: statusOk ? 'auto' : 'none',
+              background: '#EDC145',
+              color: '#1F3A5F',
+              boxShadow: '0 8px 20px rgba(237,193,69,0.35)',
             }}
-            aria-disabled={!statusOk}
           >
             <Navigation size={15} strokeWidth={2.5} />
             Y aller à pied
           </a>
 
-          {/* Bouton fermer / Maps */}
+          {/* Voir sur Google Maps */}
           <a
-            href={`https://www.google.com/maps?q=${amenite.lat},${amenite.lng}`}
+            href={`https://www.google.com/maps/search/?api=1&query=${amenite.lat},${amenite.lng}`}
             target="_blank" rel="noopener noreferrer"
             style={{
               height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 14, background: '#fff', border: '1px solid rgba(20,32,51,0.10)',
-              fontSize: 20, textDecoration: 'none',
+              borderRadius: 14, background: '#1F3A5F', border: '1.5px solid rgba(31,58,95,0.15)',
+              fontSize: 18, textDecoration: 'none',
             }}
             aria-label="Voir sur Google Maps"
             title="Voir sur Google Maps"

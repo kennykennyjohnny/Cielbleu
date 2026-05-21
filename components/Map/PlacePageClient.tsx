@@ -1,9 +1,10 @@
 ﻿'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink, Clock } from 'lucide-react'
+import { ArrowLeft, Clock } from 'lucide-react'
 import type { Place } from '@/types'
+import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -119,11 +120,46 @@ interface Props {
   // Quand fourni (page d'accueil inline), le bouton retour appelle onClose
   // au lieu de naviguer vers "/".
   onClose?: () => void
+  /** ID Supabase de l'utilisateur connecté, null si anonyme */
+  userId?: string | null
+  /** Ouvre le panel Profil pour que l'utilisateur se connecte */
+  onOpenProfile?: () => void
 }
 
-export default function PlacePageClient({ place, scores, hour, onHourChange, onClose }: Props) {
+export default function PlacePageClient({ place, scores, hour, onHourChange, onClose, userId, onOpenProfile }: Props) {
   const setHour = onHourChange
   const [shareToast, setShareToast] = useState(false)
+
+  // ── Community section state ─────────────────────────────────────────────────
+  const [sunVote, setSunVote]       = useState<'sunny' | 'shady' | null>(null)
+  const [voteToast, setVoteToast]   = useState(false)
+  const [commentText, setCommentText] = useState('')
+  const [commentSending, setCommentSending] = useState(false)
+  const [commentSent, setCommentSent] = useState(false)
+
+  // Génère / récupère un device_id persistant pour les votes anonymes
+  const deviceId = useMemo<string>(() => {
+    if (typeof window === 'undefined') return 'ssr'
+    const key = 'hs_device_id'
+    let id = localStorage.getItem(key)
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id) }
+    return id
+  }, [])
+
+  // Charge le vote existant de cet utilisateur/device
+  useEffect(() => {
+    let cancelled = false
+    async function loadVote() {
+      const query = supabase.from('sun_votes').select('is_sunny').eq('place_id', place.id)
+      const filtered = userId
+        ? query.eq('user_id', userId)
+        : query.eq('device_id', deviceId)
+      const { data } = await filtered.order('created_at', { ascending: false }).limit(1)
+      if (!cancelled && data?.[0]) setSunVote(data[0].is_sunny ? 'sunny' : 'shady')
+    }
+    loadVote()
+    return () => { cancelled = true }
+  }, [place.id, userId, deviceId])
 
   const scoreMap = useMemo(() => {
     const m: Record<string, number> = {}
@@ -178,6 +214,38 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     if (navigator?.share) { try { await navigator.share({ title: 'HopSoleil — ' + place.name, url }); return } catch { /* cancelled */ } }
     if (navigator?.clipboard) { try { await navigator.clipboard.writeText(url); setShareToast(true); setTimeout(() => setShareToast(false), 2200) } catch { /* noop */ } }
   }, [place.name])
+
+  const handleSunVote = useCallback(async (isSunny: boolean) => {
+    const newVote: 'sunny' | 'shady' = isSunny ? 'sunny' : 'shady'
+    setSunVote(newVote)
+    const slot = `${String(Math.floor(hour)).padStart(2,'0')}:${hour % 1 ? '30' : '00'}`
+    await supabase.from('sun_votes').insert({
+      place_id: place.id,
+      user_id:  userId ?? null,
+      device_id: deviceId,
+      is_sunny: isSunny,
+      time_slot: slot,
+    })
+    setVoteToast(true); setTimeout(() => setVoteToast(false), 2000)
+  }, [place.id, userId, deviceId, hour])
+
+  const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!userId || !commentText.trim()) return
+    setCommentSending(true)
+    await supabase.from('reviews').insert({
+      place_id: place.id,
+      user_id:  userId,
+      device_id: deviceId,
+      rating: 4, // vote neutre par défaut — l'ensoleillement est le vrai critère
+      comment: commentText.trim(),
+      is_anonymous: false,
+    })
+    setCommentSending(false)
+    setCommentSent(true)
+    setCommentText('')
+    setTimeout(() => setCommentSent(false), 3000)
+  }, [userId, commentText, place.id, deviceId])
 
   return (
     <div style={{ background:'transparent', fontFamily:'var(--font-outfit)', color:'#142033' }}>
@@ -380,9 +448,9 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                     color: isClosed ? '#FF6B6B' : '#1B2838' }}>{hoursLabel}</span>
                 ) : (
                   <a
-                    href={place.google_maps_url ?? `https://maps.google.com/?q=${encodeURIComponent(place.name + ' ' + place.address)}`}
+                    href={place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}`}
                     target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize:13, fontWeight:700, color:'#3A86FF', textDecoration:'none' }}
+                    style={{ fontSize:13, fontWeight:700, color:'#1F3A5F', textDecoration:'none' }}
                   >
                     Voir sur Google Maps →
                   </a>
@@ -421,26 +489,24 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
             <p style={{ ...EYEBROW, marginBottom:10 }}>Voir le lieu</p>
             <div style={{ display:'grid', gap:8 }}>
 
-              {/* Google Maps — Itinéraire + avis */}
-              {place.google_maps_url && (
-                <a href={place.google_maps_url} target="_blank" rel="noopener noreferrer"
-                  style={{ textDecoration:'none', display:'block',
-                    borderRadius:18, overflow:'hidden',
-                    background:'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)',
-                    border:'1px solid rgba(66,133,244,0.25)',
-                    boxShadow:'0 4px 16px rgba(66,133,244,0.15)' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px' }}>
-                    <span style={{ fontSize:28, flexShrink:0 }}>🗺️</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ margin:0, fontWeight:900, fontSize:14, color:'#1a3fa7' }}>Ouvrir dans Google Maps</p>
-                      <p style={{ margin:'2px 0 0', fontSize:12, color:'#3d6be4', fontWeight:600 }}>
-                        Itinéraire · Horaires · Avis
-                      </p>
-                    </div>
-                    <span style={{ fontSize:18, flexShrink:0 }}>→</span>
+              {/* Google Maps — lien principal qui fonctionne sur iOS/Android/desktop */}
+              <a href={place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}`} target="_blank" rel="noopener noreferrer"
+                style={{ textDecoration:'none', display:'block',
+                  borderRadius:18, overflow:'hidden',
+                  background:'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)',
+                  border:'1px solid rgba(66,133,244,0.25)',
+                  boxShadow:'0 4px 16px rgba(66,133,244,0.15)' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px' }}>
+                  <span style={{ fontSize:28, flexShrink:0 }}>🗺️</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontWeight:900, fontSize:14, color:'#1a3fa7' }}>Ouvrir dans Google Maps</p>
+                    <p style={{ margin:'2px 0 0', fontSize:12, color:'#3d6be4', fontWeight:600 }}>
+                      Horaires · Avis · Itinéraire
+                    </p>
                   </div>
-                </a>
-              )}
+                  <span style={{ fontSize:18, flexShrink:0 }}>→</span>
+                </div>
+              </a>
 
               {/* Street View — miniature cliquable */}
               <a
@@ -493,6 +559,109 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         )}
       </div>
 
+      {/* ═══════════ ESPACE COMMUNAUTAIRE ═══════════ */}
+      <div style={{ padding:'0 14px 20px', borderTop:'1px solid rgba(20,32,51,0.07)', marginTop:6, paddingTop:18 }}>
+        <p style={{ ...EYEBROW, marginBottom:14 }}>Terrasse en ce moment ?</p>
+
+        {/* ── Votes soleil (accessibles sans connexion) ── */}
+        <div style={{ display:'flex', gap:10, marginBottom:20 }}>
+          <button
+            onClick={() => handleSunVote(true)}
+            style={{
+              flex:1, height:46, borderRadius:14, cursor:'pointer',
+              fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14,
+              background: sunVote === 'sunny' ? '#EDC145' : 'rgba(31,58,95,0.06)',
+              color: sunVote === 'sunny' ? '#1F3A5F' : 'rgba(31,58,95,0.55)',
+              boxShadow: sunVote === 'sunny' ? '0 6px 16px rgba(237,193,69,0.35)' : 'none',
+              border: sunVote === 'sunny' ? '1.5px solid rgba(237,193,69,0.60)' : '1.5px solid transparent',
+              transition:'all 150ms',
+            }}
+            aria-pressed={sunVote === 'sunny'}
+          >
+            ☀️ Ensoleillé
+          </button>
+          <button
+            onClick={() => handleSunVote(false)}
+            style={{
+              flex:1, height:46, borderRadius:14, cursor:'pointer',
+              fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14,
+              background: sunVote === 'shady' ? 'rgba(31,58,95,0.18)' : 'rgba(31,58,95,0.06)',
+              color: sunVote === 'shady' ? '#1F3A5F' : 'rgba(31,58,95,0.55)',
+              border: sunVote === 'shady' ? '1.5px solid rgba(31,58,95,0.30)' : '1.5px solid transparent',
+              transition:'all 150ms',
+            }}
+            aria-pressed={sunVote === 'shady'}
+          >
+            🌑 À l&apos;ombre
+          </button>
+        </div>
+
+        {/* ── Commentaires — gated derrière auth ── */}
+        {userId
+          ? (
+            commentSent
+              ? <p style={{ fontSize:13, fontWeight:800, color:'#34A853', textAlign:'center', padding:'8px 0' }}>
+                  Merci pour ton avis ! ☀️
+                </p>
+              : (
+                <form onSubmit={handleCommentSubmit} style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  <textarea
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    placeholder="Partage ton expérience sur cette terrasse…"
+                    rows={3}
+                    maxLength={400}
+                    style={{
+                      width:'100%', borderRadius:14, padding:'11px 13px',
+                      border:'1.5px solid rgba(31,58,95,0.12)',
+                      background:'rgba(31,58,95,0.04)',
+                      fontFamily:'var(--font-outfit)', fontSize:13, fontWeight:600,
+                      color:'#1F3A5F', resize:'none', outline:'none', boxSizing:'border-box',
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={commentSending || !commentText.trim()}
+                    style={{
+                      height:42, borderRadius:12, border:'none', cursor:'pointer',
+                      fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:13,
+                      background: commentText.trim() ? '#1F3A5F' : 'rgba(31,58,95,0.08)',
+                      color: commentText.trim() ? '#fff' : 'rgba(31,58,95,0.35)',
+                      transition:'all 150ms',
+                    }}
+                  >
+                    {commentSending ? '…' : 'Publier mon avis'}
+                  </button>
+                </form>
+              )
+          )
+          : (
+            <button
+              onClick={onOpenProfile}
+              style={{
+                width:'100%', height:42, borderRadius:12, border:'1.5px dashed rgba(31,58,95,0.20)',
+                background:'transparent', cursor:'pointer',
+                fontFamily:'var(--font-outfit)', fontWeight:800, fontSize:13,
+                color:'rgba(31,58,95,0.55)',
+              }}
+            >
+              ✍️ Se connecter pour laisser un avis
+            </button>
+          )
+        }
+      </div>
+
+      {/* Vote toast */}
+      {voteToast && (
+        <div role="status" aria-live="polite"
+          style={{ position:'fixed', bottom:90, left:'50%', transform:'translateX(-50%)',
+            background:'#1F3A5F', color:'#fff', padding:'8px 18px',
+            borderRadius:999, fontSize:12, fontWeight:700, zIndex:50,
+            boxShadow:'0 6px 20px rgba(31,58,95,0.28)', whiteSpace:'nowrap' }}>
+          {sunVote === 'sunny' ? '☀️ Vote enregistré !' : '🌑 Vote enregistré !'}
+        </div>
+      )}
+
       {/* ═══════════ ACTION BAR (sticky bottom dans le panel) ═══════════ */}
       <div style={{ position:'sticky', bottom:0, zIndex:40,
         paddingBottom:'max(env(safe-area-inset-bottom,0px),12px)' }}>
@@ -503,28 +672,29 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           borderTop:'1px solid rgba(20,32,51,0.10)',
           boxShadow:'0 -4px 24px rgba(11,31,58,0.12)' }}>
 
-          {/* Primary: J'y suis (gold) */}
-          <button style={{ height:46, border:'none', borderRadius:14, cursor:'pointer',
-            fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, color:'#0b1f3a',
-            background:'#ffb703', boxShadow:'0 10px 22px rgba(255,183,3,0.28)' }}>
-            ☀&nbsp;J&apos;y suis
-          </button>
+          {/* Primary: Ouvrir dans Google Maps — lien universel qui fonctionne sur iOS/Android/desktop */}
+          <a
+            href={place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:7,
+              borderRadius:14, background:'#1F3A5F', color:'#fff',
+              fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, textDecoration:'none',
+              boxShadow:'0 8px 20px rgba(31,58,95,0.28)' }}
+          >
+            🗺️&nbsp;Google Maps
+          </a>
 
-          {/* Secondary: Y aller */}
-          {place.google_maps_url ? (
-            <a href={place.google_maps_url} target="_blank" rel="noopener noreferrer"
-              style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                borderRadius:14, background:'var(--color-sky-100)', color:'var(--color-sky-700)',
-                fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, textDecoration:'none' }}>
-              📍&nbsp;Y aller
-            </a>
-          ) : (
-            <button disabled
-              style={{ height:46, border:'none', borderRadius:14, background:'rgba(20,32,51,0.06)',
-                color:'#98a2b3', fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, cursor:'not-allowed' }}>
-              📍&nbsp;Y aller
-            </button>
-          )}
+          {/* Secondary: Itinéraire → ouvre Google Maps directions, mode marche */}
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place.name + ' ' + place.address)}&travelmode=walking`}
+            target="_blank" rel="noopener noreferrer"
+            style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+              borderRadius:14, background:'#EDC145', color:'#1F3A5F',
+              fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, textDecoration:'none',
+              boxShadow:'0 8px 20px rgba(237,193,69,0.35)' }}
+          >
+            📍&nbsp;Y aller
+          </a>
 
           {/* Share */}
           <button onClick={handleShare} aria-label="Partager ce lieu"

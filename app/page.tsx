@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, X, Clock } from 'lucide-react'
+import { Search, X, Clock, UserCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Filters from '@/components/Map/Filters'
 import PlacePageClient from '@/components/Map/PlacePageClient'
 import FicheAmenitePanel from '@/components/Map/FicheAmenitePanel'
+import ProfilePanel from '@/components/Map/ProfilePanel'
 import { owmIconToEmoji } from '@/lib/weather'
 import { isOpenAt } from '@/lib/openingHours'
 import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
@@ -46,9 +47,20 @@ export default function HomePage() {
   const [sheetMode, setSheetMode] = useState<SheetMode>('half')
   const [isDesktop, setIsDesktop] = useState(false)
   const [homeViewCount, setHomeViewCount] = useState(0)
+  const [showProfile, setShowProfile] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
   const dragRef = useRef<{ y: number; mode: SheetMode } | null>(null)
 
-  // ── Météo ─────────────────────────────────────────────────────────────────────
+  // ── Auth state — suivi global pour passer userId aux composants ──────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUserId(session?.user?.id ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // ── Météo ────────────────────────────────────────────────────────────────
   interface WeatherResponse {
     current: { temp: number; icon: string; description: string } | null
     forecast: WeatherForecastEntry[]
@@ -372,9 +384,33 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* ── Slider heure + Maintenant + count — DA v2, SANS météo ── */}
-          <div
-            className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shrink-0"
+          {/* ── Colonne droite : profil + slider ── */}
+          <div className="pointer-events-none flex flex-col items-end gap-2">
+
+            {/* Bouton profil */}
+            <button
+              className="pointer-events-auto inline-flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full"
+              onClick={() => { setShowProfile(p => !p); setSelectedPlace(null); setSelectedAmenite(null) }}
+              aria-label="Mon profil"
+              style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(31,58,95,0.12)',
+                boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
+                cursor: 'pointer', position: 'relative',
+              }}
+            >
+              <span className="grid place-items-center w-7 h-7 rounded-full shrink-0"
+                style={{ background: userId ? '#EDC145' : 'rgba(31,58,95,0.08)' }}>
+                <UserCircle size={15} strokeWidth={2} style={{ color: userId ? '#1F3A5F' : 'rgba(31,58,95,0.45)' }} />
+              </span>
+              <span className="font-outfit font-bold text-[12px]" style={{ color: '#1F3A5F' }}>
+                {userId ? 'Profil' : 'Connexion'}
+              </span>
+            </button>
+
+            {/* Slider heure + Maintenant + count — DA v2, SANS météo */}
+            <div
+              className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shrink-0"
             style={{
               background: '#FFFFFF',
               border: '1.5px solid rgba(31,58,95,0.12)',
@@ -424,6 +460,7 @@ export default function HomePage() {
               </>
             )}
           </div>
+          </div>{/* fin colonne droite */}
         </div>
 
         {/* Date subtile sous le brand pill */}
@@ -544,13 +581,59 @@ export default function HomePage() {
       </div>
       )}
 
+      {/* ─── Panel Profil (desktop : côté droit, mobile : bottom sheet) ─── */}
+      {showProfile && isDesktop && (
+        <aside
+          className="absolute top-0 right-0 z-40 h-dvh overflow-y-auto"
+          style={{
+            width: 420,
+            background: 'rgba(255,252,243,0.97)',
+            backdropFilter: 'blur(22px)',
+            borderLeft: '1.5px solid rgba(31,58,95,0.10)',
+            boxShadow: '-16px 0 40px rgba(31,58,95,0.12)',
+          }}
+          role="complementary" aria-label="Mon profil"
+        >
+          <ProfilePanel
+            onClose={() => setShowProfile(false)}
+            onAuthChange={(u) => setUserId(u?.id ?? null)}
+          />
+        </aside>
+      )}
+
+      {showProfile && !isDesktop && (
+        <section
+          className="absolute bottom-0 inset-x-0 z-40"
+          style={{
+            height: '90dvh',
+            background: 'rgba(255,252,243,0.97)',
+            backdropFilter: 'blur(22px)',
+            borderTopLeftRadius: 22, borderTopRightRadius: 22,
+            borderTop: '1.5px solid rgba(31,58,95,0.10)',
+            boxShadow: '0 -12px 36px rgba(31,58,95,0.14)',
+            overflow: 'hidden',
+          }}
+          role="dialog" aria-label="Mon profil"
+        >
+          <div className="flex items-center justify-center" style={{ height: 22 }}>
+            <span style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)', display: 'block' }} />
+          </div>
+          <div className="overflow-y-auto" style={{ height: 'calc(100% - 22px)' }}>
+            <ProfilePanel
+              onClose={() => setShowProfile(false)}
+              onAuthChange={(u) => setUserId(u?.id ?? null)}
+            />
+          </div>
+        </section>
+      )}
+
       {/* ─── Panel fontaine / sanisette (desktop : côté droit, mobile : bottom sheet) ─── */}
       {selectedAmenite && isDesktop && (
         <aside
           className="absolute top-0 right-0 z-30 h-dvh overflow-y-auto"
           style={{
             width: 420,
-            background: '#FFFFFF',
+            background: 'rgba(255,252,243,0.97)',
             backdropFilter: 'blur(22px)',
             borderLeft: '1.5px solid rgba(31,58,95,0.10)',
             boxShadow: '-16px 0 40px rgba(31,58,95,0.12)',
@@ -569,7 +652,7 @@ export default function HomePage() {
           className="absolute bottom-0 inset-x-0 z-30"
           style={{
             height: '62vh',
-            background: '#FFFFFF',
+            background: 'rgba(255,252,243,0.97)',
             backdropFilter: 'blur(22px)',
             borderTopLeftRadius: 22, borderTopRightRadius: 22,
             borderTop: '1.5px solid rgba(31,58,95,0.10)',
@@ -609,6 +692,8 @@ export default function HomePage() {
             hour={hour}
             onHourChange={setHour}
             onClose={handleClose}
+            userId={userId}
+            onOpenProfile={() => { setShowProfile(true); setSelectedPlace(null) }}
           />
         </aside>
       )}
@@ -645,6 +730,8 @@ export default function HomePage() {
               hour={hour}
               onHourChange={setHour}
               onClose={handleClose}
+              userId={userId}
+              onOpenProfile={() => { setShowProfile(true); setSelectedPlace(null) }}
             />
           </div>
         </section>
