@@ -22,8 +22,11 @@ export const metadata: Metadata = {
     'Le radar des terrasses ensoleillées à Paris. Score soleil temps réel, vue 3D, fenêtre d’ensoleillement.',
   metadataBase: new URL('https://hopsoleil.fr'),  icons: {
     icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/logo-icon.png', type: 'image/png', sizes: '512x512' },
       { url: '/favicon.ico' },
+    ],
+    apple: [
+      { url: '/logo-icon.png', sizes: '512x512', type: 'image/png' },
     ],
   },  openGraph: {
     title: 'HopSoleil ☀',

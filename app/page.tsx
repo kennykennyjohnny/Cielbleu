@@ -23,8 +23,10 @@ function nowHalfHour(): number {
 const MapView = dynamic(() => import('@/components/Map/MapView'), {
   ssr: false,
   loading: () => (
-    // Fond neutre crème pendant le chargement JS du bundle — disparaît vite
-    <div className="absolute inset-0" style={{ background: '#fffcf3' }} />
+    <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#fffcf3' }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo-icon.png" alt="" style={{ width: 64, height: 64, opacity: 0.35 }} aria-hidden="true" />
+    </div>
   ),
 })
 
@@ -310,9 +312,9 @@ export default function HomePage() {
           {/* ── Colonne gauche : logo + widget météo ── */}
           <div className="pointer-events-none flex flex-col gap-2">
 
-            {/* Brand pill — DA v2 navy/gold */}
+            {/* Brand pill — logo réel */}
             <div
-              className="pointer-events-auto inline-flex items-center gap-1.5 pl-1 pr-3 py-1 rounded-full cursor-pointer"
+              className="pointer-events-auto inline-flex items-center pl-2 pr-3 py-1.5 rounded-full cursor-pointer"
               aria-label="Home — HopSoleil"
               role="button"
               tabIndex={0}
@@ -324,30 +326,12 @@ export default function HomePage() {
                 boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
               }}
             >
-              {/* Icône soleil DA v2 */}
-              <span
-                className="grid place-items-center w-8 h-8 rounded-full shrink-0"
-                style={{ background: '#EDC145', boxShadow: '0 3px 10px rgba(237,193,69,0.40)' }}
-                aria-hidden="true"
-              >
-                <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
-                  <line x1="12" y1="3" x2="12" y2="6" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
-                  <line x1="12" y1="18" x2="12" y2="21" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
-                  <line x1="3" y1="12" x2="6" y2="12" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
-                  <line x1="18" y1="12" x2="21" y2="12" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
-                  <line x1="5.6" y1="5.6" x2="7.8" y2="7.8" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
-                  <line x1="16.2" y1="16.2" x2="18.4" y2="18.4" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
-                  <line x1="18.4" y1="5.6" x2="16.2" y2="7.8" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
-                  <line x1="7.8" y1="16.2" x2="5.6" y2="18.4" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
-                  <circle cx="12" cy="12" r="4" fill="#1F3A5F"/>
-                </svg>
-              </span>
-              <span
-                className="font-extrabold text-[18px] leading-none"
-                style={{ fontFamily: 'var(--font-bricolage)', fontVariationSettings: "'wdth' 75", letterSpacing: '-0.03em', color: '#1F3A5F' }}
-              >
-                Hop<span style={{ color: '#EDC145' }}>Soleil</span>
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo-full.jpg"
+                alt="HopSoleil"
+                style={{ height: 38, width: 'auto', display: 'block' }}
+              />
             </div>
 
             {/* Widget météo — indépendant du slider, plus détaillé */}

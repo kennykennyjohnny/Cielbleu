@@ -272,11 +272,12 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           <div style={{ position: 'absolute', top: -24, right: -24, width: 110, height: 110,
             borderRadius: '50%', background: 'rgba(237,193,69,0.18)' }} />
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#EDC145',
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fff',
               boxShadow: '0 0 0 8px rgba(237,193,69,0.18), 0 8px 24px rgba(237,193,69,0.40)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 14px', fontSize: 28 }}>
-              ☀️
+              margin: '0 auto 14px', overflow: 'hidden' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-icon.png" alt="HopSoleil" style={{ width: 58, height: 58, objectFit: 'contain' }} />
             </div>
             <p style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em' }}>
               Connexion à HopSoleil
@@ -387,14 +388,15 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
         <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100,
           borderRadius: '50%', background: 'rgba(237,193,69,0.15)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
-          <div style={{ width: 52, height: 52, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
-            background: '#EDC145',
+          <div style={{ width: 52, height: 52, borderRadius: '50%', flexShrink: 0,
+            background: '#fff',
             boxShadow: '0 0 0 3px rgba(237,193,69,0.40)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             {profile?.avatar_url
               // eslint-disable-next-line @next/next/no-img-element
               ? <img src={profile.avatar_url} alt={displayNameResolved} width={52} height={52} style={{ objectFit: 'cover' }} />
-              : '☀️'}
+              : /* eslint-disable-next-line @next/next/no-img-element */
+                <img src="/logo-icon.png" alt="HopSoleil" style={{ width: 44, height: 44, objectFit: 'contain' }} />}
           </div>
           <div>
             <p style={{ margin: 0, fontWeight: 900, fontSize: 17, color: '#fff' }}>{displayNameResolved}</p>
