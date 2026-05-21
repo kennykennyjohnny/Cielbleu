@@ -691,6 +691,46 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="w-full h-full" />
+
+      {/* Orbit controls — rotate view around selected place */}
+      {focusPlace && (
+        <div
+          style={{
+            position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+            display: 'flex', flexDirection: 'column', gap: 6, zIndex: 10, pointerEvents: 'none',
+          }}
+        >
+          <button
+            onClick={() => {
+              const map = mapRef.current
+              if (!map) return
+              map.easeTo({ bearing: ((map.getBearing() - 30) % 360 + 360) % 360, duration: 600, essential: true })
+            }}
+            style={{
+              width: 38, height: 38, borderRadius: '50%', cursor: 'pointer', pointerEvents: 'auto',
+              background: 'rgba(255,252,243,0.95)', border: '1px solid rgba(20,32,51,0.15)',
+              boxShadow: '0 4px 14px rgba(11,31,58,0.20)', fontSize: 20,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b1f3a',
+            }}
+            aria-label="Pivoter à gauche"
+          >↺</button>
+          <button
+            onClick={() => {
+              const map = mapRef.current
+              if (!map) return
+              map.easeTo({ bearing: ((map.getBearing() + 30) % 360 + 360) % 360, duration: 600, essential: true })
+            }}
+            style={{
+              width: 38, height: 38, borderRadius: '50%', cursor: 'pointer', pointerEvents: 'auto',
+              background: 'rgba(255,252,243,0.95)', border: '1px solid rgba(20,32,51,0.15)',
+              boxShadow: '0 4px 14px rgba(11,31,58,0.20)', fontSize: 20,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b1f3a',
+            }}
+            aria-label="Pivoter à droite"
+          >↻</button>
+        </div>
+      )}
+
       {amenite && (
         <FicheAmenite
           amenite={amenite}

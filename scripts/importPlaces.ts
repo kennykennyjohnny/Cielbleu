@@ -19,16 +19,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Grille 8×8 — couvre Paris + petite couronne (92/93/94) à rayon 900m
-// ~64 × 5 types × 60 résultats max théorique, avec radius réduit pour mieux capter
+// Grille 10×10 — couvre Paris + petite couronne (92/93/94) à rayon 900m
+// ~100 × 5 types × 60 résultats max théorique, avec radius réduit pour mieux capter
 // la densité dans les zones chargées (Bastille, Marais, Champs-Élysées...)
 const PARIS_GRID = (() => {
   const points: { lat: number; lng: number }[] = []
-  // Bornes Paris + petite couronne : lat 48.80→48.92, lng 2.22→2.48
-  // 8 lignes lat, 8 colonnes lng (= 64 points, ~1.7km entre chaque)
-  const LAT_MIN = 48.805, LAT_MAX = 48.918
-  const LNG_MIN = 2.224, LNG_MAX = 2.480
-  const ROWS = 8, COLS = 8
+  // Bornes Paris + petite couronne : lat 48.80→48.94, lng 2.21→2.49
+  // 10 lignes lat, 10 colonnes lng (= 100 points, couvre mieux 92/93/94)
+  const LAT_MIN = 48.800, LAT_MAX = 48.942
+  const LNG_MIN = 2.210, LNG_MAX = 2.490
+  const ROWS = 10, COLS = 10
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       points.push({
@@ -138,7 +138,7 @@ async function upsertPlaces(places: GooglePlace[], type: string) {
 }
 
 async function main() {
-  console.log('🗺  Import CielBleu — Google Places → Supabase')
+  console.log('🗺  Import HopSoleil — Google Places → Supabase')
   console.log(`   ${PARIS_GRID.length} points × ${PLACE_TYPES.length} types\n`)
 
   let total = 0

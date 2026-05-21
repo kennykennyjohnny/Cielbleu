@@ -179,6 +179,7 @@ export default function HomePage() {
   const handlePlaceSelect = useCallback(async (place: Place | null) => {
     if (!place) { setSelectedPlace(null); return }
     setSelectedPlace(place)
+    setSearchQuery('')
     setSheetMode('half')
     const now = new Date()
     const month = now.getMonth() + 1
@@ -250,31 +251,52 @@ export default function HomePage() {
             </span>
           </div>
 
-          {/* Radar pill : nombre */}
-          {!loading && displayedPlaces.length > 0 && (
-            <div
-              className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full"
+          {/* Heure + Maintenant + count pill */}
+          <div
+            className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shrink-0"
+            style={{
+              background: 'rgba(255,255,255,0.86)',
+              border: '1px solid rgba(20,32,51,0.10)',
+              boxShadow: '0 6px 22px rgba(11,31,58,0.10)',
+              backdropFilter: 'blur(16px)',
+            }}
+          >
+            <input
+              type="range" min={6} max={23.5} step={0.5}
+              value={hour}
+              onChange={(e) => setHour(parseFloat(e.target.value))}
+              className="cb-hour-slider"
+              style={{ width: 68, height: 20 }}
+              aria-label="Heure du soleil"
+            />
+            <span className="font-outfit" style={{ fontSize: 10, fontWeight: 800, color: '#0b1f3a', minWidth: 26, textAlign: 'right' }}>
+              {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
+            </span>
+            <button
+              onClick={() => setHour(nowHalfHour())}
+              aria-label="Maintenant"
+              title="Revenir à l'heure actuelle"
+              className="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-full transition-colors"
               style={{
-                background: 'rgba(255,255,255,0.86)',
-                border: '1px solid rgba(20,32,51,0.10)',
-                boxShadow: '0 6px 22px rgba(11,31,58,0.10)',
-                backdropFilter: 'blur(16px)',
+                background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#ffb703' : 'rgba(20,32,51,0.07)',
+                color: '#0b1f3a',
               }}
-            >
-              <span className="font-fraunces font-bold text-[14px] text-navy-900 leading-none">
-                {displayedPlaces.length}
-              </span>
-              {sunnyCount > 0 && (
-                <>
-                  <span aria-hidden="true" className="w-1 h-1 rounded-full bg-text-soft/40" />
-                  <span className="font-outfit font-bold text-[11.5px] text-sun-700 leading-none flex items-center gap-1">
-                    <span aria-hidden="true">☀</span>
-                    {sunnyCount}
+            >⊙</button>
+            {!loading && displayedPlaces.length > 0 && (
+              <>
+                <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(20,32,51,0.15)' }} />
+                <span className="font-bold text-[13px] leading-none" style={{ color: '#0b1f3a' }}>
+                  {displayedPlaces.length}
+                </span>
+                {sunnyCount > 0 && (
+                  <span className="font-bold text-[11px] leading-none flex items-center gap-0.5"
+                    style={{ color: '#f77f00' }}>
+                    <span aria-hidden="true">☀</span>{sunnyCount}
                   </span>
-                </>
-              )}
-            </div>
-          )}
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {/* Date subtile sous le brand pill */}
@@ -346,47 +368,33 @@ export default function HomePage() {
             </ul>
           )}
 
-          {/* ── Ligne 1 : Search ── */}
-          <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
-            <Search size={13} strokeWidth={2.5} className="shrink-0 text-text-soft" />
-            <input
-              id="search-places" type="text"
-              placeholder="Bar, terrasse, café, 11e…"
-              aria-label="Rechercher un lieu"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-transparent outline-none font-semibold text-text-primary placeholder:text-text-soft/70"
-              style={{ fontSize: 13.5 }}
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} aria-label="Effacer" className="p-1 rounded-full text-text-soft hover:bg-surface-2 shrink-0">
-                <X size={12} strokeWidth={2.2} />
-              </button>
-            )}
+          {/* ── Recherche : centrée, max 280px ── */}
+          <div className="flex justify-center px-3 pt-2 pb-1">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full w-full"
+              style={{ maxWidth: 280, background: 'rgba(255,255,255,0.5)', border: '1px solid rgba(20,32,51,0.08)' }}>
+              <Search size={13} strokeWidth={2.5} className="shrink-0 text-text-soft" />
+              <input
+                id="search-places" type="text"
+                placeholder="Bar, terrasse, café, 11e…"
+                aria-label="Rechercher un lieu"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') { setSearchQuery(''); e.currentTarget.blur() } }}
+                className="flex-1 min-w-0 bg-transparent outline-none font-semibold text-text-primary placeholder:text-text-soft/70"
+                style={{ fontSize: 13 }}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} aria-label="Effacer"
+                  className="p-0.5 rounded-full text-text-soft hover:bg-surface-2 shrink-0">
+                  <X size={12} strokeWidth={2.2} />
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* ── Ligne 2 : Filtres + slider heure ── */}
-          <div className="flex items-center pb-2.5 pt-0 gap-0" style={{ minHeight: 38 }}>
-            <div className="flex-1 min-w-0 overflow-hidden">
-              <Filters activeFilters={activeFilters} onToggle={toggleFilter} compact />
-            </div>
-            <div
-              className="flex items-center gap-1.5 shrink-0 px-3"
-              style={{ borderLeft: '1px solid rgba(20,32,51,0.09)' }}
-            >
-              <input
-                type="range" min={6} max={23.5} step={0.5}
-                value={hour}
-                onChange={(e) => setHour(parseFloat(e.target.value))}
-                className="cb-hour-slider"
-                style={{ width: 76, height: 22 }}
-                aria-label="Heure du soleil"
-              />
-              <span className="font-outfit" style={{ fontSize: 10.5, fontWeight: 800, color: '#6f7a8a', minWidth: 27, textAlign: 'right' }}>
-                {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
-              </span>
-              <span aria-hidden="true" style={{ fontSize: 13 }}>☀</span>
-            </div>
+          {/* ── Filtres ── */}
+          <div className="pb-2 pt-0" style={{ minHeight: 36 }}>
+            <Filters activeFilters={activeFilters} onToggle={toggleFilter} compact />
           </div>
         </div>
       </div>
