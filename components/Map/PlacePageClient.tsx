@@ -136,6 +136,12 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
   const [commentText, setCommentText] = useState('')
   const [commentSending, setCommentSending] = useState(false)
   const [commentSent, setCommentSent] = useState(false)
+  const [reviews, setReviews]       = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null }[]>([])
+
+  // ── Favorites state ─────────────────────────────────────────────────────────
+  const [isFavorite, setIsFavorite]   = useState(false)
+  const [favoriteId, setFavoriteId]   = useState<string | null>(null)
+  const [favLoading, setFavLoading]   = useState(false)
 
   // Génère / récupère un device_id persistant pour les votes anonymes
   const deviceId = useMemo<string>(() => {
@@ -245,7 +251,52 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     setCommentSent(true)
     setCommentText('')
     setTimeout(() => setCommentSent(false), 3000)
-  }, [userId, commentText, place.id, deviceId])
+    // Recharge les avis
+    loadReviews()
+  }, [userId, commentText, place.id, deviceId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch reviews ────────────────────────────────────────────────────────────
+  const loadReviews = useCallback(async () => {
+    const { data } = await supabase
+      .from('reviews')
+      .select('id, comment, created_at, profile:profiles(display_name)')
+      .eq('place_id', place.id)
+      .not('comment', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(10)
+    if (data) {
+      setReviews(data.map((r: { id: string; comment: string | null; created_at: string; profile?: { display_name?: string | null } | null | { display_name?: string | null }[] }) => ({
+        id: r.id,
+        comment: r.comment,
+        created_at: r.created_at,
+        display_name: Array.isArray(r.profile) ? r.profile[0]?.display_name : (r.profile as { display_name?: string | null } | null)?.display_name,
+      })))
+    }
+  }, [place.id])
+
+  useEffect(() => { loadReviews() }, [loadReviews])
+
+  // ── Favorites ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!userId) { setIsFavorite(false); setFavoriteId(null); return }
+    let cancelled = false
+    supabase.from('favorites').select('id').eq('user_id', userId).eq('place_id', place.id).single()
+      .then(({ data }) => { if (!cancelled && data) { setIsFavorite(true); setFavoriteId(data.id) }})
+    return () => { cancelled = true }
+  }, [userId, place.id])
+
+  const handleToggleFavorite = useCallback(async () => {
+    if (!userId) { onOpenProfile?.(); return }
+    setFavLoading(true)
+    if (isFavorite && favoriteId) {
+      await supabase.from('favorites').delete().eq('id', favoriteId)
+      setIsFavorite(false); setFavoriteId(null)
+    } else {
+      const { data } = await supabase.from('favorites').insert({ user_id: userId, place_id: place.id }).select('id').single()
+      if (data) { setIsFavorite(true); setFavoriteId(data.id) }
+    }
+    setFavLoading(false)
+  }, [userId, isFavorite, favoriteId, place.id, onOpenProfile])
 
   return (
     <div style={{ background:'transparent', fontFamily:'var(--font-outfit)', color:'#142033' }}>
@@ -282,6 +333,22 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         </div>
 
         <div style={{ flex:1 }} />
+
+        {/* ❤️ Bouton favori */}
+        <button
+          onClick={handleToggleFavorite}
+          disabled={favLoading}
+          aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+          style={{
+            flexShrink: 0,
+            width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer',
+            background: isFavorite ? 'rgba(255,99,99,0.12)' : 'rgba(20,32,51,0.06)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 17, transition: 'all 150ms',
+          }}
+        >
+          {isFavorite ? '❤️' : '🤍'}
+        </button>
 
         <div style={{ flexShrink:0, minWidth:60, textAlign:'center',
           background:isNow ? 'rgba(255,183,3,0.92)' : 'rgba(20,32,51,0.06)',
@@ -649,6 +716,33 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
             </button>
           )
         }
+
+        {/* ── Avis publiés ── */}
+        {reviews.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <p style={{ ...EYEBROW, marginBottom: 12 }}>Avis des visiteurs</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {reviews.map(r => (
+                <div key={r.id} style={{
+                  borderRadius: 16, padding: '12px 14px',
+                  background: 'rgba(31,58,95,0.04)', border: '1px solid rgba(31,58,95,0.08)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: '#1F3A5F' }}>
+                      {r.display_name ?? 'Anonyme'}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600 }}>
+                      {new Date(r.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1F3A5F', lineHeight: 1.5 }}>
+                    {r.comment}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Vote toast */}

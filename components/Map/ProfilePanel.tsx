@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ArrowLeft, LogOut, Heart, MessageSquare, Users, Star, MapPin } from 'lucide-react'
+import { ArrowLeft, LogOut, Heart, MessageSquare, Users, MapPin } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -259,23 +259,47 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           <p style={{ margin: 0, fontSize: 16, fontWeight: 900 }}>Mon profil</p>
         </div>
 
-        {/* Hero */}
-        <div style={{ textAlign: 'center', padding: '28px 20px 20px' }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(237,193,69,0.20)',
-            border: '2px solid rgba(237,193,69,0.40)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', margin: '0 auto 12px', fontSize: 28 }}>
-            ☀️
+        {/* Hero card */}
+        <div style={{
+          margin: '18px 16px 0',
+          borderRadius: 22,
+          background: 'linear-gradient(135deg, #1F3A5F 0%, #2d527a 100%)',
+          padding: '26px 20px 24px',
+          textAlign: 'center',
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          <div style={{ position: 'absolute', top: -24, right: -24, width: 110, height: 110,
+            borderRadius: '50%', background: 'rgba(237,193,69,0.18)' }} />
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#EDC145',
+              boxShadow: '0 0 0 8px rgba(237,193,69,0.18), 0 8px 24px rgba(237,193,69,0.40)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 14px', fontSize: 28 }}>
+              ☀️
+            </div>
+            <p style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em' }}>
+              Connexion à HopSoleil
+            </p>
+            <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.65)', fontWeight: 600, lineHeight: 1.5 }}>
+              Sauvegarde tes terrasses favorites,<br />note l&apos;ensoleillement, retrouve tes amis.
+            </p>
           </div>
-          <p style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#1F3A5F' }}>
-            Connexion à HopSoleil
-          </p>
-          <p style={{ margin: '6px 0 0', fontSize: 13, color: 'rgba(31,58,95,0.55)', fontWeight: 600 }}>
-            Sauvegarde tes terrasses favorites,<br />note l'ensoleillement, retrouve tes amis.
-          </p>
+        </div>
+
+        {/* Ce que tu débloques — row d'icônes */}
+        <div style={{ display: 'flex', gap: 8, margin: '12px 16px 0' }}>
+          {[{ icon: '❤️', label: 'Favoris' }, { icon: '☀️', label: 'Votes' }, { icon: '✍️', label: 'Avis' }, { icon: '👥', label: 'Amis' }].map(({ icon, label }) => (
+            <div key={label} style={{ flex: 1, borderRadius: 14, padding: '10px 4px', textAlign: 'center',
+              background: 'rgba(31,58,95,0.05)', border: '1px solid rgba(31,58,95,0.08)' }}>
+              <span style={{ fontSize: 18, display: 'block', marginBottom: 4 }}>{icon}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(31,58,95,0.55)' }}>{label}</span>
+            </div>
+          ))}
         </div>
 
         {/* Tab switcher */}
-        <div style={{ display: 'flex', gap: 6, margin: '0 16px 20px',
+        <div style={{ display: 'flex', gap: 6, margin: '20px 16px 16px',
           background: 'rgba(31,58,95,0.06)', borderRadius: 14, padding: 4 }}>
           {(['login', 'register'] as AuthTab[]).map(t => (
             <button key={t} onClick={() => { setAuthTab(t); setError(null); setMessage(null) }}
@@ -285,8 +309,9 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                 background: authTab === t ? '#fff' : 'transparent',
                 color: authTab === t ? '#1F3A5F' : 'rgba(31,58,95,0.45)',
                 boxShadow: authTab === t ? '0 2px 8px rgba(31,58,95,0.10)' : 'none',
+                transition: 'all 150ms',
               }}>
-              {t === 'login' ? 'Connexion' : 'Inscription'}
+              {t === 'login' ? 'Se connecter' : 'Créer un compte'}
             </button>
           ))}
         </div>
@@ -320,22 +345,6 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           </button>
         </form>
 
-        {/* Avantages */}
-        <div style={{ margin: '24px 16px 0' }}>
-          <p style={EYEBROW}>Ce que tu débloques</p>
-          {[
-            { icon: <Heart size={14} />, label: 'Tes terrasses favorites' },
-            { icon: <Star size={14} />, label: 'Confirmer l\'ensoleillement' },
-            { icon: <MessageSquare size={14} />, label: 'Laisser un avis' },
-            { icon: <Users size={14} />, label: 'Inviter des amis' },
-          ].map(({ icon, label }, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 0', borderBottom: i < 3 ? '1px solid rgba(31,58,95,0.06)' : 'none' }}>
-              <span style={{ color: '#EDC145', flexShrink: 0 }}>{icon}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1F3A5F' }}>{label}</span>
-            </div>
-          ))}
-        </div>
       </div>
     )
   }
@@ -367,28 +376,56 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
         </button>
       </div>
 
-      {/* Avatar + name */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 16px 14px' }}>
-        <div style={{ width: 52, height: 52, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
-          background: 'rgba(237,193,69,0.22)', border: '2px solid rgba(237,193,69,0.40)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-          {profile?.avatar_url
-            // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={profile.avatar_url} alt={displayNameResolved} width={52} height={52} style={{ objectFit: 'cover' }} />
-            : '☀️'}
+      {/* Carte avatar + stats */}
+      <div style={{
+        margin: '16px 16px 0',
+        borderRadius: 22,
+        background: 'linear-gradient(135deg, #1F3A5F 0%, #2d527a 100%)',
+        padding: '20px 20px 18px',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100,
+          borderRadius: '50%', background: 'rgba(237,193,69,0.15)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
+          <div style={{ width: 52, height: 52, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
+            background: '#EDC145',
+            boxShadow: '0 0 0 3px rgba(237,193,69,0.40)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+            {profile?.avatar_url
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={profile.avatar_url} alt={displayNameResolved} width={52} height={52} style={{ objectFit: 'cover' }} />
+              : '☀️'}
+          </div>
+          <div>
+            <p style={{ margin: 0, fontWeight: 900, fontSize: 17, color: '#fff' }}>{displayNameResolved}</p>
+            {profile?.username && (
+              <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>
+                @{profile.username}
+              </p>
+            )}
+          </div>
         </div>
-        <div>
-          <p style={{ margin: 0, fontWeight: 900, fontSize: 17, color: '#1F3A5F' }}>{displayNameResolved}</p>
-          {profile?.username && (
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.50)', fontWeight: 700 }}>
-              @{profile.username}
-            </p>
-          )}
+        {/* Stats row */}
+        <div style={{ display: 'flex', gap: 0, marginTop: 16, position: 'relative', zIndex: 1,
+          borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14 }}>
+          {[
+            { value: favorites.length, label: 'Favoris', icon: '❤️' },
+            { value: acceptedFriends.length, label: 'Amis', icon: '👥' },
+            { value: pendingRequests.length, label: 'Demandes', icon: '🔔' },
+          ].map(({ value, label, icon }, i) => (
+            <div key={label} style={{ flex: 1, textAlign: 'center',
+              borderRight: i < 2 ? '1px solid rgba(255,255,255,0.10)' : 'none' }}>
+              <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#EDC145', lineHeight: 1 }}>{value}</p>
+              <p style={{ margin: '3px 0 0', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.55)', lineHeight: 1 }}>
+                {icon} {label}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, margin: '0 16px 18px',
+      <div style={{ display: 'flex', gap: 6, margin: '16px 16px 18px',
         background: 'rgba(31,58,95,0.06)', borderRadius: 14, padding: 4 }}>
         {([
           { id: 'favoris', label: 'Favoris', icon: <Heart size={12} /> },

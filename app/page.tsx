@@ -384,12 +384,65 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* ── Colonne droite : profil + slider ── */}
-          <div className="pointer-events-none flex flex-col items-end gap-2">
+          {/* ── Colonne droite : slider + profil (en ligne) ── */}
+          <div className="pointer-events-none flex flex-row items-center gap-2">
+
+            {/* Slider heure + Maintenant + count — DA v2 */}
+            <div
+              className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shrink-0"
+              style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(31,58,95,0.12)',
+                boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
+              }}
+            >
+              <input
+                type="range" min={6} max={23.5} step={0.5}
+                value={hour}
+                onChange={(e) => setHour(parseFloat(e.target.value))}
+                className="cb-hour-slider"
+                style={{ width: 96, height: 20 }}
+                aria-label="Heure du soleil"
+              />
+              {/* Heure sélectionnée */}
+              <span className="font-outfit shrink-0" style={{ fontSize: 10, fontWeight: 800, color: '#1F3A5F', minWidth: 26 }}>
+                {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
+              </span>
+              <button
+                onClick={() => setHour(nowHalfHour())}
+                aria-label="Voir les terrasses en ce moment"
+                title="Voir les terrasses en ce moment"
+                className="shrink-0 inline-flex items-center gap-1 font-bold rounded-full transition-all duration-150 active:scale-[0.95]"
+                style={{
+                  fontSize: 10.5, paddingLeft: 7, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
+                  background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.07)',
+                  color: '#1F3A5F',
+                  border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.50)' : 'transparent'}`,
+                  boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.35)' : 'none',
+                }}
+              >
+                <Clock size={10} strokeWidth={2.5} />
+                Maintenant
+              </button>
+              {!loading && displayedPlaces.length > 0 && (
+                <>
+                  <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(31,58,95,0.15)' }} />
+                  <span className="font-bold text-[13px] leading-none" style={{ color: '#1F3A5F' }}>
+                    {displayedPlaces.length}
+                  </span>
+                  {sunnyCount > 0 && (
+                    <span className="font-bold text-[11px] leading-none flex items-center gap-0.5"
+                      style={{ color: '#EDC145' }}>
+                      <span aria-hidden="true">☀</span>{sunnyCount}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
 
             {/* Bouton profil */}
             <button
-              className="pointer-events-auto inline-flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full"
+              className="pointer-events-auto inline-flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full shrink-0"
               onClick={() => { setShowProfile(p => !p); setSelectedPlace(null); setSelectedAmenite(null) }}
               aria-label="Mon profil"
               style={{
@@ -407,59 +460,6 @@ export default function HomePage() {
                 {userId ? 'Profil' : 'Connexion'}
               </span>
             </button>
-
-            {/* Slider heure + Maintenant + count — DA v2, SANS météo */}
-            <div
-              className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shrink-0"
-            style={{
-              background: '#FFFFFF',
-              border: '1.5px solid rgba(31,58,95,0.12)',
-              boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
-            }}
-          >
-            <input
-              type="range" min={6} max={23.5} step={0.5}
-              value={hour}
-              onChange={(e) => setHour(parseFloat(e.target.value))}
-              className="cb-hour-slider"
-              style={{ width: 68, height: 20 }}
-              aria-label="Heure du soleil"
-            />
-            {/* Heure sélectionnée */}
-            <span className="font-outfit shrink-0" style={{ fontSize: 10, fontWeight: 800, color: '#1F3A5F', minWidth: 26 }}>
-              {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
-            </span>
-            <button
-              onClick={() => setHour(nowHalfHour())}
-              aria-label="Voir les terrasses en ce moment"
-              title="Voir les terrasses en ce moment"
-              className="shrink-0 inline-flex items-center gap-1 font-bold rounded-full transition-all duration-150 active:scale-[0.95]"
-              style={{
-                fontSize: 10.5, paddingLeft: 7, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
-                background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.07)',
-                color: Math.abs(hour - nowHalfHour()) < 0.3 ? '#1F3A5F' : '#1F3A5F',
-                border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.50)' : 'transparent'}`,
-                boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.35)' : 'none',
-              }}
-            >
-              <Clock size={10} strokeWidth={2.5} />
-              Maintenant
-            </button>
-            {!loading && displayedPlaces.length > 0 && (
-              <>
-                <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(31,58,95,0.15)' }} />
-                <span className="font-bold text-[13px] leading-none" style={{ color: '#1F3A5F' }}>
-                  {displayedPlaces.length}
-                </span>
-                {sunnyCount > 0 && (
-                  <span className="font-bold text-[11px] leading-none flex items-center gap-0.5"
-                    style={{ color: '#EDC145' }}>
-                    <span aria-hidden="true">☀</span>{sunnyCount}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
           </div>{/* fin colonne droite */}
         </div>
 
@@ -509,8 +509,11 @@ export default function HomePage() {
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 10px)' }}
       >
         <div
-          className="pointer-events-auto mx-3 rounded-2xl overflow-hidden"
+          className="pointer-events-auto rounded-2xl overflow-hidden"
           style={{
+            margin: '0 auto',
+            width: 'calc(100% - 24px)',
+            maxWidth: 500,
             background: 'rgba(255,255,255,0.97)',
             border: '1.5px solid rgba(31,58,95,0.10)',
             backdropFilter: 'blur(24px)',
@@ -643,6 +646,8 @@ export default function HomePage() {
           <FicheAmenitePanel
             amenite={selectedAmenite}
             onClose={() => setSelectedAmenite(null)}
+            userId={userId}
+            onOpenProfile={() => { setShowProfile(true); setSelectedAmenite(null) }}
           />
         </aside>
       )}
@@ -668,6 +673,8 @@ export default function HomePage() {
             <FicheAmenitePanel
               amenite={selectedAmenite}
               onClose={() => setSelectedAmenite(null)}
+              userId={userId}
+              onOpenProfile={() => { setShowProfile(true); setSelectedAmenite(null) }}
             />
           </div>
         </section>

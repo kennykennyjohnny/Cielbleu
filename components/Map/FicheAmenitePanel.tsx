@@ -6,13 +6,16 @@
  * Même emplacement et même comportement que PlacePageClient.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ArrowLeft, Navigation } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import type { AmeniteInfo } from '@/types'
 
 interface Props {
   amenite: AmeniteInfo
   onClose: () => void
+  userId?: string | null
+  onOpenProfile?: () => void
 }
 
 const CHIP_STYLE = (color: string): React.CSSProperties => ({
@@ -23,12 +26,58 @@ const CHIP_STYLE = (color: string): React.CSSProperties => ({
   lineHeight: 1.3,
 })
 
-export default function FicheAmenitePanel({ amenite, onClose }: Props) {
+export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProfile }: Props) {
   const [svError, setSvError] = useState(false)
+  const [reviews, setReviews] = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null }[]>([])
+  const [commentText, setCommentText] = useState('')
+  const [commentSending, setCommentSending] = useState(false)
+  const [commentSent, setCommentSent] = useState(false)
+
+  const ameniteKey = `${amenite.lat.toFixed(6)}_${amenite.lng.toFixed(6)}`
+
+  const loadReviews = useCallback(async () => {
+    const { data } = await supabase
+      .from('reviews')
+      .select('id, comment, created_at, profile:profiles(display_name)')
+      .eq('amenite_key', ameniteKey)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (data) {
+      setReviews(data.map((r: { id: string; comment: string | null; created_at: string; profile?: { display_name?: string | null } | null | { display_name?: string | null }[] }) => ({
+        id: r.id,
+        comment: r.comment,
+        created_at: r.created_at,
+        display_name: Array.isArray(r.profile)
+          ? r.profile[0]?.display_name
+          : (r.profile as { display_name?: string | null } | null)?.display_name,
+      })))
+    }
+  }, [ameniteKey])
 
   useEffect(() => {
     setSvError(false)
-  }, [amenite.lat, amenite.lng])
+    setCommentSent(false)
+    setCommentText('')
+    loadReviews()
+  }, [amenite.lat, amenite.lng, loadReviews])
+
+  async function handleCommentSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!commentText.trim() || !userId) return
+    setCommentSending(true)
+    await supabase.from('reviews').insert({
+      amenite_key: ameniteKey,
+      place_id: null,
+      device_id: 'auth',
+      rating: 3,
+      user_id: userId,
+      comment: commentText.trim(),
+    })
+    setCommentSending(false)
+    setCommentSent(true)
+    setCommentText('')
+    loadReviews()
+  }
 
   const p          = amenite.props
   const isFontaine = amenite.type === 'fontaine'
@@ -197,6 +246,80 @@ export default function FicheAmenitePanel({ amenite, onClose }: Props) {
               Sanitaire public automatique.<br />
               Accès libre, nettoyage automatique entre chaque utilisation.
             </p>
+          )}
+        </div>
+        {/* ── ESPACE COMMUNAUTAIRE ── */}
+        <div style={{ borderTop: '1px solid rgba(20,32,51,0.07)', marginTop: 6, paddingTop: 18, paddingBottom: 20 }}>
+          <p style={{ margin: '0 0 14px', color: 'rgba(31,58,95,0.45)', fontSize: 11, fontWeight: 800,
+            textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+            Avis
+          </p>
+
+          {userId
+            ? (
+              commentSent
+                ? <p style={{ fontSize: 13, fontWeight: 800, color: '#34A853', textAlign: 'center', padding: '8px 0' }}>Merci pour ton avis ! 👍</p>
+                : (
+                  <form onSubmit={handleCommentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <textarea
+                      value={commentText}
+                      onChange={e => setCommentText(e.target.value)}
+                      placeholder={`Partage ton expérience sur cette ${isFontaine ? 'fontaine' : 'sanisette'}…`}
+                      rows={2}
+                      maxLength={300}
+                      style={{
+                        width: '100%', borderRadius: 14, padding: '11px 13px',
+                        border: '1.5px solid rgba(31,58,95,0.12)',
+                        background: 'rgba(31,58,95,0.04)',
+                        fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 600,
+                        color: '#1F3A5F', resize: 'none', outline: 'none', boxSizing: 'border-box',
+                      }}
+                    />
+                    <button type="submit" disabled={commentSending || !commentText.trim()}
+                      style={{
+                        height: 42, borderRadius: 12, border: 'none', cursor: 'pointer',
+                        fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 13,
+                        background: commentText.trim() ? '#1F3A5F' : 'rgba(31,58,95,0.08)',
+                        color: commentText.trim() ? '#fff' : 'rgba(31,58,95,0.35)',
+                        transition: 'all 150ms',
+                      }}
+                    >
+                      {commentSending ? '…' : 'Publier'}
+                    </button>
+                  </form>
+                )
+            )
+            : (
+              <button onClick={onOpenProfile}
+                style={{
+                  width: '100%', height: 42, borderRadius: 12, border: '1.5px dashed rgba(31,58,95,0.20)',
+                  background: 'transparent', cursor: 'pointer',
+                  fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 13,
+                  color: 'rgba(31,58,95,0.55)',
+                }}
+              >
+                ✍️ Se connecter pour laisser un avis
+              </button>
+            )
+          }
+
+          {reviews.length > 0 && (
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {reviews.map(r => (
+                <div key={r.id} style={{
+                  borderRadius: 14, padding: '11px 13px',
+                  background: 'rgba(31,58,95,0.04)', border: '1px solid rgba(31,58,95,0.08)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: '#1F3A5F' }}>{r.display_name ?? 'Anonyme'}</span>
+                    <span style={{ fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600 }}>
+                      {new Date(r.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1F3A5F', lineHeight: 1.5 }}>{r.comment}</p>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
