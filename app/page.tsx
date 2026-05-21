@@ -57,8 +57,8 @@ export default function HomePage() {
 
   useEffect(() => {
     fetch('/api/weather')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => data ? setWeather(data) : null)
+      .then(r => r.json().catch(() => null))
+      .then(data => (data?.current || data?.forecast?.length) ? setWeather(data) : null)
       .catch(() => null)
   }, [])
 
@@ -66,16 +66,13 @@ export default function HomePage() {
   const weatherForHour = useMemo(() => {
     if (!weather) return null
     const { current, forecast } = weather
-    if (!forecast.length) return current
-    // Trouve l'entrée dont l'heure locale est la plus proche du slider
-    const now = new Date()
-    const todayStart = new Date(now)
-    todayStart.setHours(0, 0, 0, 0)
-    const target = todayStart.getTime() / 1000 + hour * 3600
+    if (!forecast?.length) return current
+    // Utilise le champ `hour` (heure locale Paris 0-23) directement
+    const targetH = Math.floor(hour)
     let best = forecast[0]
-    let bestDiff = Math.abs(best.dt - target)
+    let bestDiff = Math.abs((best.hour ?? 0) - targetH)
     for (const entry of forecast) {
-      const diff = Math.abs(entry.dt - target)
+      const diff = Math.abs((entry.hour ?? 0) - targetH)
       if (diff < bestDiff) { best = entry; bestDiff = diff }
     }
     return best
@@ -404,7 +401,7 @@ export default function HomePage() {
       </header>
 
       {/* État vide */}
-      {!loading && displayedPlaces.length === 0 && (
+      {!loading && displayedPlaces.length === 0 && !activeFilters.some(f => f === 'fontaine' || f === 'sanisette') && (
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-10 pointer-events-none flex justify-center px-6">
           <div className="rounded-2xl bg-surface-0/95 px-6 py-4 shadow-lg max-w-xs text-center"
             style={{ border: '1px solid rgba(20,32,51,0.10)' }}>
@@ -415,6 +412,20 @@ export default function HomePage() {
             <p className="text-xs text-text-soft font-outfit mt-1">
               Désactive un filtre ou modifie ta recherche.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Message guidé quand filtre eau/WC actif sans autre filtre */}
+      {!loading && activeFilters.some(f => f === 'fontaine' || f === 'sanisette') && displayedPlaces.length === 0 && (
+        <div className="absolute inset-x-0 z-10 pointer-events-none flex justify-center px-6"
+          style={{ top: 'calc(max(env(safe-area-inset-top,0px),12px) + 70px)' }}>
+          <div className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-outfit text-xs font-bold"
+            style={{ background: 'rgba(255,252,243,0.95)', border: '1px solid rgba(20,32,51,0.10)',
+              boxShadow: '0 4px 18px rgba(11,31,58,0.12)', color: '#1B2838' }}>
+            {activeFilters.includes('fontaine') && <span>💧</span>}
+            {activeFilters.includes('sanisette') && <span>🚺</span>}
+            <span>Zoome pour voir les points d&apos;eau et sanitaires</span>
           </div>
         </div>
       )}
