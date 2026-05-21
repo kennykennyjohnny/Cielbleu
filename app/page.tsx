@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, X } from 'lucide-react'
+import { Search, X, Clock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Filters from '@/components/Map/Filters'
 import PlacePageClient from '@/components/Map/PlacePageClient'
@@ -274,14 +274,22 @@ export default function HomePage() {
             </span>
             <button
               onClick={() => setHour(nowHalfHour())}
-              aria-label="Maintenant"
-              title="Revenir à l'heure actuelle"
-              className="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-full transition-colors"
+              aria-label="Voir les terrasses en ce moment"
+              title="Voir les terrasses en ce moment"
+              className="shrink-0 inline-flex items-center gap-1 font-bold rounded-full transition-all duration-150 active:scale-[0.95]"
               style={{
-                background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#ffb703' : 'rgba(20,32,51,0.07)',
-                color: '#0b1f3a',
+                fontSize: 10.5, paddingLeft: 7, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
+                background: Math.abs(hour - nowHalfHour()) < 0.3
+                  ? 'linear-gradient(145deg,#ffe566 0%,#ffb703 100%)'
+                  : 'rgba(20,32,51,0.07)',
+                color: Math.abs(hour - nowHalfHour()) < 0.3 ? '#6b3d00' : '#0b1f3a',
+                border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(255,183,3,0.50)' : 'transparent'}`,
+                boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(255,183,3,0.30)' : 'none',
               }}
-            >⊙</button>
+            >
+              <Clock size={10} strokeWidth={2.5} />
+              Maintenant
+            </button>
             {!loading && displayedPlaces.length > 0 && (
               <>
                 <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(20,32,51,0.15)' }} />
