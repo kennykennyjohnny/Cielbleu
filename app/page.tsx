@@ -339,8 +339,22 @@ export default function HomePage() {
               style={{ width: 68, height: 20 }}
               aria-label="Heure du soleil"
             />
-            <span className="font-outfit" style={{ fontSize: 10, fontWeight: 800, color: '#0b1f3a', minWidth: 26, textAlign: 'right' }}>
+            {/* Heure + météo pour l'heure sélectionnée */}
+            <span className="font-outfit inline-flex items-center gap-1 shrink-0" style={{ fontSize: 10, fontWeight: 800, color: '#0b1f3a' }}>
               {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
+              {weatherForHour && (
+                <a
+                  href="https://meteofrance.com/previsions-meteo-france/paris/75000"
+                  target="_blank" rel="noopener noreferrer"
+                  title={weatherForHour.description}
+                  className="inline-flex items-center gap-0.5 shrink-0"
+                  style={{ textDecoration: 'none', color: '#0b1f3a' }}
+                  aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>{owmIconToEmoji(weatherForHour.icon)}</span>
+                  <span style={{ fontWeight: 900, fontSize: 11 }}>{weatherForHour.temp}°</span>
+                </a>
+              )}
             </span>
             <button
               onClick={() => setHour(nowHalfHour())}
@@ -372,26 +386,6 @@ export default function HomePage() {
                     <span aria-hidden="true">☀</span>{sunnyCount}
                   </span>
                 )}
-              </>
-            )}
-            {/* Pill météo — visible uniquement si l'API répond */}
-            {weatherForHour && (
-              <>
-                <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(20,32,51,0.15)' }} />
-                <a
-                  href="https://meteofrance.com/previsions-meteo-france/paris/75000"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={weatherForHour.description}
-                  className="inline-flex items-center gap-0.5 font-bold leading-none shrink-0"
-                  style={{ fontSize: 11, color: '#0b1f3a', textDecoration: 'none' }}
-                  aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C — voir sur Météo France`}
-                >
-                  <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>
-                    {owmIconToEmoji(weatherForHour.icon)}
-                  </span>
-                  <span>{weatherForHour.temp}°</span>
-                </a>
               </>
             )}
           </div>
