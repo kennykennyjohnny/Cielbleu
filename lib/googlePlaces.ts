@@ -61,3 +61,40 @@ export function getPhotoUrl(photoReference: string, maxWidth = 800): string {
 export function getGoogleMapsUrl(placeId: string): string {
   return `https://www.google.com/maps/place/?q=place_id:${placeId}`
 }
+
+export interface PlaceDetails {
+  place_id: string
+  opening_hours?: {
+    open_now?: boolean
+    periods?: Array<{
+      open: { day: number; time: string }
+      close?: { day: number; time: string }
+    }>
+    weekday_text?: string[]
+  }
+}
+
+/**
+ * Récupère les horaires d'ouverture d'un lieu via Place Details.
+ * Utilise UNIQUEMENT le champ `opening_hours` (facturation Contact Data : $0.003/requête).
+ * Retourne null si le lieu n'a pas d'horaires ou si l'API répond avec un statut d'erreur.
+ */
+export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_PLACES_API_KEY manquante')
+
+  const params = new URLSearchParams({
+    place_id: placeId,
+    fields: 'place_id,opening_hours',
+    key: apiKey,
+    language: 'fr',
+  })
+
+  const res = await fetch(`${BASE}/details/json?${params}`)
+  if (!res.ok) throw new Error(`Place Details erreur HTTP: ${res.status}`)
+
+  const data = await res.json() as { status: string; result?: PlaceDetails }
+  if (data.status !== 'OK') return null
+
+  return data.result ?? null
+}

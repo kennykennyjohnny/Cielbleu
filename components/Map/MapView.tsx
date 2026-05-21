@@ -296,6 +296,8 @@ interface Props {
   // true = affiche fontaines/sanisettes même dézoomé + highlight
   showFontaines?: boolean
   showSanisettes?: boolean
+  // true = anneau vert highlight derrière les pins parc
+  showPark?: boolean
 }
 
 interface AmeniteInfo {
@@ -305,7 +307,7 @@ interface AmeniteInfo {
   lng: number
 }
 
-export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes, showPark }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
@@ -324,7 +326,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     features: places.map((p) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-      properties: { id: p.id, score: Math.round(p.currentScore ?? 3), name: p.name },
+      properties: { id: p.id, score: Math.round(p.currentScore ?? 3), name: p.name, type: p.type },
     })),
   }), [places])
 
@@ -430,6 +432,21 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         paint: { 'text-color': '#ffffff' },
       })
 
+      // Highlight parc — anneau vert derrière les pins parc quand filtre Parc actif
+      map.addLayer({
+        id: 'park-highlight', type: 'circle', source: 'places',
+        filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'type'], 'park']],
+        layout: { visibility: 'none' },
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 22, 14, 36, 16, 52],
+          'circle-color': '#52b788',
+          'circle-opacity': 0.15,
+          'circle-stroke-color': '#52b788',
+          'circle-stroke-width': 2.5,
+          'circle-stroke-opacity': 0.5,
+        },
+      })
+
       // Pins individuels — symbol layer GPU-accelerated
       map.addLayer({
         id: 'places-pins', type: 'symbol', source: 'places',
@@ -443,33 +460,33 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         },
       })
 
-      // ── Fontaines à boire (cachées par défaut, activées via filtre 💧) ──
+      // ── Fontaines à boire — visibles à zoom ≥ 14, filtre 💧 = visible partout ──
       map.addSource('fontaines', { type: 'geojson', data: '/api/geo/fontaines' })
       map.addLayer({
         id: 'fontaines-layer', type: 'circle', source: 'fontaines',
         filter: ['==', ['get', 'dispo'], 'OUI'],
-        layout: { visibility: 'none' },
+        minzoom: 14,
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 4, 15, 7, 18, 11],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 5, 16, 8, 18, 13],
           'circle-color': '#3A86FF',
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': 2,
-          'circle-opacity': 0.85,
+          'circle-opacity': 0.9,
         },
       })
 
-      // ── Sanisettes (cachées par défaut, activées via filtre 🚻) ─────────
+      // ── Sanisettes — visibles à zoom ≥ 14, filtre 🚻 = visible partout ──────
       map.addSource('sanisettes', { type: 'geojson', data: '/api/geo/sanisettes' })
       map.addLayer({
         id: 'sanisettes-layer', type: 'circle', source: 'sanisettes',
         filter: ['==', ['get', 'statut'], 'En service'],
-        layout: { visibility: 'none' },
+        minzoom: 14,
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 4, 15, 7, 18, 11],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 5, 16, 8, 18, 13],
           'circle-color': '#52B788',
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': 2,
-          'circle-opacity': 0.85,
+          'circle-opacity': 0.9,
         },
       })
 
@@ -523,26 +540,24 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         }
       })
 
-      // Labels EAU / WC au zoom 16+
+      // Labels EAU / WC au zoom 15+
       map.addLayer({
         id: 'fontaines-label', type: 'symbol', source: 'fontaines',
-        filter: ['==', ['get', 'dispo'], 'OUI'], minzoom: 14,
+        filter: ['==', ['get', 'dispo'], 'OUI'], minzoom: 15,
         layout: {
-          visibility: 'none',
           'text-field': '💧', 'text-size': 14,
           'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
-          'text-offset': [0, -1.6], 'text-anchor': 'bottom', 'text-allow-overlap': false,
+          'text-offset': [0, -1.8], 'text-anchor': 'bottom', 'text-allow-overlap': false,
         },
         paint: { 'text-opacity': 0.95 },
       })
       map.addLayer({
         id: 'sanisettes-label', type: 'symbol', source: 'sanisettes',
-        filter: ['==', ['get', 'statut'], 'En service'], minzoom: 14,
+        filter: ['==', ['get', 'statut'], 'En service'], minzoom: 15,
         layout: {
-          visibility: 'none',
           'text-field': '🚻', 'text-size': 14,
           'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
-          'text-offset': [0, -1.6], 'text-anchor': 'bottom', 'text-allow-overlap': false,
+          'text-offset': [0, -1.8], 'text-anchor': 'bottom', 'text-allow-overlap': false,
         },
         paint: { 'text-opacity': 0.95 },
       })
@@ -722,27 +737,31 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     apply()
   }, [sunHour, sunLat, sunLng])
 
-  // ── Visibilité couches fontaines / sanisettes ──────────────────────────
-  // Cachées par défaut. Le filtre active/désactive la visibilité.
+  // ── Visibilité couches fontaines / sanisettes / park-highlight ──────────
+  // Fontaines/sanisettes : toujours visibles au zoom ≥ 14.
+  // Filtre actif → setLayerZoomRange(id, 0, 24) = visible à tous les zooms.
+  // Park highlight : anneau vert derrière les pins parc quand filtre parc actif.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
     const apply = () => {
-      const vis = (active: boolean) => active ? 'visible' : 'none' as const
-      const layers: Array<[string, boolean]> = [
-        ['fontaines-layer',  !!showFontaines],
-        ['fontaines-label',  !!showFontaines],
-        ['sanisettes-layer', !!showSanisettes],
-        ['sanisettes-label', !!showSanisettes],
-      ]
-      for (const [id, active] of layers) {
+      const fMin = showFontaines ? 0 : 14
+      const sMin = showSanisettes ? 0 : 14
+      for (const id of ['fontaines-layer', 'fontaines-label'] as const) {
         if (!map.getLayer(id)) continue
-        try { map.setLayoutProperty(id, 'visibility', vis(active)) } catch { /* noop */ }
+        try { map.setLayerZoomRange(id, fMin, 24) } catch { /* noop */ }
+      }
+      for (const id of ['sanisettes-layer', 'sanisettes-label'] as const) {
+        if (!map.getLayer(id)) continue
+        try { map.setLayerZoomRange(id, sMin, 24) } catch { /* noop */ }
+      }
+      if (map.getLayer('park-highlight')) {
+        try { map.setLayoutProperty('park-highlight', 'visibility', showPark ? 'visible' : 'none') } catch { /* noop */ }
       }
     }
     if (map.isStyleLoaded()) apply()
     else map.once('style.load', apply)
-  }, [showFontaines, showSanisettes])
+  }, [showFontaines, showSanisettes, showPark])
 
   return (
     <div className="absolute inset-0">

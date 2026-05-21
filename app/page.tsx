@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import Filters from '@/components/Map/Filters'
 import PlacePageClient from '@/components/Map/PlacePageClient'
 import { owmIconToEmoji } from '@/lib/weather'
+import { isOpenAt } from '@/lib/openingHours'
 import type { Place, FilterType, WeatherForecastEntry } from '@/types'
 
 type SheetMode = 'peek' | 'half' | 'full'
@@ -135,10 +136,8 @@ export default function HomePage() {
     if (typeFilters.length > 0) result = result.filter((p) => typeFilters.includes(p.type))
     if (activeFilters.includes('sun')) result = result.filter((p) => (p.currentScore ?? 0) >= 4)
     if (activeFilters.includes('open')) {
-      result = result.filter((p) => {
-        if (!p.opening_hours) return true
-        return (p.opening_hours as Record<string, unknown>).open_now !== false
-      })
+      const dayOfWeek = new Date().getDay()
+      result = result.filter((p) => isOpenAt(p.opening_hours ?? null, dayOfWeek, hour, p.type))
     }
 
     if (searchQuery.trim()) {
@@ -263,6 +262,7 @@ export default function HomePage() {
           homeView={homeViewCount}
           showFontaines={activeFilters.includes('fontaine')}
           showSanisettes={activeFilters.includes('sanisette')}
+          showPark={activeFilters.includes('park')}
         />
       </div>
 
