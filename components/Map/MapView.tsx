@@ -6,7 +6,7 @@
  * Pins colorés par score (0-5), regroupés en clusters au dézoom.
  */
 
-import { useEffect, useRef, useMemo, useState } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import type { Place, AmeniteInfo } from '@/types'

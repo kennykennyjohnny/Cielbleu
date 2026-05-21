@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { Search, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -121,7 +122,7 @@ export default function PlacePageShell({ place, scores }: Props) {
       {/* ─── Brand pill + retour (top-left) ─── */}
       <header className="absolute top-0 left-0 z-20 pointer-events-none"
         style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', paddingLeft: 12 }}>
-        <a href="/" className="pointer-events-auto inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full no-underline"
+        <Link href="/" className="pointer-events-auto inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full no-underline"
           aria-label="Retour à la carte"
           style={{
             background: 'rgba(255,255,255,0.92)',
@@ -139,7 +140,7 @@ export default function PlacePageShell({ place, scores }: Props) {
             style={{ fontFamily: 'var(--font-bricolage)', fontVariationSettings: "'wdth' 75", letterSpacing: '-0.03em', color: '#0b1f3a' }}>
             HopSoleil
           </span>
-        </a>
+        </Link>
       </header>
 
       {/* ─── Search bar : top-center, TOUJOURS visible ─── */}

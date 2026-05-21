@@ -52,11 +52,8 @@ const EYEBROW: React.CSSProperties = {
   textTransform:'uppercase', letterSpacing:'0.12em',
 }
 
-const INFO_ROW: React.CSSProperties = {
-  display:'flex', alignItems:'center', justifyContent:'space-between', gap:12,
-  padding:'12px 13px', borderRadius:18,
-  background:'rgba(255,255,255,0.68)', border:'1px solid rgba(20,32,51,0.08)',
-}
+// INFO_ROW kept for potential future use
+// const INFO_ROW: React.CSSProperties = { ... }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

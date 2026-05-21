@@ -85,7 +85,6 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
   const title       = isFontaine ? 'Fontaine à boire' : 'Sanisette'
   const emoji       = isFontaine ? '💧' : '🚻'
   const themeColor  = isFontaine ? '#1F3A5F' : '#1F3A5F'  // DA v2 — navy pour les deux
-  const accentColor  = isFontaine ? '#3A86FF' : '#34A853'  // bleu eau / vert WC pour les chips seulmt
 
   const status    = isFontaine
     ? (p.dispo === 'OUI' ? 'Disponible' : 'Indisponible')
@@ -99,7 +98,6 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
 
   const svSrc     = `/api/streetview?lat=${amenite.lat}&lng=${amenite.lng}&w=800&h=320&fov=80`
   const svLink    = `https://maps.google.com/?cbll=${amenite.lat},${amenite.lng}&cbp=12,0,0,0,0&layer=c`
-  const gmapsUrl  = `https://www.google.com/maps/dir/?api=1&destination=${amenite.lat},${amenite.lng}&travelmode=walking`
 
   return (
     <div style={{ background: 'transparent', fontFamily: 'var(--font-outfit)', color: '#142033' }}>
