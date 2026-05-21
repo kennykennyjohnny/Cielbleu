@@ -293,6 +293,9 @@ interface Props {
   sunHour?: number
   // Incrémenter ce compteur depuis l'extérieur provoque un flyTo vers le centre Paris (retour à la vue de base)
   homeView?: number
+  // true = affiche fontaines/sanisettes même dézoomé + highlight
+  showFontaines?: boolean
+  showSanisettes?: boolean
 }
 
 interface AmeniteInfo {
@@ -302,7 +305,7 @@ interface AmeniteInfo {
   lng: number
 }
 
-export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
@@ -717,6 +720,29 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     apply()
   }, [sunHour, sunLat, sunLng])
 
+  // ── Visibilité couches fontaines / sanisettes ──────────────────────────
+  // Par défaut : visibles à zoom ≥ 13 (minzoom). Quand le filtre est actif :
+  // visible dès zoom 1 + rayon légèrement agrandi pour mieux les voir.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const toggle = (layerIds: string[], active: boolean, baseMinzoom: number) => {
+      for (const id of layerIds) {
+        if (!map.getLayer(id)) continue
+        try {
+          map.setLayoutProperty(id, 'visibility', 'visible')
+          map.setLayerZoomRange(id, active ? 1 : baseMinzoom, 24)
+        } catch { /* noop */ }
+      }
+    }
+    const apply = () => {
+      toggle(['fontaines-layer', 'fontaines-label'], !!showFontaines, 13)
+      toggle(['sanisettes-layer', 'sanisettes-label'], !!showSanisettes, 13)
+    }
+    if (map.isStyleLoaded()) apply()
+    else map.once('style.load', apply)
+  }, [showFontaines, showSanisettes])
+
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="w-full h-full" />
@@ -779,6 +805,11 @@ function FicheAmenite({ amenite, map, onClose }: {
   onClose: () => void
 }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const [svError, setSvError] = useState(false)
+
+  useEffect(() => {
+    setSvError(false) // reset si on change d'amenite
+  }, [amenite.lat, amenite.lng])
 
   useEffect(() => {
     if (!map) return
@@ -804,10 +835,10 @@ function FicheAmenite({ amenite, map, onClose }: {
   const model    = isFontaine && p.modele ? String(p.modele) : null
   const adresse  = !isFontaine && p.adresse ? String(p.adresse) : null
 
-  const title       = isFontaine ? 'Fontaine à boire' : 'Sanisette'
-  const themeColor  = isFontaine ? '#3A86FF' : '#4F8F65'
-  const themeBgSoft = isFontaine ? 'rgba(58,134,255,0.10)' : 'rgba(79,143,101,0.10)'
-  const gmapsUrl    = `https://www.google.com/maps/dir/?api=1&destination=${amenite.lat},${amenite.lng}&travelmode=walking`
+  const title      = isFontaine ? 'Fontaine à boire' : 'Sanisette'
+  const themeColor = isFontaine ? '#3A86FF' : '#4F8F65'
+  const svSrc      = `/api/streetview?lat=${amenite.lat}&lng=${amenite.lng}&w=560&h=240&fov=80`
+  const gmapsUrl   = `https://www.google.com/maps/dir/?api=1&destination=${amenite.lat},${amenite.lng}&travelmode=walking`
 
   if (!pos) return null
 
@@ -819,7 +850,7 @@ function FicheAmenite({ amenite, map, onClose }: {
         position: 'absolute',
         left: pos.x, top: pos.y,
         transform: 'translate(-50%, calc(-100% - 18px))',
-        maxWidth: 280, width: 'calc(100vw - 28px)',
+        maxWidth: 290, width: 'calc(100vw - 28px)',
         zIndex: 25,
       }}
     >
@@ -828,15 +859,38 @@ function FicheAmenite({ amenite, map, onClose }: {
           boxShadow: '0 18px 40px rgba(11,31,58,0.20), 0 2px 10px rgba(11,31,58,0.10)',
           border: '1px solid rgba(20,32,51,0.08)' }}>
 
-        {/* Bandeau illustré */}
-        <div className="relative flex items-center justify-center"
-          style={{
-            height: 96,
-            background: `linear-gradient(135deg, ${themeBgSoft} 0%, ${themeColor}24 100%)`,
-          }}>
-          <span aria-hidden="true" style={{ fontSize: 56, lineHeight: 1 }}>
-            {isFontaine ? '💧' : '🚻'}
-          </span>
+        {/* Photo Street View ou fallback illustré */}
+        <div className="relative" style={{ height: 130, overflow: 'hidden' }}>
+          {!svError ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={svSrc}
+                alt="Vue depuis la rue"
+                onError={() => setSvError(true)}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+              {/* Label superposé */}
+              <div style={{
+                position: 'absolute', bottom: 8, left: 10,
+                background: 'rgba(11,31,58,0.60)', backdropFilter: 'blur(6px)',
+                borderRadius: 20, padding: '3px 10px',
+                fontFamily: 'var(--font-outfit)', fontSize: 11, fontWeight: 600, color: '#fff',
+              }}>
+                📸 Vue depuis la rue
+              </div>
+            </>
+          ) : (
+            /* Fallback : dégradé + emoji */
+            <div className="flex items-center justify-center w-full h-full"
+              style={{ background: `linear-gradient(135deg, ${themeColor}18 0%, ${themeColor}38 100%)` }}>
+              <span aria-hidden="true" style={{ fontSize: 64, lineHeight: 1, opacity: 0.85 }}>
+                {isFontaine ? '💧' : '🚻'}
+              </span>
+            </div>
+          )}
+
+          {/* Bouton fermer toujours visible */}
           <button onClick={onClose}
             className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center text-[13px]"
             style={{ background: 'rgba(255,253,247,0.92)', color: '#1B2838',
@@ -846,18 +900,18 @@ function FicheAmenite({ amenite, map, onClose }: {
 
         {/* Corps */}
         <div className="px-4 pt-3 pb-4">
-          <p className="font-fraunces text-[18px] font-bold leading-tight"
+          <p className="font-bricolage text-[17px] font-bold leading-tight"
             style={{ color: '#0b1f3a', letterSpacing: '-0.02em' }}>
             {title}
           </p>
           {adresse && (
-            <p className="font-outfit text-[12px] mt-1 leading-snug"
+            <p className="font-outfit text-[12px] mt-0.5 leading-snug"
               style={{ color: '#6f7a8a' }}>
               {adresse}
             </p>
           )}
 
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
             <Chip color={statusOk ? '#3D9A70' : '#E05252'}>
               {statusOk ? '● ' : '◯ '}{status}
             </Chip>

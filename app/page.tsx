@@ -6,7 +6,8 @@ import { Search, X, Clock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Filters from '@/components/Map/Filters'
 import PlacePageClient from '@/components/Map/PlacePageClient'
-import type { Place, FilterType } from '@/types'
+import { owmIconToEmoji } from '@/lib/weather'
+import type { Place, FilterType, WeatherForecastEntry } from '@/types'
 
 type SheetMode = 'peek' | 'half' | 'full'
 const SHEET_HEIGHTS: Record<SheetMode, string> = { peek: '20vh', half: '58vh', full: '92dvh' }
@@ -43,6 +44,39 @@ export default function HomePage() {
   const [isDesktop, setIsDesktop] = useState(false)
   const [homeViewCount, setHomeViewCount] = useState(0)
   const dragRef = useRef<{ y: number; mode: SheetMode } | null>(null)
+
+  // ── Météo ─────────────────────────────────────────────────────────────────────
+  interface WeatherResponse {
+    current: { temp: number; icon: string; description: string } | null
+    forecast: WeatherForecastEntry[]
+  }
+  const [weather, setWeather] = useState<WeatherResponse | null>(null)
+
+  useEffect(() => {
+    fetch('/api/weather')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => data ? setWeather(data) : null)
+      .catch(() => null)
+  }, [])
+
+  // Entrée de prévision la plus proche de l'heure du slider
+  const weatherForHour = useMemo(() => {
+    if (!weather) return null
+    const { current, forecast } = weather
+    if (!forecast.length) return current
+    // Trouve l'entrée dont l'heure locale est la plus proche du slider
+    const now = new Date()
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
+    const target = todayStart.getTime() / 1000 + hour * 3600
+    let best = forecast[0]
+    let bestDiff = Math.abs(best.dt - target)
+    for (const entry of forecast) {
+      const diff = Math.abs(entry.dt - target)
+      if (diff < bestDiff) { best = entry; bestDiff = diff }
+    }
+    return best
+  }, [weather, hour])
 
   // focusPlace mémoisé pour éviter de re-déclencher le flyTo de la carte
   // à chaque rendu (ex. quand l'heure change dans le slider)
@@ -227,6 +261,8 @@ export default function HomePage() {
           focusPlace={mapFocusPlace}
           sunHour={hour}
           homeView={homeViewCount}
+          showFontaines={activeFilters.includes('fontaine')}
+          showSanisettes={activeFilters.includes('sanisette')}
         />
       </div>
 
@@ -316,6 +352,26 @@ export default function HomePage() {
                     <span aria-hidden="true">☀</span>{sunnyCount}
                   </span>
                 )}
+              </>
+            )}
+            {/* Pill météo — visible uniquement si l'API répond */}
+            {weatherForHour && (
+              <>
+                <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(20,32,51,0.15)' }} />
+                <a
+                  href="https://meteofrance.com/previsions-meteo-france/paris/75000"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={weatherForHour.description}
+                  className="inline-flex items-center gap-0.5 font-bold leading-none shrink-0"
+                  style={{ fontSize: 11, color: '#0b1f3a', textDecoration: 'none' }}
+                  aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C — voir sur Météo France`}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>
+                    {owmIconToEmoji(weatherForHour.icon)}
+                  </span>
+                  <span>{weatherForHour.temp}°</span>
+                </a>
               </>
             )}
           </div>

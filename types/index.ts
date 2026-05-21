@@ -1,5 +1,14 @@
 export type PlaceType = 'bar' | 'restaurant' | 'cafe' | 'park'
-export type FilterType = 'sun' | 'open' | 'bar' | 'restaurant' | 'cafe' | 'park'
+export type FilterType = 'sun' | 'open' | 'bar' | 'restaurant' | 'cafe' | 'park' | 'fontaine' | 'sanisette'
+
+export interface WeatherForecastEntry {
+  dt: number
+  hour: number
+  temp: number
+  cloudCover: number
+  icon: string
+  description: string
+}
 
 export interface Place {
   id: string

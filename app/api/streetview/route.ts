@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 
 /**
  * Proxy Street View Static API — évite d'exposer la clé API côté client.
- * GET /api/streetview?lat=48.856&lng=2.347&w=600&h=300&heading=0&fov=90&pitch=0
+ * En ne passant PAS de heading, Google auto-oriente la caméra vers le POI
+ * (l'entrée/façade du bar/restaurant).
+ * GET /api/streetview?lat=48.856&lng=2.347&w=600&h=300
  */
 export const dynamic = 'force-dynamic'
 
@@ -16,28 +18,38 @@ export async function GET(req: NextRequest) {
     return new NextResponse('Out of bounds', { status: 400 })
   }
 
-  const w       = Math.min(800, Math.max(100, parseInt(p.get('w') ?? '600')))
-  const h       = Math.min(500, Math.max(80,  parseInt(p.get('h') ?? '300')))
-  const heading = p.get('heading') ?? '0'
-  const fov     = Math.min(120, Math.max(10, parseInt(p.get('fov') ?? '90')))
-  const pitch   = p.get('pitch') ?? '0'
+  const w   = Math.min(800, Math.max(100, parseInt(p.get('w') ?? '600')))
+  const h   = Math.min(500, Math.max(80,  parseInt(p.get('h') ?? '300')))
+  // fov=75 = champ moins large = on zoom un peu plus sur la façade
+  const fov = Math.min(120, Math.max(10, parseInt(p.get('fov') ?? '75')))
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY
   if (!apiKey) return new NextResponse('Service unavailable', { status: 503 })
 
-  const url = `https://maps.googleapis.com/maps/api/streetview?size=${w}x${h}&location=${lat},${lng}&heading=${heading}&fov=${fov}&pitch=${pitch}&key=${apiKey}`
+  // Sans `heading` → Google auto-oriente vers le POI (façade/entrée).
+  // `source=outdoor` = préfère l'imagerie extérieure, évite les lobbies d'hôtels.
+  // `return_error_code=true` → 404 si vraiment aucune image disponible.
+  const url = [
+    `https://maps.googleapis.com/maps/api/streetview`,
+    `?size=${w}x${h}`,
+    `&location=${lat},${lng}`,
+    `&fov=${fov}`,
+    `&pitch=5`,           // légèrement incliné vers le haut → on voit l'enseigne/terrasse
+    `&source=outdoor`,
+    `&return_error_code=true`,
+    `&key=${apiKey}`,
+  ].join('')
 
   try {
     const res = await fetch(url)
-    if (!res.ok) return new NextResponse('Not found', { status: 404 })
+    if (!res.ok) return new NextResponse('No Street View imagery', { status: 404 })
 
     const ct = res.headers.get('content-type') ?? 'image/jpeg'
-    // Google returns a grey "no imagery" image with status 200 — pass it through
     const data = await res.arrayBuffer()
     return new NextResponse(data, {
       headers: {
         'Content-Type': ct,
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000',
       },
     })
   } catch {

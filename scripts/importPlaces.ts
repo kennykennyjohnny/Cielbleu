@@ -75,16 +75,39 @@ const PARIS_GRID = (() => {
     { lat: 48.9105, lng: 2.3350 }, // Saint-Ouen marché
     { lat: 48.9170, lng: 2.3820 }, // Aubervilliers
     { lat: 48.8980, lng: 2.3708 }, // La Courneuve / Le Bourget zone
-    // 92 — Boulogne, Issy, Levallois, Clichy
+    // 92 — Boulogne, Issy, Levallois, Clichy, Neuilly
     { lat: 48.8350, lng: 2.2431 }, // Boulogne centre
+    { lat: 48.8300, lng: 2.2380 }, // Boulogne sud
     { lat: 48.8254, lng: 2.2740 }, // Issy-les-Moulineaux
-    { lat: 48.8944, lng: 2.2880 }, // Levallois-Perret
+    { lat: 48.8944, lng: 2.2880 }, // Levallois-Perret centre
+    { lat: 48.8920, lng: 2.2840 }, // Levallois sud (Chez Bouche)
+    { lat: 48.8960, lng: 2.2920 }, // Levallois est
+    { lat: 48.8975, lng: 2.2800 }, // Levallois nord
+    { lat: 48.8900, lng: 2.2760 }, // Levallois / Neuilly limite
+    { lat: 48.8840, lng: 2.2680 }, // Neuilly-sur-Seine centre
+    { lat: 48.8800, lng: 2.2580 }, // Neuilly sud
     { lat: 48.9026, lng: 2.3070 }, // Clichy centre
+    { lat: 48.9060, lng: 2.3000 }, // Clichy nord-est
     // 94 — Vincennes, Saint-Mandé, Charenton, Ivry
     { lat: 48.8474, lng: 2.4397 }, // Vincennes centre
+    { lat: 48.8440, lng: 2.4470 }, // Vincennes est / château
     { lat: 48.8381, lng: 2.4113 }, // Saint-Mandé / Bel-Air
     { lat: 48.8236, lng: 2.4100 }, // Charenton / Alfortville
     { lat: 48.8140, lng: 2.3840 }, // Ivry-sur-Seine
+    { lat: 48.8180, lng: 2.4000 }, // Ivry est
+    // Paris ouest coeur — densification
+    { lat: 48.8620, lng: 2.3280 }, // Palais-Royal / Louvre
+    { lat: 48.8580, lng: 2.3200 }, // Concorde / Madeleine
+    { lat: 48.8640, lng: 2.3440 }, // Le Sentier / Bourse
+    { lat: 48.8561, lng: 2.3521 }, // Île de la Cité / Notre-Dame
+    { lat: 48.8534, lng: 2.3488 }, // Île Saint-Louis
+    { lat: 48.8520, lng: 2.3640 }, // Jussieu / Austerlitz
+    { lat: 48.8446, lng: 2.3600 }, // Alesia / Montrouge limite
+    { lat: 48.8600, lng: 2.3180 }, // Palais-Royal jardin
+    { lat: 48.8760, lng: 2.3640 }, // La Villette / Stalingrad
+    { lat: 48.8820, lng: 2.3730 }, // Crimée / riquet
+    { lat: 48.8880, lng: 2.3600 }, // Porte de La Chapelle
+    { lat: 48.8920, lng: 2.3440 }, // Simplon / Marcadet
   ]
 
   // Évite les doublons exacts avec la grille
@@ -99,7 +122,7 @@ const PARIS_GRID = (() => {
 
 // Types : bar + restaurant + cafe + park + night_club
 const PLACE_TYPES = ['bar', 'restaurant', 'cafe', 'park', 'night_club'] as const
-const SEARCH_RADIUS = 750 // mètres — réduit l'overlap, plus de places uniques
+const SEARCH_RADIUS = 500 // mètres — réduit l'overlap → plus de lieux uniques par requête
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -107,6 +130,21 @@ function sleep(ms: number) {
 
 // Déduplication en mémoire par google_place_id
 const seenPlaceIds = new Set<string>()
+
+// Types Google qui signalent un hôtel/gîte → on skip le lieu
+// même s'il a aussi 'restaurant' dans ses types
+const SKIP_TYPES = new Set([
+  'lodging', 'hotel', 'motel', 'campground', 'rv_park',
+  'hospital', 'doctor', 'pharmacy', 'school', 'university',
+  'gas_station', 'car_dealer', 'car_repair',
+  'real_estate_agency', 'insurance_agency', 'bank', 'atm',
+  'police', 'courthouse', 'embassy',
+])
+
+/** Retourne true si le lieu doit être ignoré (hôtel, hôpital, banque…) */
+function shouldSkipPlace(types: string[]): boolean {
+  return types.some(t => SKIP_TYPES.has(t))
+}
 
 function mapPlaceType(types: string[]): 'bar' | 'restaurant' | 'cafe' | 'park' {
   if (types.includes('park') || types.includes('natural_feature')) return 'park'
@@ -153,7 +191,7 @@ async function fetchAllForType(
 
 async function upsertPlaces(places: GooglePlace[], type: string) {
   const rows = places
-    .filter((p) => !seenPlaceIds.has(p.place_id))
+    .filter((p) => !seenPlaceIds.has(p.place_id) && !shouldSkipPlace(p.types))
     .map((p) => {
       seenPlaceIds.add(p.place_id)
       return {

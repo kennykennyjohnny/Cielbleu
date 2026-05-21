@@ -2,15 +2,17 @@
 
 import type { FilterType } from '@/types'
 
-type Tone = 'sun' | 'green' | 'navy' | 'amber' | 'emerald' | 'violet'
+type Tone = 'sun' | 'green' | 'navy' | 'amber' | 'emerald' | 'violet' | 'cyan' | 'teal'
 
 const FILTERS: { id: FilterType; label: string; icon: string; tone: Tone }[] = [
-  { id: 'sun',        label: 'Au soleil', icon: '☀️', tone: 'sun'     },
-  { id: 'open',       label: 'Ouvert',    icon: '🟢', tone: 'green'   },
-  { id: 'bar',        label: 'Bars',      icon: '🍺', tone: 'navy'    },
-  { id: 'restaurant', label: 'Restos',    icon: '🍽️', tone: 'amber'   },
-  { id: 'cafe',       label: 'Cafés',     icon: '☕', tone: 'amber'   },
-  { id: 'park',       label: 'Parcs',     icon: '🌳', tone: 'emerald' },
+  { id: 'sun',        label: 'Au soleil', icon: '☀️', tone: 'sun'      },
+  { id: 'open',       label: 'Ouvert',    icon: '🟢', tone: 'green'    },
+  { id: 'bar',        label: 'Bars',      icon: '🍺', tone: 'navy'     },
+  { id: 'restaurant', label: 'Restos',    icon: '🍽️', tone: 'amber'    },
+  { id: 'cafe',       label: 'Cafés',     icon: '☕', tone: 'amber'    },
+  { id: 'park',       label: 'Parcs',     icon: '🌳', tone: 'emerald'  },
+  { id: 'fontaine',   label: 'Eau',       icon: '💧', tone: 'cyan'     },
+  { id: 'sanisette',  label: 'WC',        icon: '🚻', tone: 'teal'     },
 ]
 
 const ACTIVE_STYLES: Record<Tone, { bg: string; color: string; border: string; shadow: string }> = {
@@ -20,6 +22,8 @@ const ACTIVE_STYLES: Record<Tone, { bg: string; color: string; border: string; s
   amber:   { bg: 'linear-gradient(145deg,#ffe8b2 0%,#f59e0b 100%)', color: '#5c3500', border: 'rgba(245,158,11,0.45)', shadow: '0 3px 10px rgba(245,158,11,0.22)' },
   emerald: { bg: 'linear-gradient(145deg,#a7f3d0 0%,#059669 100%)', color: '#022c22', border: 'rgba(5,150,105,0.40)',  shadow: '0 3px 10px rgba(5,150,105,0.22)' },
   violet:  { bg: 'linear-gradient(145deg,#ddd6fe 0%,#7c3aed 100%)', color: '#ffffff', border: 'rgba(124,58,237,0.35)', shadow: '0 3px 10px rgba(124,58,237,0.22)' },
+  cyan:    { bg: 'linear-gradient(145deg,#bae6fd 0%,#0ea5e9 100%)', color: '#0c3f5c', border: 'rgba(14,165,233,0.45)',  shadow: '0 3px 10px rgba(14,165,233,0.22)' },
+  teal:    { bg: 'linear-gradient(145deg,#99f6e4 0%,#0d9488 100%)', color: '#042f2e', border: 'rgba(13,148,136,0.40)',  shadow: '0 3px 10px rgba(13,148,136,0.22)' },
 }
 
 interface FiltersProps {
