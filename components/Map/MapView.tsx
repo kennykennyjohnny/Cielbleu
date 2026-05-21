@@ -443,33 +443,33 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         },
       })
 
-      // ── Fontaines à boire (points bleus, zoom ≥ 14) ─────────────────────
+      // ── Fontaines à boire (cachées par défaut, activées via filtre 💧) ──
       map.addSource('fontaines', { type: 'geojson', data: '/api/geo/fontaines' })
       map.addLayer({
         id: 'fontaines-layer', type: 'circle', source: 'fontaines',
         filter: ['==', ['get', 'dispo'], 'OUI'],
-        minzoom: 13,
+        layout: { visibility: 'none' },
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 16, 4.5],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 4, 15, 7, 18, 11],
           'circle-color': '#3A86FF',
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1.5,
-          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 14, 0.70],
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.85,
         },
       })
 
-      // ── Sanisettes (points verts, zoom ≥ 14) ────────────────────────────
+      // ── Sanisettes (cachées par défaut, activées via filtre 🚻) ─────────
       map.addSource('sanisettes', { type: 'geojson', data: '/api/geo/sanisettes' })
       map.addLayer({
         id: 'sanisettes-layer', type: 'circle', source: 'sanisettes',
         filter: ['==', ['get', 'statut'], 'En service'],
-        minzoom: 13,
+        layout: { visibility: 'none' },
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 16, 4.5],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 4, 15, 7, 18, 11],
           'circle-color': '#52B788',
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1.5,
-          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 14, 0.62],
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.85,
         },
       })
 
@@ -526,23 +526,25 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       // Labels EAU / WC au zoom 16+
       map.addLayer({
         id: 'fontaines-label', type: 'symbol', source: 'fontaines',
-        filter: ['==', ['get', 'dispo'], 'OUI'], minzoom: 16,
-        layout: { 'text-field': 'EAU', 'text-size': 8,
-          'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
-          'text-offset': [0, 1.2], 'text-anchor': 'top', 'text-allow-overlap': false },
-        paint: { 'text-color': '#3A86FF',
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0, 16.5, 0.8] as mapboxgl.Expression,
-          'text-halo-color': '#ffffff', 'text-halo-width': 1 },
+        filter: ['==', ['get', 'dispo'], 'OUI'], minzoom: 14,
+        layout: {
+          visibility: 'none',
+          'text-field': '💧', 'text-size': 14,
+          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
+          'text-offset': [0, -1.6], 'text-anchor': 'bottom', 'text-allow-overlap': false,
+        },
+        paint: { 'text-opacity': 0.95 },
       })
       map.addLayer({
         id: 'sanisettes-label', type: 'symbol', source: 'sanisettes',
-        filter: ['==', ['get', 'statut'], 'En service'], minzoom: 16,
-        layout: { 'text-field': 'WC', 'text-size': 8,
-          'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
-          'text-offset': [0, 1.2], 'text-anchor': 'top', 'text-allow-overlap': false },
-        paint: { 'text-color': '#52B788',
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0, 16.5, 0.8] as mapboxgl.Expression,
-          'text-halo-color': '#ffffff', 'text-halo-width': 1 },
+        filter: ['==', ['get', 'statut'], 'En service'], minzoom: 14,
+        layout: {
+          visibility: 'none',
+          'text-field': '🚻', 'text-size': 14,
+          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
+          'text-offset': [0, -1.6], 'text-anchor': 'bottom', 'text-allow-overlap': false,
+        },
+        paint: { 'text-opacity': 0.95 },
       })
 
       // Force-sync : si Supabase a répondu avant que le style finisse de charger,
@@ -721,23 +723,22 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   }, [sunHour, sunLat, sunLng])
 
   // ── Visibilité couches fontaines / sanisettes ──────────────────────────
-  // Par défaut : visibles à zoom ≥ 13 (minzoom). Quand le filtre est actif :
-  // visible dès zoom 1 + rayon légèrement agrandi pour mieux les voir.
+  // Cachées par défaut. Le filtre active/désactive la visibilité.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const toggle = (layerIds: string[], active: boolean, baseMinzoom: number) => {
-      for (const id of layerIds) {
-        if (!map.getLayer(id)) continue
-        try {
-          map.setLayoutProperty(id, 'visibility', 'visible')
-          map.setLayerZoomRange(id, active ? 1 : baseMinzoom, 24)
-        } catch { /* noop */ }
-      }
-    }
     const apply = () => {
-      toggle(['fontaines-layer', 'fontaines-label'], !!showFontaines, 13)
-      toggle(['sanisettes-layer', 'sanisettes-label'], !!showSanisettes, 13)
+      const vis = (active: boolean) => active ? 'visible' : 'none' as const
+      const layers: Array<[string, boolean]> = [
+        ['fontaines-layer',  !!showFontaines],
+        ['fontaines-label',  !!showFontaines],
+        ['sanisettes-layer', !!showSanisettes],
+        ['sanisettes-label', !!showSanisettes],
+      ]
+      for (const [id, active] of layers) {
+        if (!map.getLayer(id)) continue
+        try { map.setLayoutProperty(id, 'visibility', vis(active)) } catch { /* noop */ }
+      }
     }
     if (map.isStyleLoaded()) apply()
     else map.once('style.load', apply)
@@ -831,7 +832,7 @@ function FicheAmenite({ amenite, map, onClose }: {
   const statusOk = status === 'Disponible' || status === 'En service'
   const potable  = isFontaine && p.potable ? (String(p.potable) === 'OUI' ? 'Eau potable' : null) : null
   const pmr      = !isFontaine && p.acces_pmr ? (String(p.acces_pmr).toLowerCase() === 'oui' ? 'Accessible PMR' : null) : null
-  const horaire  = !isFontaine && p.horaire_ouverture ? String(p.horaire_ouverture) : null
+  const horaire  = !isFontaine && (p.horaire ?? p.horaire_ouverture) ? String(p.horaire ?? p.horaire_ouverture) : null
   const model    = isFontaine && p.modele ? String(p.modele) : null
   const adresse  = !isFontaine && p.adresse ? String(p.adresse) : null
 
