@@ -459,7 +459,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       map.addLayer({
         id: 'fontaines-layer', type: 'circle', source: 'fontaines',
         filter: ['==', ['get', 'dispo'], 'OUI'],
-        layout: { visibility: 'none' },
+        minzoom: 14,
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 5, 16, 8, 18, 13],
           'circle-color': '#3A86FF',
@@ -474,7 +474,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       map.addLayer({
         id: 'sanisettes-layer', type: 'circle', source: 'sanisettes',
         filter: ['==', ['get', 'statut'], 'En service'],
-        layout: { visibility: 'none' },
+        minzoom: 14,
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 5, 16, 8, 18, 13],
           'circle-color': '#52B788',
@@ -538,8 +538,8 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       map.addLayer({
         id: 'fontaines-label', type: 'symbol', source: 'fontaines',
         filter: ['==', ['get', 'dispo'], 'OUI'],
+        minzoom: 15,
         layout: {
-          visibility: 'none',
           'text-field': '💧', 'text-size': 14,
           'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
           'text-offset': [0, -1.8], 'text-anchor': 'bottom', 'text-allow-overlap': false,
@@ -549,8 +549,8 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       map.addLayer({
         id: 'sanisettes-label', type: 'symbol', source: 'sanisettes',
         filter: ['==', ['get', 'statut'], 'En service'],
+        minzoom: 15,
         layout: {
-          visibility: 'none',
           'text-field': '🚻', 'text-size': 14,
           'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
           'text-offset': [0, -1.8], 'text-anchor': 'bottom', 'text-allow-overlap': false,
@@ -741,19 +741,15 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     const map = mapRef.current
     if (!map) return
     const apply = () => {
-      const fVis = showFontaines ? 'visible' : 'none'
-      const sVis = showSanisettes ? 'visible' : 'none'
-      for (const id of ['fontaines-layer', 'fontaines-label'] as const) {
-        if (!map.getLayer(id)) continue
-        try { map.setLayoutProperty(id, 'visibility', fVis) } catch { /* noop */ }
-      }
-      for (const id of ['sanisettes-layer', 'sanisettes-label'] as const) {
-        if (!map.getLayer(id)) continue
-        try { map.setLayoutProperty(id, 'visibility', sVis) } catch { /* noop */ }
-      }
-      if (map.getLayer('park-highlight')) {
+      // fontaines : minzoom 14 par défaut, 0 quand filtre actif
+      if (map.getLayer('fontaines-layer'))  try { map.setLayerZoomRange('fontaines-layer',  showFontaines ? 0 : 14, 24) } catch { /* noop */ }
+      if (map.getLayer('fontaines-label'))  try { map.setLayerZoomRange('fontaines-label',  showFontaines ? 0 : 15, 24) } catch { /* noop */ }
+      // sanisettes : minzoom 14 par défaut, 0 quand filtre actif
+      if (map.getLayer('sanisettes-layer')) try { map.setLayerZoomRange('sanisettes-layer', showSanisettes ? 0 : 14, 24) } catch { /* noop */ }
+      if (map.getLayer('sanisettes-label')) try { map.setLayerZoomRange('sanisettes-label', showSanisettes ? 0 : 15, 24) } catch { /* noop */ }
+      // parc
+      if (map.getLayer('park-highlight'))
         try { map.setLayoutProperty('park-highlight', 'visibility', showPark ? 'visible' : 'none') } catch { /* noop */ }
-      }
     }
     if (map.isStyleLoaded()) apply()
     else map.once('style.load', apply)

@@ -146,6 +146,11 @@ export default function HomePage() {
     const typeFilters = activeFilters.filter((f): f is 'bar' | 'restaurant' | 'cafe' | 'park' =>
       ['bar', 'restaurant', 'cafe', 'park'].includes(f)
     )
+    // Quand seuls les filtres amenite (eau/WC) sont actifs → cacher tous les bars/restos
+    const ameniteOnly = activeFilters.length > 0 &&
+      activeFilters.every(f => f === 'fontaine' || f === 'sanisette')
+    if (ameniteOnly) return []
+
     if (typeFilters.length > 0) result = result.filter((p) => typeFilters.includes(p.type))
     if (activeFilters.includes('sun')) result = result.filter((p) => (p.currentScore ?? 0) >= 4)
     if (activeFilters.includes('open')) {
@@ -331,6 +336,20 @@ export default function HomePage() {
               backdropFilter: 'blur(16px)',
             }}
           >
+            {/* Météo à GAUCHE du slider, liée à l'heure sélectionnée */}
+            {weatherForHour && (
+              <a
+                href="https://meteofrance.com/previsions-meteo-france/paris/75000"
+                target="_blank" rel="noopener noreferrer"
+                title={weatherForHour.description}
+                className="inline-flex items-center gap-0.5 shrink-0 font-outfit"
+                style={{ textDecoration: 'none', color: '#0b1f3a', fontSize: 11, fontWeight: 900 }}
+                aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
+              >
+                <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>{owmIconToEmoji(weatherForHour.icon)}</span>
+                <span>{weatherForHour.temp}°</span>
+              </a>
+            )}
             <input
               type="range" min={6} max={23.5} step={0.5}
               value={hour}
@@ -339,22 +358,9 @@ export default function HomePage() {
               style={{ width: 68, height: 20 }}
               aria-label="Heure du soleil"
             />
-            {/* Heure + météo pour l'heure sélectionnée */}
-            <span className="font-outfit inline-flex items-center gap-1 shrink-0" style={{ fontSize: 10, fontWeight: 800, color: '#0b1f3a' }}>
+            {/* Heure sélectionnée */}
+            <span className="font-outfit shrink-0" style={{ fontSize: 10, fontWeight: 800, color: '#0b1f3a', minWidth: 26 }}>
               {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
-              {weatherForHour && (
-                <a
-                  href="https://meteofrance.com/previsions-meteo-france/paris/75000"
-                  target="_blank" rel="noopener noreferrer"
-                  title={weatherForHour.description}
-                  className="inline-flex items-center gap-0.5 shrink-0"
-                  style={{ textDecoration: 'none', color: '#0b1f3a' }}
-                  aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
-                >
-                  <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>{owmIconToEmoji(weatherForHour.icon)}</span>
-                  <span style={{ fontWeight: 900, fontSize: 11 }}>{weatherForHour.temp}°</span>
-                </a>
-              )}
             </span>
             <button
               onClick={() => setHour(nowHalfHour())}
