@@ -323,6 +323,14 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     })),
   }), [places])
 
+  // Refs accessibles depuis la closure de l'init effect (deps=[]) :
+  // - geojsonRef : permet d'init la source avec les places déjà chargées (évite la race condition)
+  // - sunHourRef : permet d'appliquer les ombres dès style.load sans attendre le slider
+  const geojsonRef  = useRef(geojson)
+  geojsonRef.current = geojson
+  const sunHourRef  = useRef(sunHour)
+  sunHourRef.current = sunHour
+
   // ── Init carte (une fois) ──────────────────────────────────────────────
   useEffect(() => {
     if (mapRef.current || !containerRef.current) return
@@ -365,10 +373,17 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         }
       }
 
-      // Source GeoJSON avec clustering natif Mapbox
+      // Ombres solaires dès le chargement — utilise l'heure courante via ref
+      const initSunLat = cinematicFocus?.lat ?? PARIS_CENTER[1]
+      const initSunLng = cinematicFocus?.lng ?? PARIS_CENTER[0]
+      if (sunHourRef.current != null) {
+        applySunLightingByHour(map, initSunLat, initSunLng, sunHourRef.current)
+      }
+
+      // Source GeoJSON : initialisation avec les places déjà chargées (pas d'objet vide)
       map.addSource('places', {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
+        data: geojsonRef.current,
         cluster: true,
         clusterMaxZoom: 14,
         clusterRadius: 55,

@@ -14,12 +14,13 @@ const FILTERS: { id: FilterType; label: string; icon: string; tone: 'sun' | 'sky
 interface FiltersProps {
   activeFilters: FilterType[]
   onToggle: (filter: FilterType) => void
+  compact?: boolean
 }
 
-export default function Filters({ activeFilters, onToggle }: FiltersProps) {
+export default function Filters({ activeFilters, onToggle, compact = false }: FiltersProps) {
   return (
-    <div role="group" aria-label="Filtres rapides" className="px-3 overflow-x-auto scrollbar-none">
-      <div className="flex items-center gap-2 min-w-max">
+    <div role="group" aria-label="Filtres rapides" className={`overflow-x-auto scrollbar-none ${compact ? '' : 'px-3'}`}>
+      <div className="flex items-center gap-1.5 min-w-max">
         {FILTERS.map(({ id, label, icon, tone }) => {
           const isActive = activeFilters.includes(id)
           return (
@@ -28,12 +29,12 @@ export default function Filters({ activeFilters, onToggle }: FiltersProps) {
               onClick={() => onToggle(id)}
               aria-pressed={isActive}
               aria-label={`Filtre ${label}${isActive ? ' actif' : ''}`}
-              className="inline-flex items-center gap-1.5 rounded-full font-outfit font-bold whitespace-nowrap transition-all duration-150 active:scale-[0.96] select-none"
+              className="inline-flex items-center gap-1 rounded-full font-bold whitespace-nowrap transition-all duration-150 active:scale-[0.96] select-none"
               style={{
-                height: 36,
-                paddingLeft: 12,
-                paddingRight: 14,
-                fontSize: 12.5,
+                height: compact ? 26 : 34,
+                paddingLeft: compact ? 7 : 12,
+                paddingRight: compact ? 9 : 14,
+                fontSize: compact ? 11 : 12.5,
                 color: isActive
                   ? tone === 'sun' ? '#0b1f3a'
                   : tone === 'sky' ? '#1769c2'
@@ -50,12 +51,12 @@ export default function Filters({ activeFilters, onToggle }: FiltersProps) {
                   ? '1px solid rgba(78,163,255,0.32)'
                   : '1px solid rgba(20,32,51,0.10)',
                 boxShadow: isActive && tone === 'sun'
-                  ? '0 8px 18px rgba(255,183,3,0.28)'
+                  ? '0 4px 12px rgba(255,183,3,0.24)'
                   : '0 1px 0 rgba(255,255,255,0.6) inset',
               }}
             >
-              <span aria-hidden="true" className="text-[14px] leading-none">{icon}</span>
-              <span>{label}</span>
+              <span aria-hidden="true" className="leading-none" style={{ fontSize: compact ? 11 : 14 }}>{icon}</span>
+              <span>{compact && !isActive ? '' : label}</span>
             </button>
           )
         })}

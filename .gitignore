@@ -57,3 +57,5 @@ logs
 
 # Données sources lourdes (APUR, etc.) — versionner uniquement le résultat traité
 data/source/
+
+.vercel

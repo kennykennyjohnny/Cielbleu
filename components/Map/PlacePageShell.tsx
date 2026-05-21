@@ -135,7 +135,8 @@ export default function PlacePageShell({ place, scores }: Props) {
               boxShadow: '0 6px 14px rgba(255,183,3,0.35)', color: '#0b1f3a',
             }}
             aria-hidden="true">☀</span>
-          <span className="font-fraunces font-extrabold text-[17px] tracking-[-0.04em] leading-none text-navy-900">
+          <span className="font-extrabold text-[17px] leading-none"
+            style={{ fontFamily: 'var(--font-bricolage)', fontVariationSettings: "'wdth' 75", letterSpacing: '-0.03em', color: '#0b1f3a' }}>
             HopSoleil
           </span>
         </a>

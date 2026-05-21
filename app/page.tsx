@@ -236,8 +236,7 @@ export default function HomePage() {
               backdropFilter: 'blur(16px)',
             }}
           >
-            <span
-              className="grid place-items-center w-7 h-7 rounded-full text-[14px]"
+            <span className="grid place-items-center w-7 h-7 rounded-full text-[14px]"
               style={{
                 background: 'radial-gradient(circle at 36% 30%, #fff5a0 0%, #ffb703 60%, #f77f00 100%)',
                 boxShadow: '0 6px 14px rgba(255,183,3,0.35)',
@@ -245,7 +244,8 @@ export default function HomePage() {
               }}
               aria-hidden="true"
             >☀</span>
-            <span className="font-fraunces font-extrabold text-[19px] tracking-[-0.04em] leading-none text-navy-900">
+            <span className="font-extrabold text-[20px] leading-none"
+              style={{ fontFamily: 'var(--font-bricolage)', fontVariationSettings: "'wdth' 75", letterSpacing: '-0.03em', color: '#0b1f3a' }}>
               HopSoleil
             </span>
           </div>
@@ -299,101 +299,94 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ─── Floating bottom card : filtres + search (masqué si lieu sélectionné) ─── */}
+      {/* ─── Barre flottante compact : search + filtres + slider heure ─── */}
       {!selectedPlace && (
       <div
         className="absolute bottom-0 inset-x-0 z-20 pointer-events-none"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 10px)' }}
       >
         <div
-          className="pointer-events-auto mx-3 mb-2 rounded-3xl overflow-hidden"
+          className="pointer-events-auto mx-3 rounded-2xl overflow-hidden"
           style={{
-            background: 'rgba(255,252,243,0.94)',
-            border: '1px solid rgba(20,32,51,0.10)',
-            backdropFilter: 'blur(20px)',
-            boxShadow: '0 18px 50px rgba(11,31,58,0.16), 0 1px 4px rgba(11,31,58,0.06)',
+            background: 'rgba(255,252,243,0.97)',
+            border: '1px solid rgba(20,32,51,0.09)',
+            backdropFilter: 'blur(24px)',
+            boxShadow: '0 10px 40px rgba(11,31,58,0.15)',
           }}
         >
-          {/* Filtres */}
-          <div className="pt-2.5 pb-2">
-            <Filters activeFilters={activeFilters} onToggle={toggleFilter} />
+          {/* Suggestions */}
+          {searchQuery.trim() && suggestions.length > 0 && (
+            <ul
+              role="listbox" aria-label="Lieux suggérés"
+              className="overflow-y-auto bg-white/90"
+              style={{ maxHeight: 200, borderBottom: '1px solid rgba(20,32,51,0.07)' }}
+            >
+              {suggestions.map((p) => {
+                const cp = p.address.match(/\b75(\d{3})\b/)
+                const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
+                const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
+                return (
+                  <li key={p.id} role="option">
+                    <button
+                      onClick={() => handlePlaceSelect(p)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-2 transition"
+                    >
+                      <span aria-hidden="true" className="text-[16px] shrink-0">{icon}</span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-bold text-[13px] text-text-primary truncate">{p.name}</span>
+                        <span className="block font-outfit text-[11px] text-text-soft truncate">
+                          {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
+                        </span>
+                      </span>
+                      {(p.currentScore ?? 0) >= 4 && <span aria-label="Au soleil" className="text-[13px] shrink-0">☀️</span>}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
+          {/* ── Ligne 1 : Search ── */}
+          <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
+            <Search size={13} strokeWidth={2.5} className="shrink-0 text-text-soft" />
+            <input
+              id="search-places" type="text"
+              placeholder="Bar, terrasse, café, 11e…"
+              aria-label="Rechercher un lieu"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 bg-transparent outline-none font-semibold text-text-primary placeholder:text-text-soft/70"
+              style={{ fontSize: 13.5 }}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} aria-label="Effacer" className="p-1 rounded-full text-text-soft hover:bg-surface-2 shrink-0">
+                <X size={12} strokeWidth={2.2} />
+              </button>
+            )}
           </div>
 
-          {/* Search */}
-          <div className="px-3 pb-3">
-            <div
-              className="relative flex items-center gap-2 px-2 rounded-2xl"
-              style={{
-                background: '#ffffff',
-                border: '1px solid rgba(20,32,51,0.10)',
-                minHeight: 48,
-              }}
-            >
-              <span
-                className="w-9 h-9 grid place-items-center rounded-xl shrink-0"
-                style={{ background: 'var(--color-sky-100)', color: 'var(--color-sky-700)' }}
-                aria-hidden="true"
-              >
-                <Search size={15} strokeWidth={2.4} />
-              </span>
-              <input
-                id="search-places"
-                name="search"
-                type="text"
-                placeholder="Bar terrasse, café au soleil, 11e…"
-                aria-label="Rechercher un lieu"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 bg-transparent outline-none font-outfit font-semibold text-[14px] text-text-primary placeholder:text-text-soft/85 placeholder:font-medium pr-2"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  aria-label="Effacer la recherche"
-                  className="p-1.5 rounded-full text-text-soft hover:bg-surface-2 transition shrink-0"
-                >
-                  <X size={14} strokeWidth={2.2} />
-                </button>
-              )}
+          {/* ── Ligne 2 : Filtres + slider heure ── */}
+          <div className="flex items-center pb-2.5 pt-0 gap-0" style={{ minHeight: 38 }}>
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <Filters activeFilters={activeFilters} onToggle={toggleFilter} compact />
             </div>
-
-            {/* Dropdown suggestions */}
-            {searchQuery.trim() && suggestions.length > 0 && (
-              <ul
-                role="listbox"
-                aria-label="Lieux suggérés"
-                className="mt-2 max-h-[260px] overflow-y-auto rounded-2xl bg-white"
-                style={{ border: '1px solid rgba(20,32,51,0.10)', boxShadow: '0 8px 24px rgba(11,31,58,0.10)' }}
-              >
-                {suggestions.map((p) => {
-                  const cp = p.address.match(/\b75(\d{3})\b/)
-                  const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
-                  const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
-                  const sunny = (p.currentScore ?? 0) >= 4
-                  return (
-                    <li key={p.id} role="option">
-                      <button
-                        onClick={() => handlePlaceSelect(p)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-2 transition"
-                      >
-                        <span aria-hidden="true" className="text-[18px] shrink-0">{icon}</span>
-                        <span className="flex-1 min-w-0">
-                          <span className="block font-outfit font-bold text-[13.5px] text-text-primary truncate">
-                            {p.name}
-                          </span>
-                          <span className="block font-outfit text-[11.5px] text-text-soft truncate">
-                            {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
-                          </span>
-                        </span>
-                        {sunny && (
-                          <span aria-label="Au soleil" className="text-[14px] shrink-0">☀️</span>
-                        )}
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
+            <div
+              className="flex items-center gap-1.5 shrink-0 px-3"
+              style={{ borderLeft: '1px solid rgba(20,32,51,0.09)' }}
+            >
+              <input
+                type="range" min={6} max={23.5} step={0.5}
+                value={hour}
+                onChange={(e) => setHour(parseFloat(e.target.value))}
+                className="cb-hour-slider"
+                style={{ width: 76, height: 22 }}
+                aria-label="Heure du soleil"
+              />
+              <span className="font-outfit" style={{ fontSize: 10.5, fontWeight: 800, color: '#6f7a8a', minWidth: 27, textAlign: 'right' }}>
+                {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
+              </span>
+              <span aria-hidden="true" style={{ fontSize: 13 }}>☀</span>
+            </div>
           </div>
         </div>
       </div>

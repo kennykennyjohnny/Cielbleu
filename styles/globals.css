@@ -72,9 +72,10 @@
   --color-corail: #ff6b5a;
 
   /* ─────────── Typos ─────────── */
-  --font-fraunces: var(--font-fraunces-var), "Fraunces", Georgia, serif;
-  --font-playfair: var(--font-fraunces-var), "Fraunces", Georgia, serif;
-  --font-outfit:   var(--font-outfit-var),   "Outfit",   sans-serif;
+  --font-bricolage: var(--font-bricolage-var), "Bricolage Grotesque", sans-serif;
+  --font-fraunces:  var(--font-bricolage-var), "Bricolage Grotesque", sans-serif;  /* alias rétrocompat */
+  --font-playfair:  var(--font-bricolage-var), "Bricolage Grotesque", sans-serif;  /* alias rétrocompat */
+  --font-outfit:    var(--font-outfit-var),    "Outfit",              sans-serif;
 }
 
 html,
@@ -86,7 +87,7 @@ body {
 
 body {
   color: var(--color-ink);
-  font-family: var(--font-outfit), sans-serif;
+  font-family: var(--font-bricolage), sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   background:

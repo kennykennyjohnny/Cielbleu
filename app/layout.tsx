@@ -1,13 +1,12 @@
 import type { Metadata, Viewport } from 'next'
-import { Fraunces, Outfit } from 'next/font/google'
+import { Bricolage_Grotesque, Outfit } from 'next/font/google'
 import '../styles/globals.css'
 
-const fraunces = Fraunces({
+const bricolage = Bricolage_Grotesque({
   subsets: ['latin'],
-  variable: '--font-fraunces-var',
-  weight: ['500', '600', '700', '800'],
-  style: ['normal', 'italic'],
+  variable: '--font-bricolage-var',
   display: 'swap',
+  axes: ['wdth'],
 })
 
 const outfit = Outfit({
@@ -49,7 +48,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
-      <body className={`${fraunces.variable} ${outfit.variable}`}>{children}</body>
+      <body className={`${bricolage.variable} ${outfit.variable}`}>{children}</body>
     </html>
   )
 }
