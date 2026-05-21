@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Clock } from 'lucide-react'
 import type { Place } from '@/types'
+import { todayHoursLabel } from '@/lib/openingHours'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -359,6 +360,28 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
             {sunSentence}
           </p>
         </div>
+
+        {/* ── HORAIRES ── */}
+        {(() => {
+          const hoursLabel = todayHoursLabel(
+            place.opening_hours as Record<string, unknown> | null | undefined,
+            new Date().getDay()
+          )
+          if (!hoursLabel) return null
+          const isClosed = /fermé/i.test(hoursLabel)
+          return (
+            <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:14,
+              display:'flex', alignItems:'center', gap:9 }}>
+              <Clock size={15} strokeWidth={2.2} style={{ color: isClosed ? '#FF6B6B' : '#3A86FF', flexShrink:0 }} />
+              <div>
+                <span style={{ fontSize:10, fontWeight:900, letterSpacing:'0.15em',
+                  textTransform:'uppercase', color:'#8D99AE', display:'block', marginBottom:2 }}>Horaires aujourd&apos;hui</span>
+                <span style={{ fontSize:13, fontWeight:700,
+                  color: isClosed ? '#FF6B6B' : '#1B2838' }}>{hoursLabel}</span>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ── PHOTOS ── */}
         {photoRefs.length > 0 && (

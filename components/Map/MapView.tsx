@@ -7,10 +7,9 @@
  */
 
 import { useEffect, useRef, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import type { Place } from '@/types'
+import type { Place, AmeniteInfo } from '@/types'
 import { getSunPosition } from '@/lib/suncalc'
 
 const PARIS_CENTER: [number, number] = [2.3522, 48.8566]
@@ -298,16 +297,11 @@ interface Props {
   showSanisettes?: boolean
   // true = anneau vert highlight derrière les pins parc
   showPark?: boolean
+  // Callback quand l'utilisateur clique sur une fontaine / sanisette
+  onAmeniteSelect?: (amenite: AmeniteInfo | null) => void
 }
 
-interface AmeniteInfo {
-  type: 'fontaine' | 'sanisette'
-  props: Record<string, unknown>
-  lat: number
-  lng: number
-}
-
-export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes, showPark }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes, showPark, onAmeniteSelect }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
@@ -317,8 +311,8 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
 
   // Sauvegarde la caméra avant le zoom focusPlace pour pouvoir revenir
   const returnCameraRef = useRef<{ center: [number, number]; zoom: number; pitch: number; bearing: number } | null>(null)
-
-  const [amenite, setAmenite] = useState<AmeniteInfo | null>(null)
+  const onAmeniteRef = useRef(onAmeniteSelect)
+  onAmeniteRef.current = onAmeniteSelect
 
   // GeoJSON mis à jour dès que places change
   const geojson = useMemo((): GeoJSON.FeatureCollection => ({
@@ -527,7 +521,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (f) {
           const g = f.geometry as { type: string; coordinates: [number, number] }
           const [lng, lat] = g.coordinates
-          setAmenite({ type: 'fontaine', props: f.properties ?? {}, lat, lng })
+          onAmeniteRef.current?.({ type: 'fontaine', props: f.properties ?? {}, lat, lng })
         }
       })
       map.on('click', 'sanisettes-layer', (e) => {
@@ -536,7 +530,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (f) {
           const g = f.geometry as { type: string; coordinates: [number, number] }
           const [lng, lat] = g.coordinates
-          setAmenite({ type: 'sanisette', props: f.properties ?? {}, lat, lng })
+          onAmeniteRef.current?.({ type: 'sanisette', props: f.properties ?? {}, lat, lng })
         }
       })
 
@@ -575,7 +569,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       const hits = map.queryRenderedFeatures(e.point, {
         layers: ['places-pins', 'clusters', 'fontaines-layer', 'sanisettes-layer'],
       })
-      if (!hits.length) { onSelectRef.current(null); setAmenite(null) }
+      if (!hits.length) { onSelectRef.current(null); onAmeniteRef.current?.(null) }
     })
 
     mapRef.current = map
@@ -806,170 +800,6 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         </div>
       )}
 
-      {amenite && (
-        <FicheAmenite
-          amenite={amenite}
-          map={mapRef.current}
-          onClose={() => setAmenite(null)}
-        />
-      )}
     </div>
-  )
-}
-
-// ─── FicheAmenite ─────────────────────────────────────────────────────────────
-
-function FicheAmenite({ amenite, map, onClose }: {
-  amenite: AmeniteInfo
-  map: mapboxgl.Map | null
-  onClose: () => void
-}) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
-  const [svError, setSvError] = useState(false)
-
-  useEffect(() => {
-    setSvError(false) // reset si on change d'amenite
-  }, [amenite.lat, amenite.lng])
-
-  useEffect(() => {
-    if (!map) return
-    const update = () => {
-      const p = map.project([amenite.lng, amenite.lat])
-      setPos({ x: p.x, y: p.y })
-    }
-    update()
-    map.on('move', update)
-    map.on('zoom', update)
-    return () => { map.off('move', update); map.off('zoom', update) }
-  }, [map, amenite.lng, amenite.lat])
-
-  const p          = amenite.props
-  const isFontaine = amenite.type === 'fontaine'
-  const status     = isFontaine
-    ? (p.dispo === 'OUI' ? 'Disponible' : 'Indisponible')
-    : (String(p.statut ?? '') === 'En service' ? 'En service' : 'Hors service')
-  const statusOk = status === 'Disponible' || status === 'En service'
-  const potable  = isFontaine && p.potable ? (String(p.potable) === 'OUI' ? 'Eau potable' : null) : null
-  const pmr      = !isFontaine && p.acces_pmr ? (String(p.acces_pmr).toLowerCase() === 'oui' ? 'Accessible PMR' : null) : null
-  const horaire  = !isFontaine && (p.horaire ?? p.horaire_ouverture) ? String(p.horaire ?? p.horaire_ouverture) : null
-  const model    = isFontaine && p.modele ? String(p.modele) : null
-  const adresse  = !isFontaine && p.adresse ? String(p.adresse) : null
-
-  const title      = isFontaine ? 'Fontaine à boire' : 'Sanisette'
-  const themeColor = isFontaine ? '#3A86FF' : '#4F8F65'
-  const svSrc      = `/api/streetview?lat=${amenite.lat}&lng=${amenite.lng}&w=560&h=240&fov=80`
-  const gmapsUrl   = `https://www.google.com/maps/dir/?api=1&destination=${amenite.lat},${amenite.lng}&travelmode=walking`
-
-  if (!pos) return null
-
-  return (
-    <div
-      className="pointer-events-auto"
-      role="dialog" aria-label={title}
-      style={{
-        position: 'absolute',
-        left: pos.x, top: pos.y,
-        transform: 'translate(-50%, calc(-100% - 18px))',
-        maxWidth: 290, width: 'calc(100vw - 28px)',
-        zIndex: 25,
-      }}
-    >
-      <div className="rounded-3xl overflow-hidden"
-        style={{ background: 'rgba(255,253,247,0.97)', backdropFilter: 'blur(20px)',
-          boxShadow: '0 18px 40px rgba(11,31,58,0.20), 0 2px 10px rgba(11,31,58,0.10)',
-          border: '1px solid rgba(20,32,51,0.08)' }}>
-
-        {/* Photo Street View ou fallback illustré */}
-        <div className="relative" style={{ height: 130, overflow: 'hidden' }}>
-          {!svError ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={svSrc}
-                alt="Vue depuis la rue"
-                onError={() => setSvError(true)}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              />
-              {/* Label superposé */}
-              <div style={{
-                position: 'absolute', bottom: 8, left: 10,
-                background: 'rgba(11,31,58,0.60)', backdropFilter: 'blur(6px)',
-                borderRadius: 20, padding: '3px 10px',
-                fontFamily: 'var(--font-outfit)', fontSize: 11, fontWeight: 600, color: '#fff',
-              }}>
-                📸 Vue depuis la rue
-              </div>
-            </>
-          ) : (
-            /* Fallback : dégradé + emoji */
-            <div className="flex items-center justify-center w-full h-full"
-              style={{ background: `linear-gradient(135deg, ${themeColor}18 0%, ${themeColor}38 100%)` }}>
-              <span aria-hidden="true" style={{ fontSize: 64, lineHeight: 1, opacity: 0.85 }}>
-                {isFontaine ? '💧' : '🚻'}
-              </span>
-            </div>
-          )}
-
-          {/* Bouton fermer toujours visible */}
-          <button onClick={onClose}
-            className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center text-[13px]"
-            style={{ background: 'rgba(255,253,247,0.92)', color: '#1B2838',
-              boxShadow: '0 2px 8px rgba(11,31,58,0.18)' }}
-            aria-label="Fermer">✕</button>
-        </div>
-
-        {/* Corps */}
-        <div className="px-4 pt-3 pb-4">
-          <p className="font-bricolage text-[17px] font-bold leading-tight"
-            style={{ color: '#0b1f3a', letterSpacing: '-0.02em' }}>
-            {title}
-          </p>
-          {adresse && (
-            <p className="font-outfit text-[12px] mt-0.5 leading-snug"
-              style={{ color: '#6f7a8a' }}>
-              {adresse}
-            </p>
-          )}
-
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <Chip color={statusOk ? '#3D9A70' : '#E05252'}>
-              {statusOk ? '● ' : '◯ '}{status}
-            </Chip>
-            {potable && <Chip color="#3A86FF">💧 {potable}</Chip>}
-            {pmr     && <Chip color="#7B61FF">♿ {pmr}</Chip>}
-            {horaire && <Chip color="#F77F00">🕐 {horaire}</Chip>}
-            {model   && <Chip color="#8D99AE">{model}</Chip>}
-          </div>
-
-          {/* CTA Y aller */}
-          <a
-            href={gmapsUrl} target="_blank" rel="noopener noreferrer"
-            className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl"
-            style={{
-              height: 42,
-              background: statusOk ? themeColor : 'rgba(20,32,51,0.08)',
-              color: statusOk ? '#ffffff' : '#98a2b3',
-              fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 13,
-              textDecoration: 'none',
-              boxShadow: statusOk ? `0 8px 18px ${themeColor}40` : 'none',
-              pointerEvents: statusOk ? 'auto' : 'none',
-            }}
-            aria-disabled={!statusOk}
-          >
-            <span aria-hidden="true">📍</span>
-            <span>{statusOk ? 'Y aller à pied' : 'Indisponible'}</span>
-          </a>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Chip({ children, color }: { children: ReactNode; color: string }) {
-  return (
-    <span className="font-outfit text-[11px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1"
-      style={{ background: color + '18', color, border: `1px solid ${color}30` }}>
-      {children}
-    </span>
   )
 }

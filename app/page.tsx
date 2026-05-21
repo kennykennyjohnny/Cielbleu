@@ -6,9 +6,10 @@ import { Search, X, Clock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Filters from '@/components/Map/Filters'
 import PlacePageClient from '@/components/Map/PlacePageClient'
+import FicheAmenitePanel from '@/components/Map/FicheAmenitePanel'
 import { owmIconToEmoji } from '@/lib/weather'
 import { isOpenAt } from '@/lib/openingHours'
-import type { Place, FilterType, WeatherForecastEntry } from '@/types'
+import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
 
 type SheetMode = 'peek' | 'half' | 'full'
 const SHEET_HEIGHTS: Record<SheetMode, string> = { peek: '20vh', half: '58vh', full: '92dvh' }
@@ -40,6 +41,7 @@ export default function HomePage() {
   // ── Lieu sélectionné (inline, sans navigation) ─────────────────────────
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
   const [selectedScores, setSelectedScores] = useState<{ time_slot: string; score: number }[]>([])
+  const [selectedAmenite, setSelectedAmenite] = useState<AmeniteInfo | null>(null)
   const [hour, setHour] = useState<number>(nowHalfHour)
   const [sheetMode, setSheetMode] = useState<SheetMode>('half')
   const [isDesktop, setIsDesktop] = useState(false)
@@ -103,12 +105,23 @@ export default function HomePage() {
       const m = now.getMinutes() < 30 ? '00' : '30'
       const timeSlot = `${String(h).padStart(2, '0')}:${m}`
 
-      const { data: rawPlaces, error: errPlaces } = await supabase
-        .from('places').select('*')
-        .not('lat', 'is', null).not('lng', 'is', null).limit(10000)
+      // Pagination : Supabase limite à 1000 lignes par requête par défaut
+      const PAGE = 1000
+      let from = 0
+      const allPlaces: Record<string, unknown>[] = []
+      while (true) {
+        const { data, error } = await supabase
+          .from('places').select('*')
+          .not('lat', 'is', null).not('lng', 'is', null)
+          .range(from, from + PAGE - 1)
+        if (error) { console.error('Erreur chargement lieux:', error.message); break }
+        if (!data || data.length === 0) break
+        allPlaces.push(...data)
+        if (data.length < PAGE) break
+        from += PAGE
+      }
 
-      if (errPlaces) { console.error('Erreur chargement lieux:', errPlaces.message); setLoading(false); return }
-      if (!rawPlaces) { setLoading(false); return }
+      if (!allPlaces.length) { setLoading(false); return }
 
       const { data: nowScores } = await supabase
         .from('sun_scores').select('place_id, score')
@@ -117,10 +130,10 @@ export default function HomePage() {
       const scoreByPlace = new Map<string, number>()
       for (const r of nowScores ?? []) scoreByPlace.set(r.place_id, r.score)
 
-      const enriched: Place[] = rawPlaces.map((p) => ({
+      const enriched: Place[] = allPlaces.map((p) => ({
         ...p,
-        currentScore: scoreByPlace.get(p.id) ?? 3,
-      }))
+        currentScore: scoreByPlace.get((p as { id: string }).id) ?? 3,
+      } as Place))
 
       setPlaces(enriched)
       setLoading(false)
@@ -220,6 +233,7 @@ export default function HomePage() {
 
   const handlePlaceSelect = useCallback(async (place: Place | null) => {
     if (!place) { setSelectedPlace(null); return }
+    setSelectedAmenite(null)  // ferme l'amenite si open
     setSelectedPlace(place)
     setSearchQuery('')
     setSheetMode('half')
@@ -234,6 +248,11 @@ export default function HomePage() {
 
   const handleClose = useCallback(() => {
     setSelectedPlace(null)
+  }, [])
+
+  const handleAmeniteSelect = useCallback((amenite: AmeniteInfo | null) => {
+    setSelectedAmenite(amenite)
+    if (amenite) setSelectedPlace(null)  // ferme le panel lieu si open
   }, [])
 
   // Drag handle (bottom sheet mobile)
@@ -263,6 +282,7 @@ export default function HomePage() {
           showFontaines={activeFilters.includes('fontaine')}
           showSanisettes={activeFilters.includes('sanisette')}
           showPark={activeFilters.includes('park')}
+          onAmeniteSelect={handleAmeniteSelect}
         />
       </div>
 
@@ -399,8 +419,41 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* ─── Badge météo flottant (bottom-left, au-dessus de la barre filtre) ─── */}
+      {weatherForHour && !selectedPlace && !selectedAmenite && (
+        <a
+          href="https://meteofrance.com/previsions-meteo-france/paris/75000"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C — voir sur Météo France`}
+          className="absolute z-20 flex items-center gap-2 font-outfit"
+          style={{
+            left: 12,
+            bottom: isDesktop ? 20 : 'calc(max(env(safe-area-inset-bottom, 0px), 10px) + 130px)',
+            textDecoration: 'none',
+            background: 'rgba(255,252,243,0.97)',
+            border: '1px solid rgba(20,32,51,0.09)',
+            backdropFilter: 'blur(20px)',
+            borderRadius: 999,
+            padding: '7px 14px',
+            boxShadow: '0 4px 18px rgba(11,31,58,0.14)',
+            color: '#1B2838',
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1 }}>
+            {owmIconToEmoji(weatherForHour.icon)}
+          </span>
+          <span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1 }}>
+            {weatherForHour.temp}°
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 500, color: '#8D99AE', lineHeight: 1.2, maxWidth: 110 }}>
+            {weatherForHour.description}
+          </span>
+        </a>
+      )}
+
       {/* ─── Barre flottante compact : search + filtres + slider heure ─── */}
-      {!selectedPlace && (
+      {!selectedPlace && !selectedAmenite && (
       <div
         className="absolute bottom-0 inset-x-0 z-20 pointer-events-none"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 10px)' }}
@@ -476,6 +529,52 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* ─── Panel fontaine / sanisette (desktop : côté droit, mobile : bottom sheet) ─── */}
+      {selectedAmenite && isDesktop && (
+        <aside
+          className="absolute top-0 right-0 z-30 h-dvh overflow-y-auto"
+          style={{
+            width: 420,
+            background: 'rgba(255,252,243,0.97)',
+            backdropFilter: 'blur(22px)',
+            borderLeft: '1px solid rgba(20,32,51,0.10)',
+            boxShadow: '-18px 0 48px rgba(11,31,58,0.18)',
+          }}
+          role="complementary" aria-label="Détails du point d'intérêt"
+        >
+          <FicheAmenitePanel
+            amenite={selectedAmenite}
+            onClose={() => setSelectedAmenite(null)}
+          />
+        </aside>
+      )}
+
+      {selectedAmenite && !isDesktop && (
+        <section
+          className="absolute bottom-0 inset-x-0 z-30"
+          style={{
+            height: '62vh',
+            background: 'rgba(255,252,243,0.97)',
+            backdropFilter: 'blur(22px)',
+            borderTopLeftRadius: 22, borderTopRightRadius: 22,
+            borderTop: '1px solid rgba(20,32,51,0.10)',
+            boxShadow: '0 -16px 42px rgba(11,31,58,0.20)',
+            overflow: 'hidden',
+          }}
+          role="dialog" aria-label="Détails du point d'intérêt"
+        >
+          <div className="flex items-center justify-center" style={{ height: 22 }}>
+            <span style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)', display: 'block' }} />
+          </div>
+          <div className="overflow-y-auto" style={{ height: 'calc(100% - 22px)' }}>
+            <FicheAmenitePanel
+              amenite={selectedAmenite}
+              onClose={() => setSelectedAmenite(null)}
+            />
+          </div>
+        </section>
       )}
 
       {/* ─── Panel lieu sélectionné (desktop : côté droit, mobile : bottom sheet) ─── */}

@@ -1,6 +1,13 @@
 export type PlaceType = 'bar' | 'restaurant' | 'cafe' | 'park'
 export type FilterType = 'sun' | 'open' | 'bar' | 'restaurant' | 'cafe' | 'park' | 'fontaine' | 'sanisette'
 
+export interface AmeniteInfo {
+  type: 'fontaine' | 'sanisette'
+  props: Record<string, unknown>
+  lat: number
+  lng: number
+}
+
 export interface WeatherForecastEntry {
   dt: number
   hour: number
