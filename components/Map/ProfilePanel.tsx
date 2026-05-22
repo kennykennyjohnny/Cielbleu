@@ -174,6 +174,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     if (data) setUserReviews(data as unknown as UserReview[])
   }, [])
 
+  const handleDeleteReview = useCallback(async (reviewId: string) => {
+    await supabase.from('reviews').delete().eq('id', reviewId)
+    setUserReviews(prev => prev.filter(r => r.id !== reviewId))
+  }, [])
+
   const fetchFriends = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from('friendships')
@@ -590,6 +595,18 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                         {new Date(r.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                       </p>
                     </div>
+                    <button
+                      onClick={() => handleDeleteReview(r.id)}
+                      aria-label="Supprimer cet avis"
+                      title="Supprimer"
+                      style={{ flexShrink: 0, background: 'rgba(224,82,82,0.09)',
+                        border: '1px solid rgba(224,82,82,0.22)', borderRadius: 8,
+                        cursor: 'pointer', color: 'rgba(224,82,82,0.75)',
+                        fontSize: 15, fontWeight: 900, lineHeight: 1,
+                        width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      ×
+                    </button>
                   </div>
                   {/* Commentaire */}
                   <p style={{ margin: 0, fontSize: 13, color: '#1F3A5F', fontWeight: 600, lineHeight: 1.55,
