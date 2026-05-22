@@ -710,19 +710,9 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           right:  isMobile ? 20 : 430,
         },
       })
-    } else if (returnCameraRef.current) {
-      const rc = returnCameraRef.current
-      map.flyTo({
-        center:   rc.center,
-        zoom:     rc.zoom,
-        pitch:    rc.pitch,
-        bearing:  0, // Toujours Nord en haut au retour
-        duration: 1000,
-        essential: true,
-        padding:  { top: 0, bottom: 0, left: 0, right: 0 },
-      })
-      returnCameraRef.current = null
     }
+    // Quand focusPlace → null : la carte reste à sa position courante.
+    // (Pas de fly-back — l'utilisateur glisse bas pour fermer, la vue ne bouge pas.)
   }, [focusPlace]) // eslint-disable-line
 
   // ── Vue de base Paris (clic logo HopSoleil) ────────────────────────────

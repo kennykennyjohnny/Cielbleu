@@ -295,8 +295,17 @@ export default function HomePage() {
   const onPointerMove = (e: React.PointerEvent) => {
     if (!dragRef.current) return
     const dy = e.clientY - dragRef.current.y
-    if (dy > 40)       setSheetMode(dragRef.current.mode === 'full' ? 'half' : 'peek')
-    else if (dy < -40) setSheetMode(dragRef.current.mode === 'peek' ? 'half' : 'full')
+    if (dy > 40) {
+      if      (dragRef.current.mode === 'full') setSheetMode('half')
+      else if (dragRef.current.mode === 'half') setSheetMode('peek')
+      else {
+        // peek + glisse vers le bas → ferme la card, la carte reste en place
+        dragRef.current = null
+        setSelectedPlace(null)
+      }
+    } else if (dy < -40) {
+      setSheetMode(dragRef.current.mode === 'peek' ? 'half' : 'full')
+    }
   }
   const onPointerUp = () => { dragRef.current = null }
 
