@@ -236,6 +236,9 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                 )}
               </div>
 
+              {/* Score block + slider — uniquement si scores calculés pour ce lieu */}
+              {scoresThisMonth !== null && Object.keys(scoresThisMonth).length > 0 ? (
+                <>
               {/* Score block */}
               <div className={`mt-4 rounded-2xl ${theme.bg} px-5 py-4 flex items-center gap-4 transition-colors duration-300`}>
                 <div className={`text-4xl font-playfair font-bold leading-none ${theme.text}`}>
@@ -319,6 +322,15 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                   ))}
                 </div>
               </div>
+                </>
+              ) : scoresThisMonth === null ? null : (
+                /* Pas de score calculé pour ce lieu */
+                <div className="mt-4 rounded-2xl bg-nuit/5 px-4 py-3 text-center">
+                  <p className="text-[12px] font-outfit font-semibold text-nuit/50">
+                    Score soleil non encore calculé pour ce lieu
+                  </p>
+                </div>
+              )}
 
               {/* CTA principal */}
               <button

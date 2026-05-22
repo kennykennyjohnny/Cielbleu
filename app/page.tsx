@@ -93,6 +93,18 @@ export default function HomePage() {
       .catch(() => null)
   }, [])
 
+  // ── Pollen + canicule ─────────────────────────────────────────────────────
+  const [conditions, setConditions] = useState<{
+    pollenLevel: number; pollenLabel: string; feelsLike: number | null; isHeatwave: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/conditions')
+      .then(r => r.json().catch(() => null))
+      .then(d => d && setConditions(d))
+      .catch(() => null)
+  }, [])
+
   // Entrée de prévision la plus proche de l'heure du slider
   const weatherForHour = useMemo(() => {
     if (!weather) return null
@@ -454,6 +466,32 @@ export default function HomePage() {
                   </span>
                 </a>
               ) : null}
+              {/* Pollen / canicule badge (desktop) */}
+              {conditions && (conditions.pollenLevel >= 1 || conditions.isHeatwave) && (
+                <div style={{ display: 'flex', gap: 5, marginTop: 2, flexWrap: 'wrap' }}>
+                  {conditions.pollenLevel >= 1 && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, lineHeight: 1,
+                      background: conditions.pollenLevel >= 2 ? 'rgba(120,160,60,0.14)' : 'rgba(140,170,80,0.10)',
+                      color: conditions.pollenLevel >= 2 ? '#5a7a20' : '#6a8a30',
+                      borderRadius: 999, padding: '2px 7px',
+                      border: '1px solid rgba(100,140,50,0.22)',
+                    }}>
+                      🌿 Pollen {conditions.pollenLabel.toLowerCase()}
+                    </span>
+                  )}
+                  {conditions.isHeatwave && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, lineHeight: 1,
+                      background: 'rgba(255,100,60,0.12)', color: '#c44020',
+                      borderRadius: 999, padding: '2px 7px',
+                      border: '1px solid rgba(255,100,60,0.22)',
+                    }}>
+                      🌡️ {conditions.feelsLike !== null ? `${Math.round(conditions.feelsLike)}° ressenti` : 'Canicule'}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             /* Mobile : compact empilé */
@@ -490,6 +528,32 @@ export default function HomePage() {
                   </span>
                 </a>
               ) : null}
+              {/* Pollen / canicule badge (mobile) */}
+              {conditions && (conditions.pollenLevel >= 1 || conditions.isHeatwave) && (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 1 }}>
+                  {conditions.pollenLevel >= 1 && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, lineHeight: 1,
+                      background: conditions.pollenLevel >= 2 ? 'rgba(120,160,60,0.14)' : 'rgba(140,170,80,0.10)',
+                      color: conditions.pollenLevel >= 2 ? '#5a7a20' : '#6a8a30',
+                      borderRadius: 999, padding: '2px 6px',
+                      border: '1px solid rgba(100,140,50,0.22)', whiteSpace: 'nowrap',
+                    }}>
+                      🌿 {conditions.pollenLabel}
+                    </span>
+                  )}
+                  {conditions.isHeatwave && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, lineHeight: 1,
+                      background: 'rgba(255,100,60,0.12)', color: '#c44020',
+                      borderRadius: 999, padding: '2px 6px',
+                      border: '1px solid rgba(255,100,60,0.22)', whiteSpace: 'nowrap',
+                    }}>
+                      🌡️ {conditions.feelsLike !== null ? `${Math.round(conditions.feelsLike)}°` : '+'}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

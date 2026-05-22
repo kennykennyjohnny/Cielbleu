@@ -400,7 +400,8 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         </div>
       </div>
 
-      {/* ═══════════ SLIDER HEURE — la carte derrière s'éclaire en direct ═══════════ */}
+      {/* ═══════════ SLIDER HEURE — uniquement si scores calculés ═══════════ */}
+      {scores.length > 0 && (
       <div style={{ padding:'0 16px 14px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
           <span style={{ fontSize:10, fontWeight:800, color:'#98a2b3',
@@ -419,6 +420,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           aria-valuetext={hourLabel}
         />
       </div>
+      )}
 
       {/* ═══════════ SCROLLABLE PANEL ═══════════ */}
       <div style={{ maxWidth:520, margin:'0 auto', padding:'0 14px',

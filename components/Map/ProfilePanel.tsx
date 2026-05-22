@@ -26,7 +26,15 @@ interface FriendRequest {
   requester_id: string
   addressee_id: string
   status: 'pending' | 'accepted' | 'rejected'
-  profile?: { display_name: string | null; username: string | null }
+  requester?: { display_name: string | null; username: string | null }
+  addressee?: { display_name: string | null; username: string | null }
+}
+
+interface FriendReview {
+  id: string
+  comment: string | null
+  created_at: string
+  place?: { name: string; type: string } | null
 }
 
 interface UserReview {
@@ -125,6 +133,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const [message, setMessage]   = useState<string | null>(null)
   const [friendEmail, setFriendEmail] = useState('')
 
+  // ── Aperçu profil ami (à la demande) ───────────────────────────────
+  const [friendProfileId, setFriendProfileId] = useState<string | null>(null)
+  const [friendReviews, setFriendReviews] = useState<FriendReview[]>([])
+  const [friendProfileLoading, setFriendProfileLoading] = useState(false)
+
   // ── Auth state ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -182,7 +195,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const fetchFriends = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from('friendships')
-      .select('id, requester_id, addressee_id, status, profile:profiles!friendships_addressee_id_fkey(display_name, username)')
+      .select(`
+        id, requester_id, addressee_id, status,
+        requester:profiles!friendships_requester_id_fkey(display_name, username),
+        addressee:profiles!friendships_addressee_id_fkey(display_name, username)
+      `)
       .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
       .in('status', ['pending', 'accepted'])
       .limit(30)
@@ -265,8 +282,29 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     setFriends(f => f.map(x => x.id === friendshipId ? { ...x, status: 'accepted' } : x))
   }
 
-  // ── Render helpers ─────────────────────────────────────────────────────────
+  async function handleRejectFriend(friendshipId: string) {
+    await supabase.from('friendships').update({ status: 'rejected' }).eq('id', friendshipId)
+    setFriends(f => f.filter(x => x.id !== friendshipId))
+  }
 
+  // ── Render helpers ─────────────────────────────────────────────────────────
+  async function loadFriendProfile(friendId: string) {
+    // Toggle
+    if (friendProfileId === friendId) { setFriendProfileId(null); return }
+    setFriendProfileId(friendId)
+    setFriendProfileLoading(true)
+    setFriendReviews([])
+    const { data } = await supabase
+      .from('reviews')
+      .select('id, comment, created_at, place:places(name, type)')
+      .eq('user_id', friendId)
+      .not('comment', 'is', null)
+      .neq('comment', '')
+      .order('created_at', { ascending: false })
+      .limit(3)
+    setFriendReviews((data as unknown as FriendReview[]) ?? [])
+    setFriendProfileLoading(false)
+  }
   const placeEmoji = (type: string) =>
     type === 'bar' ? '🍺' : type === 'restaurant' ? '🍽️' : type === 'park' ? '🌳' : '☕'
 
@@ -648,17 +686,23 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F' }}>
-                        {req.profile?.display_name ?? '—'}
+                        {req.requester?.display_name ?? '—'}
                       </p>
-                      {req.profile?.username && (
+                      {req.requester?.username && (
                         <p style={{ margin: '1px 0 0', fontSize: 11, color: 'rgba(31,58,95,0.50)', fontWeight: 700 }}>
-                          @{req.profile.username}
+                          @{req.requester.username}
                         </p>
                       )}
                     </div>
                     <button onClick={() => handleAcceptFriend(req.id)}
                       style={{ ...BTN_SECONDARY, width: 'auto', padding: '0 12px', height: 32, fontSize: 12 }}>
                       Accepter
+                    </button>
+                    <button onClick={() => handleRejectFriend(req.id)}
+                      style={{ width: 'auto', padding: '0 10px', height: 32, fontSize: 12, borderRadius: 12,
+                        border: '1.5px solid rgba(224,82,82,0.30)', background: 'rgba(224,82,82,0.08)',
+                        color: '#c04f4f', fontFamily: 'var(--font-outfit)', fontWeight: 800, cursor: 'pointer' }}>
+                      Refuser
                     </button>
                   </div>
                 ))}
@@ -685,25 +729,68 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                 </div>
               )
               : acceptedFriends.map(f => {
-                const isRequester = f.requester_id === user.id
-                const p = isRequester ? f.profile : f.profile // même champ via FK addressee
+                const p = f.requester_id === user.id ? f.addressee : f.requester
+                const otherId = f.requester_id === user.id ? f.addressee_id : f.requester_id
+                const isExpanded = friendProfileId === otherId
                 return (
-                  <div key={f.id} style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(237,193,69,0.18)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                      fontWeight: 900, fontSize: 14, color: '#1F3A5F' }}>
-                      {p?.display_name?.charAt(0)?.toUpperCase() ?? '?'}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F' }}>
-                        {p?.display_name ?? '—'}
-                      </p>
-                      {p?.username && (
-                        <p style={{ margin: '1px 0 0', fontSize: 11, color: 'rgba(31,58,95,0.50)', fontWeight: 700 }}>
-                          @{p.username}
+                  <div key={f.id}>
+                    <div
+                      onClick={() => loadFriendProfile(otherId)}
+                      style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+                        borderBottomLeftRadius: isExpanded ? 0 : undefined, borderBottomRightRadius: isExpanded ? 0 : undefined,
+                        marginBottom: isExpanded ? 0 : 12 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(237,193,69,0.18)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        fontWeight: 900, fontSize: 14, color: '#1F3A5F' }}>
+                        {p?.display_name?.charAt(0)?.toUpperCase() ?? '?'}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F' }}>
+                          {p?.display_name ?? '—'}
                         </p>
-                      )}
+                        {p?.username && (
+                          <p style={{ margin: '1px 0 0', fontSize: 11, color: 'rgba(31,58,95,0.50)', fontWeight: 700 }}>
+                            @{p.username}
+                          </p>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 14, color: 'rgba(31,58,95,0.35)', transition: 'transform 200ms',
+                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'block' }}>▾</span>
                     </div>
+                    {isExpanded && (
+                      <div style={{ ...CARD, marginBottom: 12,
+                        borderTopLeftRadius: 0, borderTopRightRadius: 0,
+                        borderTop: '1px solid rgba(31,58,95,0.06)', paddingTop: 10 }}>
+                        {friendProfileLoading ? (
+                          <p style={{ margin: 0, fontSize: 12, textAlign: 'center', color: 'rgba(31,58,95,0.40)', fontWeight: 600 }}>
+                            Chargement…
+                          </p>
+                        ) : friendReviews.length === 0 ? (
+                          <p style={{ margin: 0, fontSize: 12, color: 'rgba(31,58,95,0.40)', fontWeight: 600, textAlign: 'center' }}>
+                            Aucun avis public pour l&apos;instant
+                          </p>
+                        ) : (
+                          <>
+                            <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 900, letterSpacing: '0.10em',
+                              textTransform: 'uppercase', color: 'rgba(31,58,95,0.45)' }}>Derniers avis</p>
+                            {friendReviews.map(r => (
+                              <div key={r.id} style={{ marginBottom: 8, paddingBottom: 8,
+                                borderBottom: '1px solid rgba(31,58,95,0.06)' }}>
+                                <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: '#1F3A5F' }}>
+                                  {placeEmoji(r.place?.type ?? '')} {r.place?.name ?? '—'}
+                                </p>
+                                {r.comment && (
+                                  <p style={{ margin: '3px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.70)',
+                                    fontWeight: 600, lineHeight: 1.4 }}>
+                                    {r.comment}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })
