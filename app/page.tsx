@@ -35,6 +35,12 @@ const TODAY_LABEL = (() => {
   return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(d)
 })()
 
+const HEADER_DATE = (() => {
+  const d = new Date()
+  // "ven. 22 mai" — compact pour le header
+  return new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(d)
+})()
+
 export default function HomePage() {
   const [places, setPlaces] = useState<Place[]>([])
   const [activeFilters, setActiveFilters] = useState<FilterType[]>([])
@@ -302,32 +308,50 @@ export default function HomePage() {
         />
       </div>
 
-      {/* ══════ HEADER : météo gauche · logo centré · slider+profil droite ══════ */}
+      {/* ══════ HEADER RESPONSIVE ══════
+           Mobile  : Row 1 = date+météo · logo · profil
+                     Row 2 = slider full-width
+           Desktop : Row 1 = date+météo · logo · slider+profil          */}
       <header
         className="absolute top-0 inset-x-0 z-20"
         style={{
-          background: 'rgba(255,248,234,0.96)',
-          backdropFilter: 'blur(22px)',
-          WebkitBackdropFilter: 'blur(22px)',
+          background: 'rgba(255,248,234,0.97)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
           borderBottom: '1px solid rgba(31,58,95,0.07)',
           boxShadow: '0 2px 18px rgba(31,58,95,0.06)',
         }}
       >
+        {/* ── ROW 1 : date+météo · logo · [slider desktop] · profil ── */}
         <div
           style={{
             position: 'relative',
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
-            paddingLeft: 12,
-            paddingRight: 12,
+            paddingLeft: 14,
+            paddingRight: 14,
             paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)',
-            paddingBottom: 8,
+            paddingBottom: isDesktop ? 8 : 6,
             minHeight: 'calc(max(env(safe-area-inset-top, 0px), 8px) + 50px)',
           }}
         >
-          {/* ── GAUCHE : météo détaillée ── */}
-          <div style={{ flex: '0 0 auto', zIndex: 1, minWidth: 72 }}>
+          {/* ── GAUCHE : date + météo ── */}
+          <div style={{ flex: '0 0 auto', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span
+              title={TODAY_LABEL}
+              style={{
+                fontFamily: 'var(--font-bricolage)',
+                fontSize: 9.5,
+                fontWeight: 800,
+                color: 'rgba(31,58,95,0.38)',
+                letterSpacing: '0.02em',
+                textTransform: 'capitalize',
+                whiteSpace: 'nowrap',
+                lineHeight: 1,
+              }}
+            >
+              {HEADER_DATE}
+            </span>
             {weatherForHour ? (
               <a
                 href="https://meteofrance.com/previsions-meteo-france/paris/75000"
@@ -336,26 +360,26 @@ export default function HomePage() {
                 className="inline-flex items-center gap-1.5"
                 style={{ textDecoration: 'none' }}
               >
-                <span aria-hidden="true" style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>
+                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>
                   {owmIconToEmoji(weatherForHour.icon)}
                 </span>
                 <span style={{ fontFamily: 'var(--font-outfit)' }}>
-                  <span style={{ display: 'block', fontSize: 16, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>
+                  <span style={{ display: 'block', fontSize: 15, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>
                     {weatherForHour.temp}°
                   </span>
                   <span style={{
-                    display: 'block', fontSize: 9.5, fontWeight: 600,
-                    color: 'rgba(31,58,95,0.45)', lineHeight: 1.3, marginTop: 1,
-                    maxWidth: 82, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    display: 'block', fontSize: 9, fontWeight: 600,
+                    color: 'rgba(31,58,95,0.45)', lineHeight: 1.2, marginTop: 1,
+                    maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
                     {weatherForHour.description}
                   </span>
                 </span>
               </a>
-            ) : <div style={{ width: 72 }} />}
+            ) : null}
           </div>
 
-          {/* ── CENTRE : logo PNG fond transparent (mix-blend-mode) ── */}
+          {/* ── CENTRE : logo ── */}
           <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 1 }}>
             <button
               aria-label="HopSoleil — Retour à l'accueil"
@@ -367,87 +391,150 @@ export default function HomePage() {
               <img
                 src="/logo-hopsoleil.png"
                 alt="HopSoleil"
-                style={{ height: 36, width: 'auto', display: 'block', mixBlendMode: 'multiply' }}
+                style={{ height: 34, width: 'auto', display: 'block', mixBlendMode: 'multiply' }}
               />
             </button>
           </div>
 
-          {/* ── DROITE : slider heure + bouton profil ── */}
-          <div style={{ flex: '0 0 auto', marginLeft: 'auto', zIndex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* ── DROITE : slider (desktop uniquement) + profil ── */}
+          <div style={{
+            flex: '0 0 auto', marginLeft: 'auto', zIndex: 1,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            {/* Slider pill — desktop seulement */}
+            {isDesktop && (
+              <div
+                className="inline-flex items-center"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(31,58,95,0.07) 0%, rgba(237,193,69,0.10) 100%)',
+                  border: '1.5px solid rgba(237,193,69,0.32)',
+                  borderRadius: 999,
+                  padding: '4px 8px 4px 12px',
+                  gap: 6,
+                  boxShadow: '0 2px 10px rgba(237,193,69,0.12)',
+                  width: 'clamp(180px, 28vw, 260px)',
+                }}
+              >
+                <input
+                  type="range" min={6} max={23.5} step={0.5}
+                  value={hour}
+                  onChange={(e) => setHour(parseFloat(e.target.value))}
+                  className="cb-hour-slider"
+                  style={{ flex: 1, minWidth: 0 }}
+                  aria-label="Heure du soleil"
+                />
+                <span className="font-outfit shrink-0" style={{ fontSize: 12.5, fontWeight: 900, color: '#1F3A5F', lineHeight: 1, minWidth: 32 }}>
+                  {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : '00'}
+                </span>
+                <button
+                  onClick={() => setHour(nowHalfHour())}
+                  aria-label="Heure actuelle"
+                  className="shrink-0 inline-flex items-center justify-center rounded-full transition-all active:scale-[0.90]"
+                  style={{
+                    width: 24, height: 24,
+                    background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.09)',
+                    border: `1px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
+                    boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.40)' : 'none',
+                    color: '#1F3A5F',
+                  }}
+                >
+                  <Clock size={12} strokeWidth={2.5} />
+                </button>
+                {!loading && sunnyCount > 0 && (
+                  <span className="shrink-0 font-outfit font-bold" style={{ fontSize: 11, color: '#b87c00', lineHeight: 1 }}>
+                    ☀ {sunnyCount}
+                  </span>
+                )}
+              </div>
+            )}
 
-            {/* Slider pill compact */}
-            <div
-              className="inline-flex items-center gap-1.5 cb-hour-pill"
+            {/* Bouton profil — toujours visible */}
+            <button
+              onClick={() => { setShowProfile(p => !p); setSelectedPlace(null); setSelectedAmenite(null) }}
+              aria-label={userId ? 'Mon profil' : 'Se connecter'}
+              className="shrink-0 inline-flex items-center justify-center rounded-full transition-all active:scale-[0.94]"
               style={{
-                background: 'rgba(31,58,95,0.07)',
-                border: '1px solid rgba(31,58,95,0.12)',
-                borderRadius: 999,
-                padding: '5px 8px 5px 10px',
-                maxWidth: 'clamp(150px, 38vw, 240px)',
+                width: 38, height: 38,
+                background: showProfile
+                  ? '#1F3A5F'
+                  : userId ? 'rgba(237,193,69,0.18)' : 'rgba(31,58,95,0.07)',
+                border: `1.5px solid ${showProfile ? '#1F3A5F' : userId ? 'rgba(237,193,69,0.45)' : 'rgba(31,58,95,0.10)'}`,
+                boxShadow: showProfile ? '0 4px 14px rgba(31,58,95,0.25)' : userId ? '0 2px 8px rgba(237,193,69,0.18)' : 'none',
+                cursor: 'pointer',
               }}
             >
+              <UserCircle
+                size={18} strokeWidth={2}
+                style={{ color: showProfile ? '#EDC145' : userId ? '#b87c00' : 'rgba(31,58,95,0.40)' }}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* ── ROW 2 (mobile only) : slider full-width ── */}
+        {!isDesktop && (
+          <div style={{ padding: '0 14px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Label gauche */}
+            <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 10, fontWeight: 800,
+              color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              ☀ 6h
+            </span>
+
+            {/* Slider track zone */}
+            <div style={{
+              flex: 1, minWidth: 0,
+              background: 'linear-gradient(90deg, rgba(237,193,69,0.12) 0%, rgba(31,58,95,0.06) 100%)',
+              border: '1.5px solid rgba(237,193,69,0.28)',
+              borderRadius: 999,
+              padding: '3px 10px',
+              boxShadow: '0 2px 10px rgba(237,193,69,0.10)',
+            }}>
               <input
                 type="range" min={6} max={23.5} step={0.5}
                 value={hour}
                 onChange={(e) => setHour(parseFloat(e.target.value))}
-                className="cb-hour-slider cb-hour-slider-thin"
-                style={{ height: 20 }}
+                className="cb-hour-slider w-full"
                 aria-label="Heure du soleil"
               />
-              <span className="font-outfit shrink-0" style={{ fontSize: 11, fontWeight: 800, color: '#1F3A5F', minWidth: 30 }}>
-                {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
+            </div>
+
+            {/* Label droit */}
+            <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 10, fontWeight: 800,
+              color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              🌙 23h
+            </span>
+
+            {/* Heure courante + bouton maintenant */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 900,
+                color: '#1F3A5F', lineHeight: 1, minWidth: 34, textAlign: 'right' }}>
+                {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : '00'}
               </span>
               <button
                 onClick={() => setHour(nowHalfHour())}
-                aria-label="Maintenant"
-                className="shrink-0 inline-flex items-center gap-0.5 rounded-full font-bold transition-all duration-150 active:scale-[0.94]"
+                aria-label="Heure actuelle"
+                className="inline-flex items-center justify-center rounded-full transition-all active:scale-[0.88]"
                 style={{
-                  fontSize: 10, paddingLeft: 6, paddingRight: 7, paddingTop: 3, paddingBottom: 3,
+                  width: 26, height: 26, flexShrink: 0,
                   background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.08)',
+                  border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
+                  boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 10px rgba(237,193,69,0.40)' : 'none',
                   color: '#1F3A5F',
-                  border: `1px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
-                  boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.35)' : 'none',
-                  whiteSpace: 'nowrap',
                 }}
               >
-                <Clock size={9} strokeWidth={2.5} />
-                <span className="hidden sm:inline" style={{ marginLeft: 2 }}>Maintenant</span>
+                <Clock size={12} strokeWidth={2.5} />
               </button>
-              {!loading && sunnyCount > 0 && (
-                <>
-                  <span style={{ width: 1, height: 12, background: 'rgba(31,58,95,0.15)', flexShrink: 0 }} />
-                  <span className="font-bold shrink-0" style={{ fontSize: 11, color: '#EDC145' }}>
-                    ☀{sunnyCount}
-                  </span>
-                </>
-              )}
             </div>
 
-            {/* Bouton profil */}
-            <button
-              onClick={() => { setShowProfile(p => !p); setSelectedPlace(null); setSelectedAmenite(null) }}
-              aria-label={userId ? 'Mon profil' : 'Se connecter'}
-              className="shrink-0 inline-flex items-center gap-1.5 rounded-full transition-all duration-150 active:scale-[0.94]"
-              style={{
-                height: 36, paddingLeft: userId ? 6 : 10, paddingRight: 10,
-                background: userId ? 'rgba(237,193,69,0.15)' : 'rgba(31,58,95,0.07)',
-                border: `1.5px solid ${userId ? 'rgba(237,193,69,0.45)' : 'rgba(31,58,95,0.10)'}`,
-                cursor: 'pointer', fontFamily: 'var(--font-outfit)', fontSize: 12, fontWeight: 700, color: '#1F3A5F',
-              }}
-            >
-              {userId && (
-                <span style={{
-                  width: 24, height: 24, borderRadius: '50%', background: '#EDC145',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}>
-                  <UserCircle size={14} strokeWidth={2} style={{ color: '#1F3A5F' }} />
-                </span>
-              )}
-              <span className="hidden sm:block">{userId ? 'Profil' : 'Connexion'}</span>
-              {!userId && <UserCircle size={15} strokeWidth={2} style={{ color: 'rgba(31,58,95,0.45)' }} />}
-            </button>
+            {/* Compteur soleil */}
+            {!loading && sunnyCount > 0 && (
+              <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 11, fontWeight: 800,
+                color: '#b87c00', flexShrink: 0, lineHeight: 1 }}>
+                ☀{sunnyCount}
+              </span>
+            )}
           </div>
-        </div>
+        )}
       </header>
 
       {/* État vide */}
@@ -469,7 +556,7 @@ export default function HomePage() {
       {/* Message guidé quand filtre eau/WC actif sans autre filtre */}
       {!loading && activeFilters.some(f => f === 'fontaine' || f === 'sanisette') && displayedPlaces.length === 0 && (
         <div className="absolute inset-x-0 z-10 pointer-events-none flex justify-center px-6"
-          style={{ top: 'calc(max(env(safe-area-inset-top,0px),10px) + 70px)' }}>
+          style={{ top: isDesktop ? 'calc(max(env(safe-area-inset-top,0px),10px) + 68px)' : 'calc(max(env(safe-area-inset-top,0px),10px) + 112px)' }}>
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-outfit text-xs font-bold"
             style={{ background: 'rgba(255,248,234,0.97)', border: '1.5px solid rgba(31,58,95,0.12)',
               boxShadow: '0 4px 16px rgba(31,58,95,0.08)', color: '#1F3A5F' }}>

@@ -319,16 +319,6 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           </Link>
         )}
 
-        <div aria-live="polite"
-          style={{ padding:'7px 12px', borderRadius:999,
-            display:'inline-flex', alignItems:'center', gap:6,
-            fontWeight:900, fontSize:12.5, ...scoreBadgeStyle }}>
-          <span style={{ fontSize:14 }}>
-            {isSunny ? '☀️' : currentScore >= 2 ? '⛅' : '🌑'}
-          </span>
-          <span>{SCORE_LABEL[currentScore]}</span>
-        </div>
-
         <div style={{ flex:1 }} />
 
         {/* ❤️ Bouton favori */}

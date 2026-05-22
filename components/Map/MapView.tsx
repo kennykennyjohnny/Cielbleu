@@ -760,10 +760,14 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
 
   // ── Visibilité couches fontaines / sanisettes / park-highlight ──────────
   // Chaque couche n'est visible QUE si son filtre est explicitement activé.
-  // Sans filtre → couche cachée (pas de visibilité par défaut au zoom 14).
+  // ⚠️ Les couches sont ajoutées dans map.on('style.load', ...) — on ne peut
+  // donc les manipuler qu'APRÈS ce handler. On détecte leur présence via
+  // map.getLayer() plutôt que map.isStyleLoaded() (qui peut être vrai avant
+  // que les layers custom soient enregistrés si le style reload).
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
+
     const apply = () => {
       // Fontaines — visible seulement si showFontaines actif
       if (map.getLayer('fontaines-layer')) {
@@ -795,8 +799,17 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       if (map.getLayer('park-highlight'))
         try { map.setLayoutProperty('park-highlight', 'visibility', showPark ? 'visible' : 'none') } catch { /* noop */ }
     }
-    if (map.isStyleLoaded()) apply()
-    else map.once('style.load', apply)
+
+    // Si les couches existent déjà (style chargé + layers ajoutés) → applique immédiatement.
+    // Sinon attend style.load qui déclenchera d'abord l'ajout des layers (handler on() enregistré
+    // en premier dans l'init effect), puis notre apply() via once().
+    if (map.getLayer('fontaines-layer')) {
+      apply()
+    } else {
+      map.once('style.load', apply)
+      // Cleanup : évite les listeners stale si l'effet re-run avant le chargement
+      return () => { map.off('style.load', apply) }
+    }
   }, [showFontaines, showSanisettes, showPark])
 
   return (

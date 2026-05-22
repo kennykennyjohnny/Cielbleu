@@ -248,71 +248,85 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     return (
       <div style={{ background: 'transparent', fontFamily: 'var(--font-outfit)', color: '#1F3A5F', padding: '0 0 80px' }}>
 
-        {/* Header */}
+        {/* Header minimal */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 0' }}>
           <button onClick={onClose} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(31,58,95,0.08)',
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(31,58,95,0.07)',
               display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ArrowLeft size={16} strokeWidth={2.5} />
             </div>
           </button>
-          <p style={{ margin: 0, fontSize: 16, fontWeight: 900 }}>Mon profil</p>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 900, letterSpacing: '-0.02em' }}>Mon espace</p>
         </div>
 
-        {/* Hero card */}
+        {/* Hero — gradient navy avec soleil doré */}
         <div style={{
-          margin: '18px 16px 0',
-          borderRadius: 22,
-          background: 'linear-gradient(135deg, #1F3A5F 0%, #2d527a 100%)',
-          padding: '26px 20px 24px',
+          margin: '16px 16px 0',
+          borderRadius: 24,
+          background: 'linear-gradient(145deg, #1a3358 0%, #1F3A5F 55%, #254878 100%)',
+          padding: '28px 22px 24px',
           textAlign: 'center',
           position: 'relative',
           overflow: 'hidden',
         }}>
-          <div style={{ position: 'absolute', top: -24, right: -24, width: 110, height: 110,
-            borderRadius: '50%', background: 'rgba(237,193,69,0.18)' }} />
+          {/* Halos décoratifs */}
+          <div style={{ position: 'absolute', top: -30, right: -30, width: 130, height: 130,
+            borderRadius: '50%', background: 'rgba(237,193,69,0.14)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', bottom: -20, left: -20, width: 90, height: 90,
+            borderRadius: '50%', background: 'rgba(237,193,69,0.08)', pointerEvents: 'none' }} />
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fff',
-              boxShadow: '0 0 0 8px rgba(237,193,69,0.18), 0 8px 24px rgba(237,193,69,0.40)',
+            {/* Icône soleil */}
+            <div style={{
+              width: 68, height: 68, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #EDC145 0%, #f5d060 100%)',
+              boxShadow: '0 0 0 10px rgba(237,193,69,0.15), 0 10px 28px rgba(237,193,69,0.45)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 14px', overflow: 'hidden' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-icon.png" alt="HopSoleil" style={{ width: 58, height: 58, objectFit: 'contain' }} />
+              margin: '0 auto 16px',
+            }}>
+              <span style={{ fontSize: 32, lineHeight: 1 }}>☀</span>
             </div>
-            <p style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#fff', letterSpacing: '-0.02em' }}>
-              Connexion à HopSoleil
+            <p style={{ margin: 0, fontFamily: 'var(--font-bricolage)', fontSize: 19, fontWeight: 900, color: '#fff', letterSpacing: '-0.03em' }}>
+              Rejoins HopSoleil
             </p>
-            <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.65)', fontWeight: 600, lineHeight: 1.5 }}>
-              Sauvegarde tes terrasses favorites,<br />note l&apos;ensoleillement, retrouve tes amis.
+            <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.60)', fontWeight: 600, lineHeight: 1.55 }}>
+              Garde tes terrasses chouchous,<br />vote sur l&apos;ensoleillement, retrouve tes amis.
             </p>
           </div>
         </div>
 
-        {/* Ce que tu débloques — row d'icônes */}
-        <div style={{ display: 'flex', gap: 8, margin: '12px 16px 0' }}>
-          {[{ icon: '❤️', label: 'Favoris' }, { icon: '☀️', label: 'Votes' }, { icon: '✍️', label: 'Avis' }, { icon: '👥', label: 'Amis' }].map(({ icon, label }) => (
-            <div key={label} style={{ flex: 1, borderRadius: 14, padding: '10px 4px', textAlign: 'center',
-              background: 'rgba(31,58,95,0.05)', border: '1px solid rgba(31,58,95,0.08)' }}>
-              <span style={{ fontSize: 18, display: 'block', marginBottom: 4 }}>{icon}</span>
-              <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(31,58,95,0.55)' }}>{label}</span>
+        {/* Perks — 4 pills iconiques */}
+        <div style={{ display: 'flex', gap: 7, margin: '14px 16px 0' }}>
+          {[
+            { icon: '♥', label: 'Favoris', color: 'rgba(224,82,82,0.12)', border: 'rgba(224,82,82,0.20)' },
+            { icon: '☀', label: 'Votes',   color: 'rgba(237,193,69,0.14)', border: 'rgba(237,193,69,0.35)' },
+            { icon: '✏', label: 'Avis',    color: 'rgba(31,58,95,0.06)',  border: 'rgba(31,58,95,0.12)' },
+            { icon: '⌾',  label: 'Amis',   color: 'rgba(52,168,83,0.10)', border: 'rgba(52,168,83,0.25)' },
+          ].map(({ icon, label, color, border }) => (
+            <div key={label} style={{
+              flex: 1, borderRadius: 14, padding: '10px 4px', textAlign: 'center',
+              background: color, border: `1.5px solid ${border}`,
+            }}>
+              <span style={{ fontSize: 17, display: 'block', marginBottom: 5, lineHeight: 1 }}>{icon}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(31,58,95,0.60)', letterSpacing: '0.01em' }}>{label}</span>
             </div>
           ))}
         </div>
 
         {/* Tab switcher */}
-        <div style={{ display: 'flex', gap: 6, margin: '20px 16px 16px',
+        <div style={{ display: 'flex', gap: 6, margin: '18px 16px 14px',
           background: 'rgba(31,58,95,0.06)', borderRadius: 14, padding: 4 }}>
           {(['login', 'register'] as AuthTab[]).map(t => (
             <button key={t} onClick={() => { setAuthTab(t); setError(null); setMessage(null) }}
               style={{
                 flex: 1, height: 36, borderRadius: 10, border: 'none', cursor: 'pointer',
                 fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 13,
-                background: authTab === t ? '#fff' : 'transparent',
-                color: authTab === t ? '#1F3A5F' : 'rgba(31,58,95,0.45)',
-                boxShadow: authTab === t ? '0 2px 8px rgba(31,58,95,0.10)' : 'none',
+                background: authTab === t ? '#1F3A5F' : 'transparent',
+                color: authTab === t ? '#fff' : 'rgba(31,58,95,0.45)',
+                boxShadow: authTab === t ? '0 4px 14px rgba(31,58,95,0.22)' : 'none',
                 transition: 'all 150ms',
+                letterSpacing: '-0.01em',
               }}>
-              {t === 'login' ? 'Se connecter' : 'Créer un compte'}
+              {t === 'login' ? 'Connexion' : 'Inscription'}
             </button>
           ))}
         </div>
@@ -335,14 +349,14 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
             autoComplete={authTab === 'login' ? 'current-password' : 'new-password'} required />
 
           {error && (
-            <p style={{ margin: 0, fontSize: 13, color: '#E05252', fontWeight: 700 }}>{error}</p>
+            <p style={{ margin: 0, fontSize: 13, color: '#E05252', fontWeight: 700, background: 'rgba(224,82,82,0.08)', padding: '8px 12px', borderRadius: 10 }}>{error}</p>
           )}
           {message && (
-            <p style={{ margin: 0, fontSize: 13, color: '#34A853', fontWeight: 700 }}>{message}</p>
+            <p style={{ margin: 0, fontSize: 13, color: '#34A853', fontWeight: 700, background: 'rgba(52,168,83,0.08)', padding: '8px 12px', borderRadius: 10 }}>{message}</p>
           )}
 
           <button type="submit" style={{ ...BTN_PRIMARY, marginTop: 4 }} disabled={loading}>
-            {loading ? '…' : authTab === 'login' ? 'Se connecter' : "S'inscrire"}
+            {loading ? '…' : authTab === 'login' ? 'Se connecter' : "Créer mon compte"}
           </button>
         </form>
 
@@ -357,6 +371,9 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const pendingRequests = friends.filter(f => f.status === 'pending' && f.addressee_id === user.id)
   const acceptedFriends = friends.filter(f => f.status === 'accepted')
 
+  // Initiale pour l'avatar généré
+  const initiale = displayNameResolved.charAt(0).toUpperCase()
+
   return (
     <div style={{ background: 'transparent', fontFamily: 'var(--font-outfit)', color: '#1F3A5F', paddingBottom: 80 }}>
 
@@ -364,70 +381,82 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={onClose} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(31,58,95,0.08)',
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(31,58,95,0.07)',
               display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ArrowLeft size={16} strokeWidth={2.5} />
             </div>
           </button>
-          <p style={{ margin: 0, fontSize: 16, fontWeight: 900 }}>Mon profil</p>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 900, letterSpacing: '-0.02em' }}>Mon espace</p>
         </div>
         <button onClick={handleLogout} title="Se déconnecter"
-          style={{ background: 'none', border: 'none', padding: 6, cursor: 'pointer', color: 'rgba(31,58,95,0.45)' }}>
-          <LogOut size={16} strokeWidth={2} />
+          style={{ background: 'rgba(31,58,95,0.06)', border: '1px solid rgba(31,58,95,0.10)', borderRadius: 10,
+            padding: '6px 10px', cursor: 'pointer', color: 'rgba(31,58,95,0.55)',
+            display: 'flex', alignItems: 'center', gap: 5,
+            fontFamily: 'var(--font-outfit)', fontWeight: 700, fontSize: 12 }}>
+          <LogOut size={13} strokeWidth={2} />
+          <span>Déco</span>
         </button>
       </div>
 
-      {/* Carte avatar + stats */}
+      {/* Carte avatar + stats — DA v2 */}
       <div style={{
-        margin: '16px 16px 0',
-        borderRadius: 22,
-        background: 'linear-gradient(135deg, #1F3A5F 0%, #2d527a 100%)',
+        margin: '14px 16px 0',
+        borderRadius: 24,
+        background: 'linear-gradient(145deg, #1a3358 0%, #1F3A5F 55%, #254878 100%)',
         padding: '20px 20px 18px',
         position: 'relative', overflow: 'hidden',
       }}>
-        <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100,
-          borderRadius: '50%', background: 'rgba(237,193,69,0.15)' }} />
+        {/* Halos décoratifs */}
+        <div style={{ position: 'absolute', top: -25, right: -25, width: 110, height: 110,
+          borderRadius: '50%', background: 'rgba(237,193,69,0.15)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: -15, left: -15, width: 70, height: 70,
+          borderRadius: '50%', background: 'rgba(237,193,69,0.08)', pointerEvents: 'none' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
-          <div style={{ width: 52, height: 52, borderRadius: '50%', flexShrink: 0,
-            background: '#fff',
-            boxShadow: '0 0 0 3px rgba(237,193,69,0.40)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          {/* Avatar — photo ou initiale */}
+          <div style={{
+            width: 54, height: 54, borderRadius: '50%', flexShrink: 0,
+            background: profile?.avatar_url ? 'transparent' : '#EDC145',
+            boxShadow: '0 0 0 3px rgba(237,193,69,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+          }}>
             {profile?.avatar_url
               // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={profile.avatar_url} alt={displayNameResolved} width={52} height={52} style={{ objectFit: 'cover' }} />
-              : /* eslint-disable-next-line @next/next/no-img-element */
-                <img src="/logo-icon.png" alt="HopSoleil" style={{ width: 44, height: 44, objectFit: 'contain' }} />}
+              ? <img src={profile.avatar_url} alt={displayNameResolved} width={54} height={54} style={{ objectFit: 'cover' }} />
+              : <span style={{ fontSize: 22, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>{initiale}</span>
+            }
           </div>
           <div>
-            <p style={{ margin: 0, fontWeight: 900, fontSize: 17, color: '#fff' }}>{displayNameResolved}</p>
+            <p style={{ margin: 0, fontFamily: 'var(--font-bricolage)', fontWeight: 900, fontSize: 18, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+              {displayNameResolved}
+            </p>
             {profile?.username && (
-              <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>
+              <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'rgba(255,255,255,0.50)', fontWeight: 700 }}>
                 @{profile.username}
               </p>
             )}
           </div>
         </div>
         {/* Stats row */}
-        <div style={{ display: 'flex', gap: 0, marginTop: 16, position: 'relative', zIndex: 1,
+        <div style={{ display: 'flex', marginTop: 16, position: 'relative', zIndex: 1,
           borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14 }}>
           {[
-            { value: favorites.length, label: 'Favoris', icon: '❤️' },
-            { value: acceptedFriends.length, label: 'Amis', icon: '👥' },
-            { value: pendingRequests.length, label: 'Demandes', icon: '🔔' },
-          ].map(({ value, label, icon }, i) => (
+            { value: favorites.length, label: 'Favoris', color: '#EDC145' },
+            { value: acceptedFriends.length, label: 'Amis', color: '#EDC145' },
+            { value: pendingRequests.length, label: 'Demandes', color: pendingRequests.length > 0 ? '#f5d060' : 'rgba(255,255,255,0.40)' },
+          ].map(({ value, label, color }, i) => (
             <div key={label} style={{ flex: 1, textAlign: 'center',
               borderRight: i < 2 ? '1px solid rgba(255,255,255,0.10)' : 'none' }}>
-              <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#EDC145', lineHeight: 1 }}>{value}</p>
-              <p style={{ margin: '3px 0 0', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.55)', lineHeight: 1 }}>
-                {icon} {label}
+              <p style={{ margin: 0, fontSize: 22, fontWeight: 900, color, lineHeight: 1, letterSpacing: '-0.02em' }}>{value}</p>
+              <p style={{ margin: '4px 0 0', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.45)', lineHeight: 1, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {label}
               </p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, margin: '16px 16px 18px',
+      {/* Tabs — DA v2 : actif = navy fond blanc, inactif = transparent */}
+      <div style={{ display: 'flex', gap: 6, margin: '14px 16px 16px',
         background: 'rgba(31,58,95,0.06)', borderRadius: 14, padding: 4 }}>
         {([
           { id: 'favoris', label: 'Favoris', icon: <Heart size={12} /> },
@@ -436,14 +465,22 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
         ] as { id: ProfileTab; label: string; icon: React.ReactNode }[]).map(t => (
           <button key={t.id} onClick={() => setProfileTab(t.id)}
             style={{
-              flex: 1, height: 34, borderRadius: 10, border: 'none', cursor: 'pointer',
-              fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              background: profileTab === t.id ? '#fff' : 'transparent',
-              color: profileTab === t.id ? '#1F3A5F' : 'rgba(31,58,95,0.45)',
-              boxShadow: profileTab === t.id ? '0 2px 8px rgba(31,58,95,0.10)' : 'none',
+              flex: 1, height: 36, borderRadius: 10, border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12.5,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              background: profileTab === t.id ? '#1F3A5F' : 'transparent',
+              color: profileTab === t.id ? '#EDC145' : 'rgba(31,58,95,0.45)',
+              boxShadow: profileTab === t.id ? '0 4px 14px rgba(31,58,95,0.20)' : 'none',
+              transition: 'all 150ms',
+              letterSpacing: '-0.01em',
             }}>
             {t.icon} {t.label}
+            {t.id === 'amis' && pendingRequests.length > 0 && (
+              <span style={{ background: '#EDC145', color: '#1F3A5F', borderRadius: 999,
+                fontSize: 9, fontWeight: 900, padding: '1px 5px', lineHeight: '14px' }}>
+                {pendingRequests.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -456,13 +493,16 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           <>
             {favorites.length === 0
               ? (
-                <div style={{ ...CARD, textAlign: 'center', padding: '28px 16px' }}>
-                  <p style={{ margin: 0, fontSize: 28 }}>🌅</p>
-                  <p style={{ margin: '8px 0 0', fontWeight: 800, fontSize: 14, color: '#1F3A5F' }}>
-                    Pas encore de favoris
+                <div style={{ ...CARD, textAlign: 'center', padding: '30px 16px' }}>
+                  <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(237,193,69,0.14)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                    <Heart size={22} strokeWidth={1.8} style={{ color: '#c98e00' }} />
+                  </div>
+                  <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: '#1F3A5F' }}>
+                    Aucun favori pour l&apos;instant
                   </p>
-                  <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.50)', fontWeight: 600 }}>
-                    Clique sur le ❤️ sur une fiche pour sauvegarder un lieu.
+                  <p style={{ margin: '5px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.50)', fontWeight: 600, lineHeight: 1.5 }}>
+                    Ouvre une fiche de terrasse et clique sur ♥ pour la sauvegarder ici.
                   </p>
                 </div>
               )
@@ -492,13 +532,16 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
         {/* ── AVIS ── */}
         {profileTab === 'avis' && (
-          <div style={{ ...CARD, textAlign: 'center', padding: '28px 16px' }}>
-            <p style={{ margin: 0, fontSize: 28 }}>✍️</p>
-            <p style={{ margin: '8px 0 0', fontWeight: 800, fontSize: 14, color: '#1F3A5F' }}>
+          <div style={{ ...CARD, textAlign: 'center', padding: '30px 16px' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(31,58,95,0.07)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <MessageSquare size={22} strokeWidth={1.8} style={{ color: 'rgba(31,58,95,0.45)' }} />
+            </div>
+            <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: '#1F3A5F' }}>
               Tes avis apparaissent ici
             </p>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.50)', fontWeight: 600 }}>
-              Commente une terrasse depuis sa fiche pour retrouver tes avis ici.
+            <p style={{ margin: '5px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.50)', fontWeight: 600, lineHeight: 1.5 }}>
+              Commente une terrasse depuis sa fiche pour retrouver tous tes avis ici.
             </p>
           </div>
         )}
@@ -554,10 +597,16 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
             </p>
             {acceptedFriends.length === 0
               ? (
-                <div style={{ ...CARD, textAlign: 'center', padding: '24px 16px' }}>
-                  <p style={{ margin: 0, fontSize: 24 }}>👥</p>
-                  <p style={{ margin: '6px 0 0', fontSize: 13, color: 'rgba(31,58,95,0.55)', fontWeight: 700 }}>
-                    Tes amis découvrent Paris au soleil avec toi.
+                <div style={{ ...CARD, textAlign: 'center', padding: '26px 16px' }}>
+                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(52,168,83,0.10)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                    <Users size={20} strokeWidth={1.8} style={{ color: '#34A853' }} />
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, color: '#1F3A5F', fontWeight: 800 }}>
+                    Pas encore d&apos;amis ajoutés
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.50)', fontWeight: 600, lineHeight: 1.5 }}>
+                    Invite tes amis via leur pseudo pour explorer Paris au soleil ensemble.
                   </p>
                 </div>
               )
@@ -566,9 +615,10 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                 const p = isRequester ? f.profile : f.profile // même champ via FK addressee
                 return (
                   <div key={f.id} style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(31,58,95,0.08)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                      ☀️
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(237,193,69,0.18)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      fontWeight: 900, fontSize: 14, color: '#1F3A5F' }}>
+                      {p?.display_name?.charAt(0)?.toUpperCase() ?? '?'}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F' }}>
