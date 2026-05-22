@@ -134,6 +134,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const [friendEmail, setFriendEmail] = useState('')
   const [friendSuggestions, setFriendSuggestions] = useState<{ id: string; username: string | null; display_name: string | null }[]>([])  const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null)
   const skipNextSearchRef = useRef(false)
+
+  // ── Username setup (Google users) ──────────────────────────────────
+  const [needsUsername, setNeedsUsername] = useState(false)
+  const [newUsername, setNewUsername]     = useState('')
+
   // ── Avatar upload ──────────────────────────────────────────────────
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -167,7 +172,10 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
       .select('*')
       .eq('id', userId)
       .single()
-    if (data) setProfile(data)
+    if (data) {
+      setProfile(data)
+      if (!data.username) setNeedsUsername(true)
+    }
   }, [])
 
   const fetchFavorites = useCallback(async (userId: string) => {
@@ -263,7 +271,16 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     setLoading(true); setError(null)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
-    if (error) setError(error.message)
+    if (error) {
+      const msg = error.message.toLowerCase()
+      if (msg.includes('email not confirmed') || msg.includes('email_not_confirmed')) {
+        setError('Email non confirmé — vérifie ta boîte mail.')
+      } else if (msg.includes('invalid login credentials') || msg.includes('invalid_credentials')) {
+        setError('Email ou mot de passe incorrect.')
+      } else {
+        setError(error.message)
+      }
+    }
   }
 
   async function handleRegister(e: React.FormEvent) {
@@ -280,6 +297,26 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
   async function handleLogout() {
     await supabase.auth.signOut()
+  }
+
+  async function handleGoogleSignIn() {
+    setLoading(true); setError(null)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : '' },
+    })
+    if (error) { setError(error.message); setLoading(false) }
+  }
+
+  async function handleSaveUsername(e: React.FormEvent) {
+    e.preventDefault()
+    if (!user || !newUsername.trim()) return
+    setLoading(true); setError(null)
+    const username = newUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    const { error } = await supabase.from('profiles').update({ username }).eq('id', user.id)
+    setLoading(false)
+    if (error) setError(error.code === '23505' ? 'Ce pseudo est déjà pris.' : error.message)
+    else { setProfile(p => p ? { ...p, username } : p); setNeedsUsername(false) }
   }
 
   async function handleRemoveFavorite(favId: string) {
@@ -478,11 +515,79 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           </button>
         </form>
 
+        {/* ── Google OAuth ── */}
+        <div style={{ padding: '10px 16px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{ flex: 1, height: 1, background: 'rgba(31,58,95,0.12)' }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap' }}>ou</span>
+            <span style={{ flex: 1, height: 1, background: 'rgba(31,58,95,0.12)' }} />
+          </div>
+          <button type="button" onClick={handleGoogleSignIn} disabled={loading}
+            style={{ width: '100%', height: 46, borderRadius: 14, background: '#fff',
+              border: '1.5px solid rgba(31,58,95,0.15)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 14, color: '#1F3A5F',
+              boxShadow: '0 2px 8px rgba(31,58,95,0.08)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Continuer avec Google
+          </button>
+        </div>
+
       </div>
     )
   }
 
-  // ── LOGGED-IN PANEL ────────────────────────────────────────────────────────
+  // ── LOGGED-IN PANEL ──────────────────────────────────────────────
+
+  // Étape pseudo manquant (ex. après connexion Google)
+  if (needsUsername) return (
+    <div style={{ background: 'transparent', fontFamily: 'var(--font-outfit)', color: '#1F3A5F', padding: '0 0 80px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 0' }}>
+        <button onClick={() => setNeedsUsername(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+          <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(31,58,95,0.07)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ArrowLeft size={16} strokeWidth={2.5} />
+          </div>
+        </button>
+        <p style={{ margin: 0, fontSize: 15, fontWeight: 900, letterSpacing: '-0.02em' }}>Choisis ton pseudo</p>
+      </div>
+      <div style={{ margin: '20px 16px 0', borderRadius: 22,
+        background: 'linear-gradient(145deg, #1a3358 0%, #1F3A5F 55%, #254878 100%)',
+        padding: '24px 20px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: -25, right: -25, width: 100, height: 100,
+          borderRadius: '50%', background: 'rgba(237,193,69,0.15)', pointerEvents: 'none' }} />
+        <p style={{ margin: 0, fontFamily: 'var(--font-bricolage)', fontSize: 17, fontWeight: 900,
+          color: '#fff', letterSpacing: '-0.03em', position: 'relative' }}>Bienvenue 👋</p>
+        <p style={{ margin: '8px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.60)', fontWeight: 600,
+          lineHeight: 1.55, position: 'relative' }}>
+          Ton compte est créé ! Choisis le pseudo qui<br />t&apos;identifiera auprès de tes amis.
+        </p>
+      </div>
+      <form onSubmit={handleSaveUsername}
+        style={{ padding: '18px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <input style={INPUT} type="text" placeholder="ton_pseudo"
+          value={newUsername} onChange={e => { setNewUsername(e.target.value); setError(null) }}
+          minLength={2} maxLength={30} required />
+        <p style={{ margin: 0, fontSize: 11, color: 'rgba(31,58,95,0.45)', fontWeight: 600 }}>
+          Minuscules, chiffres, underscore — 2 à 30 caractères.
+        </p>
+        {error && <p style={{ margin: 0, fontSize: 13, color: '#E05252', fontWeight: 700,
+          background: 'rgba(224,82,82,0.08)', padding: '8px 12px', borderRadius: 10 }}>{error}</p>}
+        <button type="submit" style={{ ...BTN_PRIMARY, marginTop: 4 }} disabled={loading}>
+          {loading ? '…' : 'Confirmer mon pseudo'}
+        </button>
+        <button type="button" onClick={() => setNeedsUsername(false)}
+          style={{ ...BTN_SECONDARY, fontSize: 13 }}>
+          Choisir plus tard
+        </button>
+      </form>
+    </div>
+  )
 
   const displayNameResolved = profile?.display_name ?? user.email?.split('@')[0] ?? 'Soleiliste'
 

@@ -119,10 +119,10 @@ export default function PlacePageShell({ place, scores }: Props) {
         />
       </div>
 
-      {/* ─── Brand pill + retour (top-left) ─── */}
+      {/* ─── Logo + retour (top-left) ─── */}
       <header className="absolute top-0 left-0 z-20 pointer-events-none"
         style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', paddingLeft: 12 }}>
-        <Link href="/" className="pointer-events-auto inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full no-underline"
+        <Link href="/" className="pointer-events-auto inline-flex items-center pl-2 pr-3 py-1.5 rounded-full no-underline"
           aria-label="Retour à la carte"
           style={{
             background: 'rgba(255,255,255,0.92)',
@@ -130,18 +130,46 @@ export default function PlacePageShell({ place, scores }: Props) {
             boxShadow: '0 6px 22px rgba(11,31,58,0.10)',
             backdropFilter: 'blur(16px)',
           }}>
-          <span className="grid place-items-center w-7 h-7 rounded-full text-[14px]"
-            style={{
-              background: 'radial-gradient(circle at 36% 30%, #fff5a0 0%, #ffb703 60%, #f77f00 100%)',
-              boxShadow: '0 6px 14px rgba(255,183,3,0.35)', color: '#0b1f3a',
-            }}
-            aria-hidden="true">☀</span>
-          <span className="font-extrabold text-[17px] leading-none"
-            style={{ fontFamily: 'var(--font-bricolage)', fontVariationSettings: "'wdth' 75", letterSpacing: '-0.03em', color: '#0b1f3a' }}>
-            HopSoleil
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-hopsoleil.png" alt="HopSoleil"
+            style={{ height: 30, width: 'auto', display: 'block', mixBlendMode: 'multiply' }} />
         </Link>
       </header>
+
+      {/* ─── Slider mobile — bulle flottante ─── */}
+      {!isDesktop && (
+        <div className="absolute inset-x-0 z-[19] pointer-events-none"
+          style={{ top: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 58px)', padding: '0 12px' }}>
+          <div className="pointer-events-auto" style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,252,243,0.98)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1.5px solid rgba(237,193,69,0.42)',
+            borderRadius: 999,
+            padding: '7px 14px',
+            boxShadow: '0 6px 22px rgba(31,58,95,0.13), 0 2px 8px rgba(237,193,69,0.15)',
+          }}>
+            <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 10, fontWeight: 800,
+              color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>☀ 6h</span>
+            <input
+              type="range" min={6} max={23.5} step={0.5}
+              value={hour}
+              onChange={(e) => setHour(parseFloat(e.target.value))}
+              className="cb-hour-slider"
+              style={{ flex: 1, minWidth: 0 }}
+              aria-label="Heure du soleil"
+            />
+            <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 10, fontWeight: 800,
+              color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>🌙 23h</span>
+            <span style={{ width: 1, height: 14, background: 'rgba(31,58,95,0.12)', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 900,
+              color: '#1F3A5F', lineHeight: 1, minWidth: 32, textAlign: 'right', flexShrink: 0 }}>
+              {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : '00'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ─── Search bar : top-center, TOUJOURS visible ─── */}
       <div className="absolute z-20 pointer-events-auto"

@@ -654,7 +654,7 @@ export default function HomePage() {
       {!isDesktop && (
         <div
           className="absolute inset-x-0 z-[18]"
-          style={{ top: 'calc(max(env(safe-area-inset-top, 0px), 8px) + 62px)', padding: '0 12px' }}
+          style={{ top: 'calc(max(env(safe-area-inset-top, 0px), 8px) + 72px)', padding: '0 12px' }}
         >
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
