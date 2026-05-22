@@ -297,15 +297,21 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           <div style={{ position: 'absolute', bottom: -20, left: -20, width: 90, height: 90,
             borderRadius: '50%', background: 'rgba(237,193,69,0.08)', pointerEvents: 'none' }} />
           <div style={{ position: 'relative', zIndex: 1 }}>
-            {/* Icône soleil */}
+            {/* Logo HopSoleil */}
             <div style={{
-              width: 68, height: 68, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #EDC145 0%, #f5d060 100%)',
-              boxShadow: '0 0 0 10px rgba(237,193,69,0.15), 0 10px 28px rgba(237,193,69,0.45)',
+              width: 80, height: 80, borderRadius: '50%',
+              background: '#FFFFFF',
+              boxShadow: '0 0 0 8px rgba(237,193,69,0.18), 0 12px 32px rgba(31,58,95,0.30)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               margin: '0 auto 16px',
+              overflow: 'hidden',
+              flexShrink: 0,
             }}>
-              <span style={{ fontSize: 32, lineHeight: 1 }}>☀</span>
+              <img
+                src="/logo-icon.png"
+                alt="HopSoleil"
+                style={{ width: 72, height: 72, objectFit: 'contain', borderRadius: '50%' }}
+              />
             </div>
             <p style={{ margin: 0, fontFamily: 'var(--font-bricolage)', fontSize: 19, fontWeight: 900, color: '#fff', letterSpacing: '-0.03em' }}>
               Rejoins HopSoleil
