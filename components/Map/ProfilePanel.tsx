@@ -132,8 +132,8 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const [error, setError]       = useState<string | null>(null)
   const [message, setMessage]   = useState<string | null>(null)
   const [friendEmail, setFriendEmail] = useState('')
-  const [friendSuggestions, setFriendSuggestions] = useState<{ id: string; username: string | null; display_name: string | null }[]>([])
-
+  const [friendSuggestions, setFriendSuggestions] = useState<{ id: string; username: string | null; display_name: string | null }[]>([])  const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null)
+  const skipNextSearchRef = useRef(false)
   // ── Avatar upload ──────────────────────────────────────────────────
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -225,6 +225,8 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   // ── Friend search autocomplete ─────────────────────────────────────────────
 
   useEffect(() => {
+    if (skipNextSearchRef.current) { skipNextSearchRef.current = false; return }
+    setSelectedFriendId(null)
     const q = friendEmail.trim().toLowerCase()
     if (!q || q.length < 2) { setFriendSuggestions([]); return }
     const t = setTimeout(async () => {
@@ -290,15 +292,17 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     if (!user || !friendEmail.trim()) return
     setLoading(true); setError(null)
 
-    // Cherche l'utilisateur par email via la RPC (ou on ne peut pas — email est privé)
-    // On doit chercher par username pour la vie privée
-    const { data: targetProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('username', friendEmail.trim().toLowerCase())
-      .single()
+    let targetId = selectedFriendId
+    if (!targetId) {
+      const { data: targetProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('username', friendEmail.trim())
+        .single()
+      targetId = targetProfile?.id ?? null
+    }
 
-    if (!targetProfile) {
+    if (!targetId) {
       setError('Aucun utilisateur trouvé avec ce pseudo.')
       setLoading(false)
       return
@@ -306,12 +310,12 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
     const { error } = await supabase.from('friendships').insert({
       requester_id: user.id,
-      addressee_id: targetProfile.id,
+      addressee_id: targetId,
     })
 
     setLoading(false)
     if (error) setError(error.code === '23505' ? 'Demande déjà envoyée.' : error.message)
-    else { setFriendEmail(''); fetchFriends(user.id) }
+    else { setFriendEmail(''); setSelectedFriendId(null); setFriendSuggestions([]); fetchFriends(user.id) }
   }
 
   async function handleAcceptFriend(friendshipId: string) {
@@ -502,14 +506,30 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           </button>
           <p style={{ margin: 0, fontSize: 15, fontWeight: 900, letterSpacing: '-0.02em' }}>Mon espace</p>
         </div>
-        <button onClick={handleLogout} title="Se déconnecter"
-          style={{ background: 'rgba(31,58,95,0.06)', border: '1px solid rgba(31,58,95,0.10)', borderRadius: 10,
-            padding: '6px 10px', cursor: 'pointer', color: 'rgba(31,58,95,0.55)',
-            display: 'flex', alignItems: 'center', gap: 5,
-            fontFamily: 'var(--font-outfit)', fontWeight: 700, fontSize: 12 }}>
-          <LogOut size={13} strokeWidth={2} />
-          <span>Déco</span>
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {profile?.username && (
+            <button
+              onClick={() => {
+                const url = `https://hopsoleil.fr/u/${profile.username}`
+                if (navigator?.share) navigator.share({ title: (profile.display_name ?? 'Mon profil') + ' sur HopSoleil', url }).catch(() => {})
+                else navigator.clipboard.writeText(url).catch(() => {})
+              }}
+              title="Partager mon profil"
+              style={{ background: 'rgba(31,58,95,0.06)', border: '1px solid rgba(31,58,95,0.10)', borderRadius: 10,
+                padding: '6px 10px', cursor: 'pointer', color: 'rgba(31,58,95,0.55)',
+                display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Share2 size={13} strokeWidth={2} />
+            </button>
+          )}
+          <button onClick={handleLogout} title="Se déconnecter"
+            style={{ background: 'rgba(31,58,95,0.06)', border: '1px solid rgba(31,58,95,0.10)', borderRadius: 10,
+              padding: '6px 10px', cursor: 'pointer', color: 'rgba(31,58,95,0.55)',
+              display: 'flex', alignItems: 'center', gap: 5,
+              fontFamily: 'var(--font-outfit)', fontWeight: 700, fontSize: 12 }}>
+            <LogOut size={13} strokeWidth={2} />
+            <span>Déco</span>
+          </button>
+        </div>
       </div>
 
       {/* Carte avatar + stats — DA v2 */}
@@ -750,7 +770,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
             {/* Ajouter un ami par pseudo */}
             <p style={EYEBROW}>Ajouter un ami (par pseudo)</p>
             <form onSubmit={handleAddFriend} style={{ display: 'flex', gap: 8, marginBottom: friendSuggestions.length > 0 ? 0 : 16, position: 'relative' }}>
-              <input style={{ ...INPUT, flex: 1 }} type="text" placeholder="@pseudo"
+              <input style={{ ...INPUT, flex: 1 }} type="text" placeholder="pseudo"
                 value={friendEmail} onChange={e => { setFriendEmail(e.target.value); setError(null) }}
                 autoComplete="off" />
               <button type="submit" disabled={loading}
@@ -768,7 +788,9 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                   <button key={s.id}
                     type="button"
                     onClick={() => {
-                      setFriendEmail(s.username ?? s.display_name ?? '')
+                      skipNextSearchRef.current = true
+                      setFriendEmail(s.display_name ?? s.username ?? '')
+                      setSelectedFriendId(s.id)
                       setFriendSuggestions([])
                     }}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%',
@@ -937,22 +959,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
         )}
       </div>
 
-      {/* ── Sticky action bar ── */}
-      <div style={{ position: 'sticky', bottom: 0, zIndex: 40,
-        paddingBottom: 'max(env(safe-area-inset-bottom,0px),12px)' }}>
-        <div style={{
-          margin: '0 12px', padding: '12px 12px 14px',
-          background: 'rgba(255,248,236,0.96)', backdropFilter: 'blur(18px)',
-          borderRadius: '24px 24px 0 0',
-          borderTop: '1px solid rgba(31,58,95,0.10)',
-          boxShadow: '0 -4px 24px rgba(31,58,95,0.10)',
-        }}>
-          <button onClick={handleLogout} style={{ ...BTN_SECONDARY, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <LogOut size={14} strokeWidth={2} />
-            Se déconnecter
-          </button>
-        </div>
-      </div>
+
 
     </div>
   )

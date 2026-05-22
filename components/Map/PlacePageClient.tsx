@@ -461,7 +461,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
               </span>
             )}
             <span style={{ ...MINI_BADGE, background:'rgba(79,143,101,0.10)', color:'#3d8554' }}>
-              ● Terrasse
+              {place.type === 'park' ? '🌳 Parc' : '● Terrasse'}
             </span>
             <span style={{ ...MINI_BADGE }}>
               {TYPE_LABEL[place.type] ?? place.type}

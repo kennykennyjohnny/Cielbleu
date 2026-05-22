@@ -256,6 +256,54 @@ function bearingFromBuildingPoly(
   return bestBearing
 }
 
+function drawParkPin(): { width: number; height: number; data: Uint8Array } {
+  const W = 60, H = 60
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  const CX = W / 2, CY = H / 2
+
+  // Halo outer
+  ctx.beginPath()
+  ctx.arc(CX, CY, 27, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(46,168,77,0.16)'
+  ctx.fill()
+  // Halo inner
+  ctx.beginPath()
+  ctx.arc(CX, CY, 22, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(46,168,77,0.22)'
+  ctx.fill()
+
+  // Drop shadow + circle
+  ctx.save()
+  ctx.shadowColor = 'rgba(46,168,77,0.40)'
+  ctx.shadowBlur = 10
+  ctx.shadowOffsetY = 3
+  ctx.beginPath()
+  ctx.arc(CX, CY, 17, 0, Math.PI * 2)
+  ctx.fillStyle = '#2ea84d'
+  ctx.fill()
+  ctx.restore()
+
+  // White border
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(CX, CY, 17, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+  ctx.lineWidth = 2.5
+  ctx.stroke()
+  ctx.restore()
+
+  // Tree icon
+  ctx.fillStyle = '#fff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = '15px system-ui'
+  ctx.fillText('🌳', CX, CY + 1)
+
+  return { width: W, height: H, data: new Uint8Array(ctx.getImageData(0, 0, W, H).data.buffer) }
+}
+
 function applyStyle(map: mapboxgl.Map) {
   // Le style custom Mapbox a ses propres POIs avec un schéma qu'on ne connaît pas
   // d'avance. Stratégie en 3 étapes :
@@ -398,6 +446,9 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           map.addImage(`pin-${s}`, drawPinImage(s) as unknown as HTMLImageElement)
         }
       }
+      if (!map.hasImage('pin-park')) {
+        map.addImage('pin-park', drawParkPin() as unknown as HTMLImageElement)
+      }
 
       // Ombres solaires dès le chargement — utilise l'heure courante via ref
       const initSunLat = cinematicFocus?.lat ?? PARIS_CENTER[1]
@@ -471,7 +522,8 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         id: 'places-pins', type: 'symbol', source: 'places',
         filter: ['!', ['has', 'point_count']],
         layout: {
-          'icon-image': ['match', ['get', 'score'], 0, 'pin-0', 1, 'pin-1', 2, 'pin-2', 3, 'pin-3', 4, 'pin-4', 5, 'pin-5', 'pin-3'],
+          'icon-image': ['case', ['==', ['get', 'type'], 'park'], 'pin-park',
+            ['match', ['get', 'score'], 0, 'pin-0', 1, 'pin-1', 2, 'pin-2', 3, 'pin-3', 4, 'pin-4', 5, 'pin-5', 'pin-3']],
           'icon-anchor': 'center',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
