@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, X, Clock, UserCircle, Compass, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, X, Clock, UserCircle, Compass } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getSunPosition } from '@/lib/suncalc'
 import Filters from '@/components/Map/Filters'
@@ -13,15 +13,12 @@ import { owmIconToEmoji } from '@/lib/weather'
 import { isOpenAt } from '@/lib/openingHours'
 import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
 
-type SheetMode = 'peek' | 'half' | 'full'
-const SHEET_HEIGHTS: Record<SheetMode, string> = { peek: '18vh', half: '38vh', full: '92dvh' }
-
 function nowHalfHour(): number {
   const now = new Date()
   return Math.max(6, Math.min(23.5, now.getHours() + (now.getMinutes() >= 30 ? 0.5 : 0)))
 }
 
-const MapView = dynamic(() => import('@/components/Map/MapView'), {
+const MapView      = dynamic(() => import('@/components/Map/MapView'), {
   ssr: false,
   loading: () => (
     <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#fffcf3' }}>
@@ -30,6 +27,7 @@ const MapView = dynamic(() => import('@/components/Map/MapView'), {
     </div>
   ),
 })
+const PlacePreview = dynamic(() => import('@/components/Map/PlacePreview'), { ssr: false })
 
 const TODAY_LABEL = (() => {
   const d = new Date()
@@ -63,14 +61,12 @@ export default function HomePage() {
   const [selectedScores, setSelectedScores] = useState<{ time_slot: string; score: number }[]>([])
   const [selectedAmenite, setSelectedAmenite] = useState<AmeniteInfo | null>(null)
   const [hour, setHour] = useState<number>(nowHalfHour)
-  const [sheetMode, setSheetMode] = useState<SheetMode>('half')
   const [isDesktop, setIsDesktop] = useState(false)
   const [homeViewCount, setHomeViewCount] = useState(0)
   const [showProfile, setShowProfile] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null)
   const prevShowProfileRef = useRef(false)
-  const dragRef = useRef<{ y: number; mode: SheetMode } | null>(null)
   const headerRef = useRef<HTMLElement>(null)
   const [headerH, setHeaderH] = useState(0)
 
@@ -319,11 +315,11 @@ export default function HomePage() {
   // et reste visible quelle que soit la card ouverte.
   const recenterBottom = useMemo(() => {
     if (isDesktop) return '165px'
-    if (selectedPlace)  return `calc(${SHEET_HEIGHTS[sheetMode]} + 14px)`
+    if (selectedPlace && !isDesktop) return '52dvh'
     if (selectedAmenite) return 'calc(62vh + 14px)'
     if (showProfile)     return 'calc(90dvh + 14px)' // off-screen, OK
     return 'calc(max(env(safe-area-inset-bottom, 0px), 10px) + 190px)'
-  }, [isDesktop, selectedPlace, sheetMode, selectedAmenite, showProfile])
+  }, [isDesktop, selectedPlace, selectedAmenite, showProfile])
 
   // ── Sync scores du slider (debounce 400 ms) ──────────────────────────────
   // Quand l'heure change, re-fetche sun_scores pour le nouveau créneau.
@@ -363,7 +359,6 @@ export default function HomePage() {
     setSelectedAmenite(null)  // ferme l'amenite si open
     setSelectedPlace(place)
     setSearchQuery('')
-    setSheetMode('half')
     const now = new Date()
     const month = now.getMonth() + 1
     const { data } = await supabase
@@ -388,27 +383,6 @@ export default function HomePage() {
     const { data } = await supabase.from('places').select('*').eq('id', placeId).single()
     if (data) await handlePlaceSelect(data as Place)
   }, [handlePlaceSelect])
-
-  // Drag handle (bottom sheet mobile)
-  const onPointerDown = (e: React.PointerEvent) => {
-    dragRef.current = { y: e.clientY, mode: sheetMode }
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-  }
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragRef.current) return
-    const dy = e.clientY - dragRef.current.y
-    if (dy > 40) {
-      if (dragRef.current.mode === 'full') setSheetMode('half')
-      else {
-        // half ou peek + glisse vers le bas → ferme directement
-        dragRef.current = null
-        setSelectedPlace(null)
-      }
-    } else if (dy < -40) {
-      setSheetMode(dragRef.current.mode === 'peek' ? 'half' : 'full')
-    }
-  }
-  const onPointerUp = () => { dragRef.current = null }
 
   return (
     <main className="relative h-dvh w-full overflow-hidden">
@@ -1038,73 +1012,10 @@ export default function HomePage() {
       )}
 
       {selectedPlace && !isDesktop && (
-        <section
-          className="absolute bottom-0 inset-x-0 z-30"
-          style={{
-            height: SHEET_HEIGHTS[sheetMode],
-            transition: 'height 280ms cubic-bezier(0.2,0.8,0.2,1)',
-            background: 'rgba(255,252,243,0.97)',
-            backdropFilter: 'blur(22px)',
-            borderTopLeftRadius: 22, borderTopRightRadius: 22,
-            borderTop: '1px solid rgba(20,32,51,0.10)',
-            boxShadow: '0 -16px 42px rgba(11,31,58,0.20)',
-            overflow: 'hidden',
-            display: 'flex', flexDirection: 'column',
-          }}
-          role="dialog" aria-label={`Détails de ${selectedPlace.name}`}
-        >
-          {/* ── Drag handle bar ── */}
-          <div style={{ height: 36, flexShrink: 0, display: 'flex', alignItems: 'center',
-            padding: '0 12px', borderBottom: '1px solid rgba(20,32,51,0.06)' }}>
-            {/* × Fermer */}
-            <button
-              onClick={handleClose}
-              aria-label="Fermer"
-              style={{ width: 28, height: 28, borderRadius: '50%', border: 'none',
-                background: 'rgba(20,32,51,0.07)', cursor: 'pointer', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <X size={13} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
-            </button>
-            {/* Poignée centrale — drag */}
-            <div
-              onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-              role="separator" aria-label="Redimensionner (glisser haut/bas)"
-              style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', touchAction: 'none', cursor: 'grab' }}
-            >
-              <span aria-hidden="true"
-                style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(20,32,51,0.15)' }} />
-            </div>
-            {/* ↓/↑ Agrandir / réduire */}
-            <button
-              onClick={() => setSheetMode(m => m === 'peek' ? 'full' : 'peek')}
-              aria-label={sheetMode === 'peek' ? 'Agrandir' : 'Réduire'}
-              style={{ width: 28, height: 28, borderRadius: '50%', border: 'none',
-                background: 'rgba(20,32,51,0.07)', cursor: 'pointer', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              {sheetMode === 'peek'
-                ? <ChevronUp   size={14} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
-                : <ChevronDown size={14} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
-              }
-            </button>
-          </div>
-          {/* ── Content (PlacePageClient gère son propre scroll) ── */}
-          <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-            <PlacePageClient
-              place={selectedPlace}
-              scores={selectedScores}
-              hour={hour}
-              onHourChange={setHour}
-              onClose={handleClose}
-              userId={userId}
-              onOpenProfile={() => { setShowProfile(true); setSelectedPlace(null) }}
-            />
-          </div>
-        </section>
+        <PlacePreview place={selectedPlace} onClose={handleClose} />
       )}
+
+
     </main>
   )
 }
