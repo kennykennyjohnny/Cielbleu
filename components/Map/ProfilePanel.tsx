@@ -37,6 +37,13 @@ interface FriendReview {
   place?: { name: string; type: string } | null
 }
 
+interface FriendFavorite {
+  id: string
+  place_id: string
+  created_at: string
+  place?: { name: string; type: string } | null
+}
+
 interface UserReview {
   id: string
   comment: string | null
@@ -150,8 +157,10 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const [avatarUploading, setAvatarUploading] = useState(false)
 
   // ── Aperçu profil ami (à la demande) ───────────────────────────────
-  const [friendProfileId, setFriendProfileId] = useState<string | null>(null)
-  const [friendReviews, setFriendReviews] = useState<FriendReview[]>([])
+  const [friendProfileId, setFriendProfileId]     = useState<string | null>(null)
+  const [friendReviews, setFriendReviews]         = useState<FriendReview[]>([])
+  const [friendFavorites, setFriendFavorites]     = useState<FriendFavorite[]>([])
+  const [friendProfileTab, setFriendProfileTab]   = useState<'likes' | 'reviews'>('likes')
   const [friendProfileLoading, setFriendProfileLoading] = useState(false)
 
   // ── Auth state ─────────────────────────────────────────────────────────────
@@ -343,7 +352,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     setLoading(true); setError(null)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : '' },
+      options: {
+        redirectTo: typeof window !== 'undefined'
+          ? `${window.location.origin}/auth/callback`
+          : '/auth/callback',
+      },
     })
     if (error) { setError(error.message); setLoading(false) }
   }
@@ -445,15 +458,27 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     setFriendProfileId(friendId)
     setFriendProfileLoading(true)
     setFriendReviews([])
-    const { data } = await supabase
-      .from('reviews')
-      .select('id, comment, created_at, place:places(name, type)')
-      .eq('user_id', friendId)
-      .not('comment', 'is', null)
-      .neq('comment', '')
-      .order('created_at', { ascending: false })
-      .limit(3)
-    setFriendReviews((data as unknown as FriendReview[]) ?? [])
+    setFriendFavorites([])
+
+    const [reviewsRes, favoritesRes] = await Promise.all([
+      supabase
+        .from('reviews')
+        .select('id, comment, created_at, place:places(name, type)')
+        .eq('user_id', friendId)
+        .not('comment', 'is', null)
+        .neq('comment', '')
+        .order('created_at', { ascending: false })
+        .limit(10),
+      supabase
+        .from('favorites')
+        .select('id, place_id, created_at, place:places(name, type)')
+        .eq('user_id', friendId)
+        .order('created_at', { ascending: false })
+        .limit(10),
+    ])
+
+    setFriendReviews((reviewsRes.data as unknown as FriendReview[]) ?? [])
+    setFriendFavorites((favoritesRes.data as unknown as FriendFavorite[]) ?? [])
     setFriendProfileLoading(false)
   }
   const placeEmoji = (type: string) =>
@@ -1134,19 +1159,43 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                       <div style={{ ...CARD, marginBottom: 12,
                         borderTopLeftRadius: 0, borderTopRightRadius: 0,
                         borderTop: '1px solid rgba(31,58,95,0.06)', paddingTop: 10 }}>
+
+                        {/* Onglets */}
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                          {(['likes', 'reviews'] as const).map(tab => (
+                            <button key={tab} type="button"
+                              onClick={() => setFriendProfileTab(tab)}
+                              style={{
+                                flex: 1, height: 32, borderRadius: 10, border: 'none', cursor: 'pointer',
+                                fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12,
+                                background: friendProfileTab === tab ? '#1F3A5F' : 'rgba(31,58,95,0.07)',
+                                color: friendProfileTab === tab ? '#EDC145' : 'rgba(31,58,95,0.60)',
+                              }}>
+                              {tab === 'likes' ? '♥️ Lieux likés' : '⭐ Avis'}
+                            </button>
+                          ))}
+                        </div>
+
                         {friendProfileLoading ? (
-                          <p style={{ margin: 0, fontSize: 12, textAlign: 'center', color: 'rgba(31,58,95,0.40)', fontWeight: 600 }}>
-                            Chargement…
-                          </p>
-                        ) : friendReviews.length === 0 ? (
-                          <p style={{ margin: 0, fontSize: 12, color: 'rgba(31,58,95,0.40)', fontWeight: 600, textAlign: 'center' }}>
-                            Aucun avis public pour l&apos;instant
-                          </p>
+                          <p style={{ margin: 0, fontSize: 12, textAlign: 'center', color: 'rgba(31,58,95,0.40)', fontWeight: 600 }}>Chargement…</p>
+                        ) : friendProfileTab === 'likes' ? (
+                          friendFavorites.length === 0 ? (
+                            <p style={{ margin: 0, fontSize: 12, color: 'rgba(31,58,95,0.40)', fontWeight: 600, textAlign: 'center' }}>Aucun lieu liké pour l’instant</p>
+                          ) : (
+                            friendFavorites.map(fav => (
+                              <div key={fav.id} style={{ marginBottom: 8, paddingBottom: 8,
+                                borderBottom: '1px solid rgba(31,58,95,0.06)' }}>
+                                <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#1F3A5F' }}>
+                                  {placeEmoji(fav.place?.type ?? '')} {fav.place?.name ?? '—'}
+                                </p>
+                              </div>
+                            ))
+                          )
                         ) : (
-                          <>
-                            <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 900, letterSpacing: '0.10em',
-                              textTransform: 'uppercase', color: 'rgba(31,58,95,0.45)' }}>Derniers avis</p>
-                            {friendReviews.map(r => (
+                          friendReviews.length === 0 ? (
+                            <p style={{ margin: 0, fontSize: 12, color: 'rgba(31,58,95,0.40)', fontWeight: 600, textAlign: 'center' }}>Aucun avis public pour l’instant</p>
+                          ) : (
+                            friendReviews.map(r => (
                               <div key={r.id} style={{ marginBottom: 8, paddingBottom: 8,
                                 borderBottom: '1px solid rgba(31,58,95,0.06)' }}>
                                 <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: '#1F3A5F' }}>
@@ -1159,9 +1208,10 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                                   </p>
                                 )}
                               </div>
-                            ))}
-                          </>
+                            ))
+                          )
                         )}
+
                         {/* Bouton supprimer l'ami */}
                         <button
                           onClick={() => handleRemoveFriend(f.id)}
