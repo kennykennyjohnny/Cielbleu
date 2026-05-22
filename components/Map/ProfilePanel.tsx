@@ -836,11 +836,6 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
             <p style={{ margin: 0, fontFamily: 'var(--font-bricolage)', fontWeight: 900, fontSize: 18, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
               {displayNameResolved}
             </p>
-            {profile?.username && (
-              <p style={{ margin: '4px 0 0', fontSize: 11.5, color: 'rgba(255,255,255,0.50)', fontWeight: 700 }}>
-                @{profile.username}
-              </p>
-            )}
           </div>
         </div>
         {/* Stats row */}
