@@ -127,10 +127,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
   const [email, setEmail]      = useState('')
   const [password, setPassword] = useState('')
-  const [displayName, setDisplayName] = useState('')
+  const [displayName, setDisplayName] = useState('')  // garde pour compat (non utilisé)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const [message, setMessage]   = useState<string | null>(null)
+  const [name, setName]         = useState('')  // prénom = pseudo (champ unique)
   const [friendEmail, setFriendEmail] = useState('')
   const [friendSuggestions, setFriendSuggestions] = useState<{ id: string; username: string | null; display_name: string | null }[]>([])
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null)
@@ -138,12 +139,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
   // ── Username setup (Google users) ──────────────────────────────────
   const [needsUsername, setNeedsUsername] = useState(false)
-  const [newUsername, setNewUsername]     = useState('')
+  const [newName, setNewName]             = useState('')  // prénom = pseudo
 
   // ── Paramètres profil ──────────────────────────────────────────────
-  const [showSettings, setShowSettings]     = useState(false)
-  const [editDisplayName, setEditDisplayName] = useState('')
-  const [editUsername, setEditUsername]     = useState('')
+  const [showSettings, setShowSettings] = useState(false)
+  const [editName, setEditName]         = useState('')  // prénom = pseudo
 
   // ── Avatar upload ──────────────────────────────────────────────────
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -212,8 +212,6 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   }, [])
 
   const fetchFriends = useCallback(async (userId: string) => {
-    // friendships.requester_id references auth.users (not profiles),
-    // so we can't auto-join to profiles. Fetch in two steps.
     const { data: rows } = await supabase
       .from('friendships')
       .select('id, requester_id, addressee_id, status, created_at')
@@ -232,7 +230,18 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     const pm: Record<string, { display_name: string | null; username: string | null }> =
       Object.fromEntries((profileRows ?? []).map(p => [p.id, p]))
 
-    setFriends(rows.map(r => ({
+    // Dédupliquer les paires mutuelles : garder la plus pertinente
+    const pairMap = new Map<string, typeof rows[0]>()
+    for (const r of rows) {
+      const key = [r.requester_id, r.addressee_id].sort().join('|')
+      const ex = pairMap.get(key)
+      if (!ex) { pairMap.set(key, r); continue }
+      // Préférer : accepted > l'entrée où userId est addressee (peut accepter)
+      if (r.status === 'accepted') pairMap.set(key, r)
+      else if (ex.status !== 'accepted' && r.addressee_id === userId) pairMap.set(key, r)
+    }
+
+    setFriends([...pairMap.values()].map(r => ({
       ...r,
       requester: pm[r.requester_id] ?? null,
       addressee: pm[r.addressee_id] ?? null,
@@ -306,13 +315,24 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true); setError(null)
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email, password,
-      options: { data: { full_name: displayName } },
+      options: { data: { full_name: name } },
     })
     setLoading(false)
-    if (error) setError(error.message)
-    else setMessage('Vérifie ta boîte mail pour confirmer ton compte 📬')
+    if (error) {
+      const msg = error.message.toLowerCase()
+      if (msg.includes('already') || msg.includes('already_registered')) {
+        setError('Un compte existe déjà avec cet email — essaie de te connecter.')
+      } else {
+        setError(error.message)
+      }
+      return
+    }
+    if (!data.session) {
+      setMessage('Compte créé ! Vérifie ta boîte mail pour confirmer. 📬')
+    }
+    // Si session immédiate (sans confirmation email), onAuthStateChange gère la suite
   }
 
   async function handleLogout() {
@@ -330,27 +350,28 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
   async function handleSaveSettings(e: React.FormEvent) {
     e.preventDefault()
-    if (!user) return
+    if (!user || !editName.trim()) return
     setLoading(true); setError(null)
-    const username = editUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')
-    const display_name = editDisplayName.trim()
+    const display_name = editName.trim()
+    const username = display_name.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'user'
     const { error } = await supabase.from('profiles')
-      .update({ username: username || null, display_name: display_name || null })
+      .update({ username, display_name })
       .eq('id', user.id)
     setLoading(false)
-    if (error) setError(error.code === '23505' ? 'Ce pseudo est déjà pris.' : error.message)
-    else { setProfile(p => p ? { ...p, username: username || null, display_name: display_name || null } : p); setShowSettings(false) }
+    if (error) setError(error.code === '23505' ? 'Ce prénom/pseudo est déjà pris.' : error.message)
+    else { setProfile(p => p ? { ...p, username, display_name } : p); setShowSettings(false) }
   }
 
-  async function handleSaveUsername(e: React.FormEvent) {
+  async function handleSaveName(e: React.FormEvent) {
     e.preventDefault()
-    if (!user || !newUsername.trim()) return
+    if (!user || !newName.trim()) return
     setLoading(true); setError(null)
-    const username = newUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')
-    const { error } = await supabase.from('profiles').update({ username }).eq('id', user.id)
+    const display_name = newName.trim()
+    const username = display_name.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'user'
+    const { error } = await supabase.from('profiles').update({ username, display_name }).eq('id', user.id)
     setLoading(false)
-    if (error) setError(error.code === '23505' ? 'Ce pseudo est déjà pris.' : error.message)
-    else { setProfile(p => p ? { ...p, username } : p); setNeedsUsername(false) }
+    if (error) setError(error.code === '23505' ? 'Ce prénom/pseudo est déjà pris.' : error.message)
+    else { setProfile(p => p ? { ...p, username, display_name } : p); setNeedsUsername(false) }
   }
 
   async function handleRemoveFavorite(favId: string) {
@@ -368,13 +389,25 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
       const { data: targetProfile } = await supabase
         .from('profiles')
         .select('id')
-        .ilike('username', friendEmail.trim())
+        .or(`username.ilike.${friendEmail.trim()},display_name.ilike.${friendEmail.trim()}`)
         .single()
       targetId = targetProfile?.id ?? null
     }
 
     if (!targetId) {
-      setError('Aucun utilisateur trouvé avec ce pseudo.')
+      setError('Aucun utilisateur trouvé avec ce prénom.')
+      setLoading(false)
+      return
+    }
+
+    // Vérifier si l'autre a déjà envoyé une demande (accepter plutôt que dupliquer)
+    const reverseReq = friends.find(
+      f => f.requester_id === targetId && f.addressee_id === user.id && f.status === 'pending'
+    )
+    if (reverseReq) {
+      await supabase.from('friendships').update({ status: 'accepted' }).eq('id', reverseReq.id)
+      setFriendEmail(''); setSelectedFriendId(null); setFriendSuggestions([])
+      fetchFriends(user.id)
       setLoading(false)
       return
     }
@@ -525,8 +558,8 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
           {authTab === 'register' && (
-            <input style={INPUT} type="text" placeholder="Ton prénom ou pseudo"
-              value={displayName} onChange={e => setDisplayName(e.target.value)} required />
+            <input style={INPUT} type="text" placeholder="Ton prénom (aussi ton pseudo)"
+              value={name} onChange={e => setName(e.target.value)} required />
           )}
 
           <input style={INPUT} type="email" placeholder="Adresse email"
@@ -595,31 +628,16 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
       <form onSubmit={handleSaveSettings}
         style={{ padding: '20px 16px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-        {/* Prénom / Pseudo affiché */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <label style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em',
             textTransform: 'uppercase', color: 'rgba(31,58,95,0.45)' }}>
-            Prénom / Pseudo affiché
+            Prénom / Pseudo
           </label>
           <input style={INPUT} type="text" placeholder="ex. Alex"
-            value={editDisplayName} onChange={e => { setEditDisplayName(e.target.value); setError(null) }}
-            maxLength={50} />
+            value={editName} onChange={e => { setEditName(e.target.value); setError(null) }}
+            minLength={2} maxLength={40} required />
           <p style={{ margin: 0, fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600, lineHeight: 1.4 }}>
-            Visible par tes amis et sur la carte.
-          </p>
-        </div>
-
-        {/* Identifiant unique */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: 'rgba(31,58,95,0.45)' }}>
-            Identifiant unique (@username)
-          </label>
-          <input style={INPUT} type="text" placeholder="ex. alex_soleil"
-            value={editUsername} onChange={e => { setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_')); setError(null) }}
-            minLength={2} maxLength={30} />
-          <p style={{ margin: 0, fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600, lineHeight: 1.4 }}>
-            Utilisé pour te retrouver et partager ton profil. Minuscules, chiffres, underscore.
+            C’est ton nom affiché et ton identifiant unique — comme sur Snapchat.
           </p>
         </div>
 
@@ -661,13 +679,13 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           Ton compte est créé ! Choisis le pseudo qui<br />t&apos;identifiera auprès de tes amis.
         </p>
       </div>
-      <form onSubmit={handleSaveUsername}
+      <form onSubmit={handleSaveName}
         style={{ padding: '18px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <input style={INPUT} type="text" placeholder="ton_pseudo"
-          value={newUsername} onChange={e => { setNewUsername(e.target.value); setError(null) }}
-          minLength={2} maxLength={30} required />
+        <input style={INPUT} type="text" placeholder="Ton prénom (ex. Alex)"
+          value={newName} onChange={e => { setNewName(e.target.value); setError(null) }}
+          minLength={2} maxLength={40} required />
         <p style={{ margin: 0, fontSize: 11, color: 'rgba(31,58,95,0.45)', fontWeight: 600 }}>
-          Minuscules, chiffres, underscore — 2 à 30 caractères.
+          Ton prénom = ton pseudo unique. C’est comme ça que tes amis te retrouveront.
         </p>
         {error && <p style={{ margin: 0, fontSize: 13, color: '#E05252', fontWeight: 700,
           background: 'rgba(224,82,82,0.08)', padding: '8px 12px', borderRadius: 10 }}>{error}</p>}
@@ -721,7 +739,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
             </button>
           )}
           <button
-            onClick={() => { setEditDisplayName(profile?.display_name ?? ''); setEditUsername(profile?.username ?? ''); setError(null); setShowSettings(true) }}
+            onClick={() => { setEditName(profile?.display_name ?? profile?.username ?? ''); setError(null); setShowSettings(true) }}
             title="Paramètres"
             style={{ background: 'rgba(31,58,95,0.06)', border: '1px solid rgba(31,58,95,0.10)', borderRadius: 10,
               padding: '6px 10px', cursor: 'pointer', color: 'rgba(31,58,95,0.55)',
