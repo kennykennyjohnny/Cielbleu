@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { Star, X, Sunrise, Sunset, Share2, Heart, Navigation2 } from 'lucide-react'
+import { Star, X, Sunrise, Sunset, Share2, Heart } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Place } from '@/types'
 
@@ -157,6 +157,14 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
     if (navigator?.clipboard) { await navigator.clipboard.writeText(url) }
   }, [place.id, place.name])
 
+  // Ouvre Google Maps natif sur iOS (Universal Links) et Android (App Links)
+  // window.location.href est indispensable — target="_blank" bloque les Universal Links iOS
+  const handleOpenMaps = useCallback(() => {
+    const q = encodeURIComponent(`${place.lat},${place.lng}`)
+    const pid = place.google_place_id ? `&query_place_id=${place.google_place_id}` : ''
+    window.location.href = `https://www.google.com/maps/search/?api=1&query=${q}${pid}`
+  }, [place.lat, place.lng, place.google_place_id])
+
   // ── Snap helpers ─────────────────────────────────────────────────────────
   const snapTo = useCallback((target: 1 | 2 | 3) => {
     snapRef.current = target
@@ -284,20 +292,18 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                   <span>Partager</span>
                 </button>
 
-                {place.google_maps_url ? (
-                  <a
-                    href={place.google_maps_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Ouvrir l'itinéraire dans Maps"
-                    className="flex-1 flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl bg-nuit/5 text-nuit/60 text-[11px] font-outfit font-semibold touch-manipulation active:bg-nuit/10 transition-colors"
-                  >
-                    <Navigation2 size={18} strokeWidth={2} />
-                    <span>Y aller</span>
-                  </a>
-                ) : (
-                  <div className="flex-1" />
-                )}
+                <button
+                  onClick={handleOpenMaps}
+                  aria-label="Ouvrir dans Google Maps"
+                  className="flex-1 flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl bg-nuit/5 text-nuit/60 text-[11px] font-outfit font-semibold touch-manipulation active:bg-nuit/10 transition-colors"
+                >
+                  {/* Google Maps pin icon */}
+                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+                    <circle cx="12" cy="9" r="2.5" fill="white"/>
+                  </svg>
+                  <span>Google Maps</span>
+                </button>
               </div>
             </div>
 
