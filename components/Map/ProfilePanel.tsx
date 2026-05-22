@@ -34,6 +34,7 @@ interface FriendReview {
   id: string
   comment: string | null
   created_at: string
+  place_id?: string | null
   place?: { name: string; type: string } | null
 }
 
@@ -121,9 +122,11 @@ interface Props {
   onClose: () => void
   /** Callback appelé quand l'état auth change (login/logout) */
   onAuthChange?: (user: User | null) => void
+  /** Callback pour naviguer vers la fiche d'un lieu depuis le profil */
+  onSelectPlace?: (placeId: string) => void
 }
 
-export default function ProfilePanel({ onClose, onAuthChange }: Props) {
+export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: Props) {
   const [user, setUser]               = useState<User | null>(null)
   const [profile, setProfile]         = useState<Profile | null>(null)
   const [favorites, setFavorites]     = useState<Favorite[]>([])
@@ -153,7 +156,19 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
   // ── Avatar upload ──────────────────────────────────────────────────
   const avatarInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef  = useRef<HTMLInputElement>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
+  const [showAvatarChoice, setShowAvatarChoice] = useState(false)
+
+  // ── Crop ────────────────────────────────────────────────────────────
+  const [cropSrc, setCropSrc]         = useState<string | null>(null)
+  const [cropScale, setCropScale]     = useState(1)
+  const [cropOffset, setCropOffset]   = useState({ x: 0, y: 0 })
+  const cropNaturalRef = useRef({ w: 1, h: 1 })
+  const cropDragRef    = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null)
+  const CROP_PREVIEW   = 260  // px — taille du conteneur de prévisualisation
+  const CROP_OUT       = 256  // px — taille de sortie
 
   // ── Aperçu profil ami (à la demande) ───────────────────────────────
   const [friendProfileId, setFriendProfileId]     = useState<string | null>(null)
@@ -291,15 +306,87 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const handleAvatarUpload = useCallback(async (file: File) => {
     if (!user) return
     setAvatarUploading(true)
-    const ext = file.name.split('.').pop() ?? 'jpg'
-    const path = `${user.id}/avatar.${ext}`
-    const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+    const path = `${user.id}/avatar.jpg`
+    const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { setError(upErr.message); setAvatarUploading(false); return }
+    // Ajouter un timestamp pour forcer le rechargement du cache
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
-    await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
-    setProfile(p => p ? { ...p, avatar_url: publicUrl } : p)
+    const urlWithTs = `${publicUrl}?t=${Date.now()}`
+    await supabase.from('profiles').update({ avatar_url: urlWithTs }).eq('id', user.id)
+    setProfile(p => p ? { ...p, avatar_url: urlWithTs } : p)
     setAvatarUploading(false)
   }, [user])
+
+  // ── Crop confirm ───────────────────────────────────────────────────────────
+
+  function handleFileForCrop(file: File) {
+    setShowAvatarChoice(false)
+    const url = URL.createObjectURL(file)
+    // Lire dimensions naturelles
+    const img = new window.Image()
+    img.onload = () => {
+      cropNaturalRef.current = { w: img.naturalWidth, h: img.naturalHeight }
+      const cover = Math.max(CROP_PREVIEW / img.naturalWidth, CROP_PREVIEW / img.naturalHeight)
+      setCropScale(cover)
+      setCropOffset({ x: 0, y: 0 })
+      setCropSrc(url)
+    }
+    img.src = url
+  }
+
+  async function handleCropConfirm() {
+    if (!cropSrc) return
+    const img = new window.Image()
+    img.onload = async () => {
+      const canvas = document.createElement('canvas')
+      canvas.width  = CROP_OUT
+      canvas.height = CROP_OUT
+      const ctx = canvas.getContext('2d')!
+
+      // Clip circulaire
+      ctx.beginPath()
+      ctx.arc(CROP_OUT / 2, CROP_OUT / 2, CROP_OUT / 2, 0, Math.PI * 2)
+      ctx.clip()
+
+      // L'image est affichée dans un conteneur CROP_PREVIEW×CROP_PREVIEW
+      // avec transform: translate(ox, oy) scale(s), transform-origin: center
+      // → le coin haut-gauche de l'image en px display :
+      const { x: ox, y: oy } = cropOffset
+      const s = cropScale
+      const dispW = img.naturalWidth  * s
+      const dispH = img.naturalHeight * s
+      const imgLeft = CROP_PREVIEW / 2 + ox - dispW / 2
+      const imgTop  = CROP_PREVIEW / 2 + oy - dispH / 2
+
+      // Le cercle de crop est centré dans le conteneur → son coin haut-gauche :
+      const circleLeft = CROP_PREVIEW / 2 - CROP_OUT / 2
+      const circleTop  = CROP_PREVIEW / 2 - CROP_OUT / 2
+
+      // Coordonnées source dans l'image naturelle
+      const srcX = (circleLeft - imgLeft) / s
+      const srcY = (circleTop  - imgTop)  / s
+      const srcW = CROP_OUT / s
+      const srcH = CROP_OUT / s
+
+      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, CROP_OUT, CROP_OUT)
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return
+        URL.revokeObjectURL(cropSrc)
+        setCropSrc(null)
+        const cropped = new File([blob], 'avatar.jpg', { type: 'image/jpeg' })
+        await handleAvatarUpload(cropped)
+      }, 'image/jpeg', 0.90)
+    }
+    img.src = cropSrc
+  }
+
+  // ── Naviguer vers un lieu depuis le profil ─────────────────────────────────
+
+  function handleGoToPlace(placeId: string) {
+    onSelectPlace?.(placeId)
+    onClose()
+  }
 
   // ── Auth actions ───────────────────────────────────────────────────────────
 
@@ -462,7 +549,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     const [reviewsRes, favoritesRes] = await Promise.all([
       supabase
         .from('reviews')
-        .select('id, comment, created_at, place:places(name, type)')
+        .select('id, comment, created_at, place_id, place:places(name, type)')
         .eq('user_id', friendId)
         .not('comment', 'is', null)
         .neq('comment', '')
@@ -811,7 +898,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
             </div>
             {/* Bouton upload photo */}
             <button
-              onClick={() => avatarInputRef.current?.click()}
+              onClick={() => setShowAvatarChoice(true)}
               disabled={avatarUploading}
               aria-label="Changer la photo de profil"
               style={{ position: 'absolute', bottom: -2, right: -4, width: 22, height: 22,
@@ -824,13 +911,13 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                 : <Camera size={11} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
               }
             </button>
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/*"
+            {/* Inputs cachés : galerie vs caméra */}
+            <input ref={galleryInputRef} type="file" accept="image/*"
               style={{ display: 'none' }}
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f) }}
-            />
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileForCrop(f) }} />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="user"
+              style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileForCrop(f) }} />
           </div>
           <div>
             <p style={{ margin: 0, fontFamily: 'var(--font-bricolage)', fontWeight: 900, fontSize: 18, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
@@ -928,7 +1015,8 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                 </div>
               )
               : favorites.map(fav => (
-                <div key={fav.id} style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div key={fav.id} style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+                  onClick={() => handleGoToPlace(fav.place_id)}>
                   <span style={{ fontSize: 22, flexShrink: 0 }}>
                     {fav.place ? placeEmoji(fav.place.type) : <MapPin size={18} />}
                   </span>
@@ -940,7 +1028,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                       {fav.place?.address?.split(',')[0]}
                     </p>
                   </div>
-                  <button onClick={() => handleRemoveFavorite(fav.id)}
+                  <button onClick={e => { e.stopPropagation(); handleRemoveFavorite(fav.id) }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#E05252', flexShrink: 0 }}
                     aria-label="Retirer des favoris">
                     <Heart size={16} fill="#E05252" />
@@ -970,7 +1058,8 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
             ) : userReviews.map(r => {
               const typeEmoji = r.place?.type === 'bar' ? '🍺' : r.place?.type === 'restaurant' ? '🍽️' : r.place?.type === 'park' ? '🌳' : '☕'
               return (
-                <div key={r.id} style={{ ...CARD }}>
+                <div key={r.id} style={{ ...CARD, cursor: r.place_id ? 'pointer' : 'default' }}
+                  onClick={() => { if (r.place_id) handleGoToPlace(r.place_id) }}>
                   {/* Lieu */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: 18, flexShrink: 0 }}>{typeEmoji}</span>
@@ -984,7 +1073,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                       </p>
                     </div>
                     <button
-                      onClick={() => handleDeleteReview(r.id)}
+                      onClick={e => { e.stopPropagation(); handleDeleteReview(r.id) }}
                       aria-label="Supprimer cet avis"
                       title="Supprimer"
                       style={{ flexShrink: 0, background: 'rgba(224,82,82,0.09)',
@@ -1178,9 +1267,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                           ) : (
                             friendFavorites.map(fav => (
                               <div key={fav.id} style={{ marginBottom: 8, paddingBottom: 8,
-                                borderBottom: '1px solid rgba(31,58,95,0.06)' }}>
+                                borderBottom: '1px solid rgba(31,58,95,0.06)',
+                                cursor: 'pointer' }}
+                                onClick={() => handleGoToPlace(fav.place_id)}>
                                 <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#1F3A5F' }}>
-                                  {placeEmoji(fav.place?.type ?? '')} {fav.place?.name ?? '—'}
+                                  {placeEmoji(fav.place?.type ?? '')} {fav.place?.name ?? '—'} <span style={{ fontSize: 10, color: 'rgba(31,58,95,0.35)' }}>→</span>
                                 </p>
                               </div>
                             ))
@@ -1191,9 +1282,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                           ) : (
                             friendReviews.map(r => (
                               <div key={r.id} style={{ marginBottom: 8, paddingBottom: 8,
-                                borderBottom: '1px solid rgba(31,58,95,0.06)' }}>
+                                borderBottom: '1px solid rgba(31,58,95,0.06)',
+                                cursor: r.place_id ? 'pointer' : 'default' }}
+                                onClick={() => { if (r.place_id) handleGoToPlace(r.place_id) }}>
                                 <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: '#1F3A5F' }}>
-                                  {placeEmoji(r.place?.type ?? '')} {r.place?.name ?? '—'}
+                                  {placeEmoji(r.place?.type ?? '')} {r.place?.name ?? '—'} {r.place_id && <span style={{ fontSize: 10, color: 'rgba(31,58,95,0.35)' }}>→</span>}
                                 </p>
                                 {r.comment && (
                                   <p style={{ margin: '3px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.70)',
@@ -1261,7 +1354,125 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
         )}
       </div>
 
+      {/* ── CHOICE MODAL : appareil photo ou galerie ────────────────────────── */}
+      {showAvatarChoice && (
+        <div
+          onClick={() => setShowAvatarChoice(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 420, background: '#FFF8EC',
+              borderTopLeftRadius: 22, borderTopRightRadius: 22,
+              padding: '18px 20px 32px', fontFamily: 'var(--font-outfit)' }}>
+            <p style={{ margin: '0 0 16px', fontWeight: 900, fontSize: 15, color: '#1F3A5F', textAlign: 'center' }}>
+              Choisir une photo de profil
+            </p>
+            <button
+              onClick={() => { setShowAvatarChoice(false); setTimeout(() => cameraInputRef.current?.click(), 50) }}
+              style={{ width: '100%', height: 50, marginBottom: 10, borderRadius: 14,
+                background: '#1F3A5F', color: '#EDC145', border: 'none', cursor: 'pointer',
+                fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 15,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <Camera size={18} strokeWidth={2.2} /> Prendre une photo
+            </button>
+            <button
+              onClick={() => { setShowAvatarChoice(false); setTimeout(() => galleryInputRef.current?.click(), 50) }}
+              style={{ width: '100%', height: 50, marginBottom: 10, borderRadius: 14,
+                background: 'rgba(31,58,95,0.08)', color: '#1F3A5F',
+                border: '1.5px solid rgba(31,58,95,0.14)', cursor: 'pointer',
+                fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 15,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              🖼️ Choisir depuis la galerie
+            </button>
+            <button
+              onClick={() => setShowAvatarChoice(false)}
+              style={{ width: '100%', height: 42, borderRadius: 14, border: 'none', cursor: 'pointer',
+                background: 'transparent', fontFamily: 'var(--font-outfit)', fontWeight: 700,
+                fontSize: 14, color: 'rgba(31,58,95,0.50)' }}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
 
+      {/* ── CROP MODAL ──────────────────────────────────────────────────────── */}
+      {cropSrc && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9100, background: 'rgba(0,0,0,0.88)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'var(--font-outfit)' }}>
+
+          <p style={{ margin: '0 0 16px', color: '#fff', fontWeight: 800, fontSize: 14 }}>
+            Recadrer la photo
+          </p>
+
+          {/* Zone de prévisualisation */}
+          <div style={{
+            width: CROP_PREVIEW, height: CROP_PREVIEW,
+            borderRadius: '50%', overflow: 'hidden', position: 'relative',
+            boxShadow: '0 0 0 9999px rgba(0,0,0,0.70)',
+            cursor: 'grab', userSelect: 'none', flexShrink: 0,
+          }}
+            onPointerDown={e => {
+              cropDragRef.current = { sx: e.clientX, sy: e.clientY, ox: cropOffset.x, oy: cropOffset.y }
+              ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+            }}
+            onPointerMove={e => {
+              if (!cropDragRef.current) return
+              setCropOffset({
+                x: cropDragRef.current.ox + (e.clientX - cropDragRef.current.sx),
+                y: cropDragRef.current.oy + (e.clientY - cropDragRef.current.sy),
+              })
+            }}
+            onPointerUp={() => { cropDragRef.current = null }}
+            onWheel={e => {
+              e.preventDefault()
+              const minS = Math.max(CROP_PREVIEW / cropNaturalRef.current.w, CROP_PREVIEW / cropNaturalRef.current.h)
+              setCropScale(s => Math.max(minS, Math.min(s - e.deltaY * 0.001, 8)))
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={cropSrc}
+              alt=""
+              draggable={false}
+              style={{
+                position: 'absolute',
+                width: cropNaturalRef.current.w,
+                height: cropNaturalRef.current.h,
+                transform: `translate(calc(-50% + ${cropOffset.x}px), calc(-50% + ${cropOffset.y}px)) scale(${cropScale})`,
+                transformOrigin: 'center center',
+                top: '50%', left: '50%',
+                pointerEvents: 'none',
+              }}
+            />
+          </div>
+
+          <p style={{ margin: '14px 0 20px', fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>
+            Glisse pour repositionner · molette pour zoomer
+          </p>
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              onClick={() => { URL.revokeObjectURL(cropSrc); setCropSrc(null) }}
+              style={{ height: 46, padding: '0 24px', borderRadius: 14,
+                background: 'rgba(255,255,255,0.12)', border: '1.5px solid rgba(255,255,255,0.20)',
+                color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                fontFamily: 'var(--font-outfit)' }}>
+              Annuler
+            </button>
+            <button
+              onClick={handleCropConfirm}
+              style={{ height: 46, padding: '0 28px', borderRadius: 14,
+                background: '#EDC145', border: 'none', color: '#1F3A5F',
+                cursor: 'pointer', fontWeight: 900, fontSize: 15,
+                fontFamily: 'var(--font-outfit)',
+                boxShadow: '0 6px 20px rgba(237,193,69,0.40)' }}>
+              Valider ✓
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   )

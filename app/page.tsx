@@ -353,6 +353,13 @@ export default function HomePage() {
     if (amenite) setSelectedPlace(null)  // ferme le panel lieu si open
   }, [])
 
+  /** Depuis le profil : ouvrir la fiche d'un lieu par son ID */
+  const handleSelectPlaceFromProfile = useCallback(async (placeId: string) => {
+    setShowProfile(false)
+    const { data } = await supabase.from('places').select('*').eq('id', placeId).single()
+    if (data) await handlePlaceSelect(data as Place)
+  }, [handlePlaceSelect])
+
   // Drag handle (bottom sheet mobile)
   const onPointerDown = (e: React.PointerEvent) => {
     dragRef.current = { y: e.clientY, mode: sheetMode }
@@ -881,6 +888,7 @@ export default function HomePage() {
           <ProfilePanel
             onClose={() => setShowProfile(false)}
             onAuthChange={(u) => setUserId(u?.id ?? null)}
+            onSelectPlace={handleSelectPlaceFromProfile}
           />
         </aside>
       )}
@@ -906,6 +914,7 @@ export default function HomePage() {
             <ProfilePanel
               onClose={() => setShowProfile(false)}
               onAuthChange={(u) => setUserId(u?.id ?? null)}
+              onSelectPlace={handleSelectPlaceFromProfile}
             />
           </div>
         </section>
