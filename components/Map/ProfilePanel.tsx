@@ -313,7 +313,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
               flexShrink: 0,
             }}>
               <img
-                src="/logo-icon.png"
+                src="/favicon-vdef.png"
                 alt="HopSoleil"
                 style={{ width: '100%', height: 'auto', display: 'block' }}
               />
