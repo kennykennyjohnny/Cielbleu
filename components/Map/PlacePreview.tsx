@@ -14,8 +14,8 @@ const Terrace3DView = dynamic(() => import('./Terrace3DView'), { ssr: false })
 // snap=2 : medium (~430px visible = actions + type + score + slider)
 // snap=3 : plein  (92dvh = tout + vue 3D)
 const SNAP_Y: Record<1 | 2 | 3, string> = {
-  1: 'calc(92dvh - 116px)',
-  2: 'calc(max(92dvh - 430px, 26dvh))',
+  1: 'calc(92dvh - 160px)', // peek : handle + titre + adresse + action row + badges
+  2: 'calc(max(92dvh - 460px, 24dvh))', // medium : + score + slider
   3: '0px',
 }
 
@@ -252,18 +252,18 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
               <X size={20} strokeWidth={2.4} />
             </button>
 
-            {/* ── ZONE PEEK — toujours visible (~116px) ────────────────── */}
-            <div className="px-5 shrink-0">
-              <h2 className="font-playfair text-[22px] leading-tight font-bold text-nuit pr-14 truncate">
+            {/* ── ZONE PEEK — toujours visible ────────────────────────── */}
+            <div className="px-4 shrink-0">
+              <h2 className="font-playfair text-[20px] leading-tight font-bold text-nuit pr-12 truncate">
                 {place.name}
               </h2>
-              <p className="text-[12px] text-gris font-outfit mt-0.5 pr-14 truncate">
+              <p className="text-[12px] text-gris font-outfit mt-0.5 pr-12 truncate">
                 {place.address}
               </p>
 
-              {/* ── Action row : ❤️ Partager Y aller ────────────────────── */}
+              {/* ── Action row compact : ❤️ | Partager | Maps ───────────── */}
               <div
-                className="flex items-stretch gap-2 mt-3 pb-4"
+                className="flex items-center gap-2 mt-2.5"
                 role="toolbar"
                 aria-label="Actions rapides"
               >
@@ -272,71 +272,74 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                   aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                   aria-pressed={isFavorite}
                   className={[
-                    'flex-1 flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl',
-                    'text-[11px] font-outfit font-semibold transition-colors touch-manipulation',
+                    'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl',
+                    'text-[11px] font-outfit font-semibold transition-colors touch-manipulation min-h-[36px]',
                     isFavorite
                       ? 'bg-[rgba(255,107,107,0.12)] text-corail'
-                      : 'bg-nuit/5 text-nuit/60',
+                      : 'bg-nuit/5 text-nuit/55',
                   ].join(' ')}
                 >
-                  <Heart size={18} fill={isFavorite ? 'currentColor' : 'none'} strokeWidth={2} />
+                  <Heart size={14} fill={isFavorite ? 'currentColor' : 'none'} strokeWidth={2} />
                   <span>Favoris</span>
                 </button>
 
                 <button
                   onClick={handleShare}
                   aria-label="Partager cette terrasse"
-                  className="flex-1 flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl bg-nuit/5 text-nuit/60 text-[11px] font-outfit font-semibold touch-manipulation active:bg-nuit/10 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-nuit/5 text-nuit/55 text-[11px] font-outfit font-semibold touch-manipulation active:bg-nuit/10 transition-colors min-h-[36px]"
                 >
-                  <Share2 size={18} strokeWidth={2} />
+                  <Share2 size={14} strokeWidth={2} />
                   <span>Partager</span>
                 </button>
 
                 <button
                   onClick={handleOpenMaps}
                   aria-label="Ouvrir dans Google Maps"
-                  className="flex-1 flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl bg-nuit/5 text-nuit/60 text-[11px] font-outfit font-semibold touch-manipulation active:bg-nuit/10 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-nuit/5 text-nuit/55 text-[11px] font-outfit font-semibold touch-manipulation active:bg-nuit/10 transition-colors min-h-[36px]"
                 >
-                  {/* Google Maps pin icon */}
-                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
                     <circle cx="12" cy="9" r="2.5" fill="white"/>
                   </svg>
-                  <span>Google Maps</span>
+                  <span>Maps</span>
                 </button>
               </div>
-            </div>
 
-            {/* Séparateur */}
-            <div className="h-px bg-nuit/8 mx-5 shrink-0" />
-
-            {/* ── CONTENU SCROLLABLE ───────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pt-4 pb-8">
-
-              {/* Type + rating + price + arrondissement */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="rounded-full bg-nuit/8 px-3 py-1 text-[11px] font-outfit font-semibold text-nuit uppercase tracking-wide">
+              {/* ── Type + rating + price + arrondissement (peek) ────────── */}
+              <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pb-3">
+                {place.has_terrace !== false && (
+                  <span className="flex items-center gap-1 rounded-full bg-[rgba(34,197,94,0.12)] px-2.5 py-0.5 text-[10px] font-outfit font-bold text-[#15803d] uppercase tracking-wide">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" />
+                    Terrasse
+                  </span>
+                )}
+                <span className="rounded-full bg-nuit/8 px-2.5 py-0.5 text-[10px] font-outfit font-semibold text-nuit uppercase tracking-wide">
                   {TYPE_LABEL[place.type] ?? place.type}
                 </span>
                 {rating != null && (
-                  <span className="flex items-center gap-1 text-sm font-outfit font-medium text-nuit">
-                    <Star size={14} fill="#FFBE0B" stroke="#FFBE0B" />
+                  <span className="flex items-center gap-0.5 text-[12px] font-outfit font-semibold text-nuit">
+                    <Star size={11} fill="#FFBE0B" stroke="#FFBE0B" />
                     {rating.toFixed(1)}
                   </span>
                 )}
                 {priceLevel != null && priceLevel > 0 && (
-                  <span className="text-sm font-outfit font-medium text-gris">
-                    {'€'.repeat(priceLevel)}
-                    <span className="text-nuit/15">{'€'.repeat(4 - priceLevel)}</span>
+                  <span className="text-[12px] font-outfit font-medium text-gris">
+                    {'€'.repeat(priceLevel)}<span className="opacity-20">{'€'.repeat(4 - priceLevel)}</span>
                   </span>
                 )}
                 {place.arrondissement != null && (
-                  <span className="text-sm font-outfit text-gris">
-                    · {place.arrondissement}
-                    <sup>{place.arrondissement === 1 ? 'er' : 'e'}</sup>
+                  <span className="text-[12px] font-outfit text-gris">
+                    {place.arrondissement}<sup>{place.arrondissement === 1 ? 'er' : 'e'}</sup>
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* Séparateur */}
+            <div className="h-px bg-nuit/8 mx-4 shrink-0" />
+
+            {/* ── CONTENU SCROLLABLE ───────────────────────────────────── */}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pt-4 pb-8">
 
               {/* Score block + slider */}
               {scoresThisMonth !== null && Object.keys(scoresThisMonth).length > 0 ? (

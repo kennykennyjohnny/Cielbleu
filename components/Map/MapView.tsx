@@ -765,17 +765,24 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     const place = placesRef.current.find(p => p.id === highlightPlaceId)
     if (!place) return
 
-    // Anneau pulsant — cercle blanc + halo oré qui s'agrandit et disparaît
-    const el = document.createElement('div')
-    el.style.cssText = [
+    // Anneau pulsant — IMPORTANT: Mapbox écrase `element.style.transform` pour positionner
+    // le marqueur. Si l'animation CSS applique aussi `transform: scale()` sur le même
+    // élément, l'animation gagne dans la cascade CSS et le pin se retrouve en haut-gauche.
+    // Solution : wrapper sans animation (que Mapbox peut transformer librement) +
+    // anneau enfant qui porte l'animation.
+    const wrapper = document.createElement('div')
+    wrapper.style.cssText = 'width:58px;height:58px;pointer-events:none'
+    const ring = document.createElement('div')
+    ring.style.cssText = [
       'width:58px', 'height:58px', 'border-radius:50%',
       'border:3px solid rgba(255,255,255,0.92)',
       'box-shadow:0 0 0 2.5px rgba(237,193,69,0.85), 0 0 18px rgba(237,193,69,0.40)',
       'animation:pin-selected-pulse 1.7s ease-out infinite',
       'pointer-events:none',
     ].join(';')
+    wrapper.appendChild(ring)
 
-    selectedRingRef.current = new mapboxgl.Marker({ element: el, anchor: 'center' })
+    selectedRingRef.current = new mapboxgl.Marker({ element: wrapper, anchor: 'center' })
       .setLngLat([place.lng, place.lat])
       .addTo(map)
   }, [highlightPlaceId]) // eslint-disable-line
