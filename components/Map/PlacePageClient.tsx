@@ -364,7 +364,8 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
   }, [userId, isFavorite, favoriteId, place.id, onOpenProfile])
 
   return (
-    <div style={{ background:'transparent', fontFamily:'var(--font-outfit)', color:'#142033' }}>
+    <div style={{ background:'transparent', fontFamily:'var(--font-outfit)', color:'#142033',
+        display:'flex', flexDirection:'column', height:'100%', overflow:'hidden' }}>
 
       {/* ═══════════ HEADER COMPACT : score badge + heure + back ═══════════ */}
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px 12px' }}>
@@ -448,8 +449,8 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
       )}
 
       {/* ═══════════ SCROLLABLE PANEL ═══════════ */}
-      <div style={{ maxWidth:520, margin:'0 auto', padding:'0 14px',
-        paddingBottom:'max(calc(88px + env(safe-area-inset-bottom,0px)), 100px)' }}>
+      <div style={{ flex:1, overflowY:'auto', overscrollBehavior:'contain', minHeight:0 }}>
+      <div style={{ maxWidth:520, margin:'0 auto', padding:'0 14px 24px' }}>
 
         {/* ── PLACE HEAD ── */}
         <div style={{ padding:'18px 0 14px' }}>
@@ -810,6 +811,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         }
 
       </div>
+      </div>{/* /scroll-wrapper */}
 
       {/* Vote toast */}
       {voteToast && (
@@ -822,8 +824,8 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         </div>
       )}
 
-      {/* ═══════════ ACTION BAR (sticky bottom dans le panel) ═══════════ */}
-      <div style={{ position:'sticky', bottom:0, zIndex:40,
+      {/* ═══════════ ACTION BAR ═══════════ */}
+      <div style={{ zIndex:40, flexShrink:0,
         paddingBottom:'max(env(safe-area-inset-bottom,0px),12px)' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 44px', gap:8,
           margin:'0 12px', padding:'12px 12px 14px',

@@ -27,7 +27,7 @@ interface Props {
 
 type SheetMode = 'peek' | 'half' | 'full'
 const SHEET_HEIGHTS: Record<SheetMode, string> = {
-  peek: '20vh', half: '58vh', full: '92dvh',
+  peek: '18vh', half: '38vh', full: '92dvh',
 }
 
 function nowHalfHour(): number {
@@ -210,9 +210,10 @@ export default function PlacePageShell({ place, scores }: Props) {
       {/* ─── DESKTOP : panel droit, largeur 420px ─── */}
       {isDesktop && (
         <aside
-          className="absolute top-0 right-0 z-30 h-dvh overflow-y-auto"
+          className="absolute top-0 right-0 z-30 h-dvh"
           style={{
             width: 420,
+            display: 'flex', flexDirection: 'column',
             background: 'rgba(255,252,243,0.97)',
             backdropFilter: 'blur(22px)',
             borderLeft: '1px solid rgba(20,32,51,0.10)',
@@ -238,20 +239,46 @@ export default function PlacePageShell({ place, scores }: Props) {
             borderTop: '1px solid rgba(20,32,51,0.10)',
             boxShadow: '0 -16px 42px rgba(11,31,58,0.20)',
             overflow: 'hidden',
+            display: 'flex', flexDirection: 'column',
           }}
           role="dialog" aria-label={`Détails de ${place.name}`}
         >
-          <div
-            onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-            role="separator" aria-label="Redimensionner la fiche (glisser haut/bas)"
-            className="flex items-center justify-center cursor-grab active:cursor-grabbing"
-            style={{ height: 22, touchAction: 'none' }}
-          >
-            <span aria-hidden="true"
-              style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)' }} />
+          {/* ── Drag handle bar ── */}
+          <div style={{ height: 40, flexShrink: 0, display: 'flex', alignItems: 'center',
+            padding: '0 10px', gap: 8, borderBottom: '1px solid rgba(20,32,51,0.07)' }}>
+            <button
+              onClick={() => router.push('/')}
+              style={{ height: 30, padding: '0 11px', borderRadius: 9,
+                border: '1.5px solid rgba(20,32,51,0.12)',
+                background: 'rgba(20,32,51,0.05)', cursor: 'pointer',
+                fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12,
+                color: '#0b1f3a', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              ← Fermer
+            </button>
+            <div
+              onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+              role="separator" aria-label="Redimensionner la fiche (glisser haut/bas)"
+              style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', touchAction: 'none', cursor: 'grab' }}
+            >
+              <span aria-hidden="true"
+                style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)' }} />
+            </div>
+            <button
+              onClick={() => setMode(m => m === 'full' ? 'half' : 'peek')}
+              style={{ height: 30, padding: '0 11px', borderRadius: 9,
+                border: '1.5px solid rgba(20,32,51,0.12)',
+                background: 'rgba(20,32,51,0.05)', cursor: 'pointer',
+                fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12,
+                color: '#0b1f3a', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              ↓ Baisser
+            </button>
           </div>
-          <div className="overflow-y-auto" style={{ height: 'calc(100% - 22px)' }}>
+          {/* ── Content (PlacePageClient gère son propre scroll) ── */}
+          <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
             <PlacePageClient place={place} scores={scores}
               hour={hour} onHourChange={setHour} />
           </div>
