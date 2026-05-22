@@ -29,6 +29,14 @@ interface FriendRequest {
   profile?: { display_name: string | null; username: string | null }
 }
 
+interface UserReview {
+  id: string
+  comment: string | null
+  created_at: string
+  place_id: string | null
+  place?: { name: string; address: string; type: string } | null
+}
+
 // ── Style constants ─────────────────────────────────────────────────────────────
 
 const CARD: React.CSSProperties = {
@@ -105,6 +113,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const [profile, setProfile]         = useState<Profile | null>(null)
   const [favorites, setFavorites]     = useState<Favorite[]>([])
   const [friends, setFriends]         = useState<FriendRequest[]>([])
+  const [userReviews, setUserReviews] = useState<UserReview[]>([])
   const [authTab, setAuthTab]         = useState<AuthTab>('login')
   const [profileTab, setProfileTab]   = useState<ProfileTab>('favoris')
 
@@ -153,6 +162,18 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     if (data) setFavorites(data as unknown as Favorite[])
   }, [])
 
+  const fetchUserReviews = useCallback(async (userId: string) => {
+    const { data } = await supabase
+      .from('reviews')
+      .select('id, comment, created_at, place_id, place:places(name, address, type)')
+      .eq('user_id', userId)
+      .not('comment', 'is', null)
+      .neq('comment', '')
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (data) setUserReviews(data as unknown as UserReview[])
+  }, [])
+
   const fetchFriends = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from('friendships')
@@ -165,13 +186,14 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
   useEffect(() => {
     if (!user) {
-      setProfile(null); setFavorites([]); setFriends([])
+      setProfile(null); setFavorites([]); setFriends([]); setUserReviews([])
       return
     }
     fetchProfile(user.id)
     fetchFavorites(user.id)
     fetchFriends(user.id)
-  }, [user, fetchProfile, fetchFavorites, fetchFriends])
+    fetchUserReviews(user.id)
+  }, [user, fetchProfile, fetchFavorites, fetchFriends, fetchUserReviews])
 
   // ── Auth actions ───────────────────────────────────────────────────────────
 
@@ -296,17 +318,17 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
         {/* Perks — 4 pills iconiques */}
         <div style={{ display: 'flex', gap: 7, margin: '14px 16px 0' }}>
-          {[
-            { icon: '♥', label: 'Favoris', color: 'rgba(224,82,82,0.12)', border: 'rgba(224,82,82,0.20)' },
-            { icon: '☀', label: 'Votes',   color: 'rgba(237,193,69,0.14)', border: 'rgba(237,193,69,0.35)' },
-            { icon: '✏', label: 'Avis',    color: 'rgba(31,58,95,0.06)',  border: 'rgba(31,58,95,0.12)' },
-            { icon: '⌾',  label: 'Amis',   color: 'rgba(52,168,83,0.10)', border: 'rgba(52,168,83,0.25)' },
-          ].map(({ icon, label, color, border }) => (
+          {([
+            { icon: <Heart size={16} strokeWidth={2} style={{ color: '#c04f4f' }} />, label: 'Favoris', color: 'rgba(224,82,82,0.12)', border: 'rgba(224,82,82,0.20)' },
+            { icon: <span style={{ fontSize: 16, lineHeight: 1 }}>☀️</span>, label: 'Votes', color: 'rgba(237,193,69,0.14)', border: 'rgba(237,193,69,0.35)' },
+            { icon: <MessageSquare size={16} strokeWidth={2} style={{ color: 'rgba(31,58,95,0.55)' }} />, label: 'Avis', color: 'rgba(31,58,95,0.06)', border: 'rgba(31,58,95,0.12)' },
+            { icon: <Users size={16} strokeWidth={2} style={{ color: '#34A853' }} />, label: 'Amis', color: 'rgba(52,168,83,0.10)', border: 'rgba(52,168,83,0.25)' },
+          ] as { icon: React.ReactNode; label: string; color: string; border: string }[]).map(({ icon, label, color, border }) => (
             <div key={label} style={{
               flex: 1, borderRadius: 14, padding: '10px 4px', textAlign: 'center',
               background: color, border: `1.5px solid ${border}`,
             }}>
-              <span style={{ fontSize: 17, display: 'block', marginBottom: 5, lineHeight: 1 }}>{icon}</span>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6, height: 20, alignItems: 'center' }}>{icon}</div>
               <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(31,58,95,0.60)', letterSpacing: '0.01em' }}>{label}</span>
             </div>
           ))}
@@ -532,18 +554,47 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
         {/* ── AVIS ── */}
         {profileTab === 'avis' && (
-          <div style={{ ...CARD, textAlign: 'center', padding: '30px 16px' }}>
-            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(31,58,95,0.07)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-              <MessageSquare size={22} strokeWidth={1.8} style={{ color: 'rgba(31,58,95,0.45)' }} />
-            </div>
-            <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: '#1F3A5F' }}>
-              Tes avis apparaissent ici
-            </p>
-            <p style={{ margin: '5px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.50)', fontWeight: 600, lineHeight: 1.5 }}>
-              Commente une terrasse depuis sa fiche pour retrouver tous tes avis ici.
-            </p>
-          </div>
+          <>
+            {userReviews.length === 0 ? (
+              <div style={{ ...CARD, textAlign: 'center', padding: '30px 16px' }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(31,58,95,0.07)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <MessageSquare size={22} strokeWidth={1.8} style={{ color: 'rgba(31,58,95,0.45)' }} />
+                </div>
+                <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: '#1F3A5F' }}>
+                  Aucun avis pour l&apos;instant
+                </p>
+                <p style={{ margin: '5px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.50)', fontWeight: 600, lineHeight: 1.5 }}>
+                  Commente une terrasse depuis sa fiche pour la retrouver ici.
+                </p>
+              </div>
+            ) : userReviews.map(r => {
+              const typeEmoji = r.place?.type === 'bar' ? '🍺' : r.place?.type === 'restaurant' ? '🍽️' : r.place?.type === 'park' ? '🌳' : '☕'
+              return (
+                <div key={r.id} style={{ ...CARD }}>
+                  {/* Lieu */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 18, flexShrink: 0 }}>{typeEmoji}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {r.place?.name ?? 'Lieu inconnu'}
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'rgba(31,58,95,0.45)', fontWeight: 600 }}>
+                        {new Date(r.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Commentaire */}
+                  <p style={{ margin: 0, fontSize: 13, color: '#1F3A5F', fontWeight: 600, lineHeight: 1.55,
+                    background: 'rgba(255,255,255,0.75)', borderRadius: 10, padding: '8px 10px',
+                    borderLeft: '3px solid rgba(237,193,69,0.55)' }}>
+                    {r.comment}
+                  </p>
+                </div>
+              )
+            })}
+          </>
         )}
 
         {/* ── AMIS ── */}

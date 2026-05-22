@@ -546,6 +546,53 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           )
         })()}
 
+        {/* ── AVIS DES VISITEURS ── */}
+        {reviews.length > 0 && (
+          <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
+            <p style={{ ...EYEBROW, marginBottom:12 }}>
+              Avis des visiteurs · {reviews.length}
+            </p>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {reviews.map(r => {
+                const initiale = (r.display_name ?? 'A').charAt(0).toUpperCase()
+                return (
+                  <div key={r.id} style={{
+                    borderRadius:16, padding:'12px 14px',
+                    background:'rgba(255,255,255,0.82)',
+                    border:'1px solid rgba(20,32,51,0.08)',
+                    boxShadow:'0 2px 8px rgba(31,58,95,0.05)',
+                  }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                      <div style={{
+                        width:30, height:30, borderRadius:'50%', flexShrink:0,
+                        background:'rgba(237,193,69,0.18)',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        fontSize:12, fontWeight:900, color:'#b87c00',
+                      }}>
+                        {initiale}
+                      </div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <span style={{ fontSize:12, fontWeight:800, color:'#1F3A5F', display:'block', lineHeight:1.2 }}>
+                          {r.display_name ?? 'Anonyme'}
+                        </span>
+                        <span style={{ fontSize:10.5, color:'rgba(31,58,95,0.40)', fontWeight:600 }}>
+                          {new Date(r.created_at).toLocaleDateString('fr-FR', { day:'numeric', month:'long' })}
+                        </span>
+                      </div>
+                      <span style={{ fontSize:13, color:'#EDC145', flexShrink:0 }}>☀</span>
+                    </div>
+                    <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#1F3A5F', lineHeight:1.55,
+                      borderLeft:'3px solid rgba(237,193,69,0.55)',
+                      paddingLeft:10 }}>
+                      {r.comment}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── PHOTOS ── */}
         {photoRefs.length > 0 && (
           <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
@@ -647,7 +694,9 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
 
       {/* ═══════════ ESPACE COMMUNAUTAIRE ═══════════ */}
       <div style={{ padding:'0 14px 20px', borderTop:'1px solid rgba(20,32,51,0.07)', marginTop:6, paddingTop:18 }}>
-        <p style={{ ...EYEBROW, marginBottom:14 }}>Terrasse en ce moment ?</p>
+        <p style={{ ...EYEBROW, marginBottom:14 }}>
+          {reviews.length > 0 ? 'Ajoute ton avis' : 'Sois le premier à donner ton avis'}
+        </p>
 
         {/* ── Votes soleil (accessibles sans connexion) ── */}
         <div style={{ display:'flex', gap:10, marginBottom:20 }}>
@@ -741,32 +790,6 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           )
         }
 
-        {/* ── Avis publiés ── */}
-        {reviews.length > 0 && (
-          <div style={{ marginTop: 20 }}>
-            <p style={{ ...EYEBROW, marginBottom: 12 }}>Avis des visiteurs</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {reviews.map(r => (
-                <div key={r.id} style={{
-                  borderRadius: 16, padding: '12px 14px',
-                  background: 'rgba(31,58,95,0.04)', border: '1px solid rgba(31,58,95,0.08)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: '#1F3A5F' }}>
-                      {r.display_name ?? 'Anonyme'}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600 }}>
-                      {new Date(r.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                    </span>
-                  </div>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1F3A5F', lineHeight: 1.5 }}>
-                    {r.comment}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Vote toast */}

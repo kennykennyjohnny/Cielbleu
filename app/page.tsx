@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { Search, X, Clock, UserCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { getSunPosition } from '@/lib/suncalc'
 import Filters from '@/components/Map/Filters'
 import PlacePageClient from '@/components/Map/PlacePageClient'
 import FicheAmenitePanel from '@/components/Map/FicheAmenitePanel'
@@ -256,6 +257,39 @@ export default function HomePage() {
     () => displayedPlaces.filter((p) => (p.currentScore ?? 0) >= 4).length,
     [displayedPlaces]
   )
+
+  // ── Sync scores du slider (debounce 400 ms) ──────────────────────────────
+  // Quand l'heure change, re-fetche sun_scores pour le nouveau créneau.
+  // Si la DB n'a pas encore de données → fallback suncalc (altitude solaire Paris).
+  useEffect(() => {
+    if (!places.length) return
+    const hFloor = Math.floor(hour)
+    const mStr   = hour % 1 ? '30' : '00'
+    const slot   = `${String(hFloor).padStart(2, '0')}:${mStr}`
+    const month  = new Date().getMonth() + 1
+
+    const t = window.setTimeout(async () => {
+      const { data } = await supabase
+        .from('sun_scores').select('place_id, score')
+        .eq('month', month).eq('time_slot', slot)
+
+      if (data && data.length > 0) {
+        const byId = new Map(data.map(r => [r.place_id, r.score]))
+        setPlaces(prev => prev.map(p => ({
+          ...p, currentScore: byId.get(p.id) ?? p.currentScore ?? 3,
+        })))
+      } else {
+        // Fallback : score basé sur l'altitude du soleil (même pour tous, Paris)
+        const d = new Date()
+        d.setHours(hFloor, hour % 1 ? 30 : 0, 0, 0)
+        const pos = getSunPosition(d, 48.8566, 2.3522)
+        const alt = (pos.altitude * 180) / Math.PI
+        const s = pos.altitude <= 0 ? 0 : alt < 5 ? 2 : alt < 15 ? 3 : alt < 35 ? 4 : 5
+        setPlaces(prev => prev.map(p => ({ ...p, currentScore: s })))
+      }
+    }, 400)
+    return () => window.clearTimeout(t)
+  }, [hour]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleFilter = useCallback((filter: FilterType) => {
     setActiveFilters((prev) =>
