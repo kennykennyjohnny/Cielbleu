@@ -362,10 +362,9 @@ export default function HomePage() {
     if (!dragRef.current) return
     const dy = e.clientY - dragRef.current.y
     if (dy > 40) {
-      if      (dragRef.current.mode === 'full') setSheetMode('half')
-      else if (dragRef.current.mode === 'half') setSheetMode('peek')
+      if (dragRef.current.mode === 'full') setSheetMode('half')
       else {
-        // peek + glisse vers le bas → ferme la card, la carte reste en place
+        // half ou peek + glisse vers le bas → ferme directement
         dragRef.current = null
         setSelectedPlace(null)
       }
@@ -1013,7 +1012,7 @@ export default function HomePage() {
             <span aria-hidden="true"
               style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)' }} />
           </div>
-          <div className="overflow-y-auto" style={{ height: 'calc(100% - 22px)' }}>
+          <div className="overflow-y-auto" style={{ height: 'calc(100% - 22px)', overscrollBehavior: 'contain' }}>
             <PlacePageClient
               place={selectedPlace}
               scores={selectedScores}

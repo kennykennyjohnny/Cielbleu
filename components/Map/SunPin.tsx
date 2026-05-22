@@ -20,8 +20,8 @@ const PALETTES: Record<number, Palette> = {
   1: { ring: '#7f94aa', inner: '#bfd2e5', symbol: '☁', symbolColor: '#5f7892', badgeBg: '#5f7892', badgeColor: '#ffffff', halo: false, haloColor: '#7f94aa' },
   2: { ring: '#5ab8ff', inner: '#bfe4ff', symbol: '⛅', symbolColor: '#16324f', badgeBg: '#177fe6', badgeColor: '#ffffff', halo: false, haloColor: '#5ab8ff' },
   3: { ring: '#2f9bff', inner: '#d9efff', symbol: '☀', symbolColor: '#177fe6', badgeBg: '#2f9bff', badgeColor: '#ffffff', halo: false, haloColor: '#2f9bff' },
-  4: { ring: '#ffd35a', inner: '#fff3c4', symbol: '☀', symbolColor: '#b57500', badgeBg: '#f59e0b', badgeColor: '#16324f', halo: true,  haloColor: '#ffbe0b' },
-  5: { ring: '#ffbe0b', inner: '#ffe082', symbol: '☀', symbolColor: '#a85a00', badgeBg: '#16324f', badgeColor: '#ffe082', halo: true,  haloColor: '#ffbe0b' },
+  4: { ring: '#2ea84d', inner: '#b8f0cb', symbol: '☀', symbolColor: '#0b4d20', badgeBg: '#2ea84d', badgeColor: '#ffffff', halo: false, haloColor: '#2ea84d' },
+  5: { ring: '#1a7d38', inner: '#7fe0a0', symbol: '☀', symbolColor: '#062b14', badgeBg: '#1a7d38', badgeColor: '#ffffff', halo: false, haloColor: '#1a7d38' },
 }
 
 const SCORE_LABEL: Record<number, string> = {

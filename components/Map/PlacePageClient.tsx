@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Clock } from 'lucide-react'
+import { ArrowLeft, Clock, Share2 } from 'lucide-react'
 import type { Place } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
@@ -223,10 +223,10 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         : { background:'rgba(10,25,42,0.88)',    color:'#a8c8e8', border:'1px solid rgba(255,255,255,0.12)' }
 
   const handleShare = useCallback(async () => {
-    const url = typeof window !== 'undefined' ? window.location.href : ''
+    const url = `https://hopsoleil.fr/place/${place.id}`
     if (navigator?.share) { try { await navigator.share({ title: 'HopSoleil — ' + place.name, url }); return } catch { /* cancelled */ } }
     if (navigator?.clipboard) { try { await navigator.clipboard.writeText(url); setShareToast(true); setTimeout(() => setShareToast(false), 2200) } catch { /* noop */ } }
-  }, [place.name])
+  }, [place.id, place.name])
 
   const handleSunVote = useCallback(async (isSunny: boolean) => {
     const newVote: 'sunny' | 'shady' = isSunny ? 'sunny' : 'shady'
@@ -328,6 +328,19 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
   }, [userId, commentText, place.id, deviceId, loadReviews])
 
   // ── Favorites ────────────────────────────────────────────────────────────────
+  const [likeCount, setLikeCount] = useState<number>(0)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase
+      .from('place_like_counts')
+      .select('like_count')
+      .eq('place_id', place.id)
+      .single()
+      .then(({ data }) => { if (!cancelled && data) setLikeCount(data.like_count) })
+    return () => { cancelled = true }
+  }, [place.id])
+
   useEffect(() => {
     if (!userId) { setIsFavorite(false); setFavoriteId(null); return }
     let cancelled = false
@@ -342,9 +355,10 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     if (isFavorite && favoriteId) {
       await supabase.from('favorites').delete().eq('id', favoriteId)
       setIsFavorite(false); setFavoriteId(null)
+      setLikeCount(c => Math.max(0, c - 1))
     } else {
       const { data } = await supabase.from('favorites').insert({ user_id: userId, place_id: place.id }).select('id').single()
-      if (data) { setIsFavorite(true); setFavoriteId(data.id) }
+      if (data) { setIsFavorite(true); setFavoriteId(data.id); setLikeCount(c => c + 1) }
     }
     setFavLoading(false)
   }, [userId, isFavorite, favoriteId, place.id, onOpenProfile])
@@ -375,20 +389,31 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
 
         <div style={{ flex:1 }} />
 
-        {/* ❤️ Bouton favori */}
+        {/* ❤️ Bouton favori + compteur */}
         <button
           onClick={handleToggleFavorite}
           disabled={favLoading}
           aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
           style={{
             flexShrink: 0,
-            width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer',
-            background: isFavorite ? 'rgba(255,99,99,0.12)' : 'rgba(20,32,51,0.06)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            minWidth: 34, height: 34,
+            borderRadius: likeCount > 0 ? 999 : '50%',
+            padding: likeCount > 0 ? '0 10px' : '0',
+            border: 'none', cursor: 'pointer',
+            background: isFavorite ? 'rgba(255,99,99,0.14)' : 'rgba(20,32,51,0.06)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
             fontSize: 17, transition: 'all 150ms',
           }}
         >
           {isFavorite ? '❤️' : '🤍'}
+          {likeCount > 0 && (
+            <span style={{
+              fontSize: 12, fontWeight: 800, lineHeight: 1,
+              color: isFavorite ? '#d93636' : 'rgba(20,32,51,0.50)',
+            }}>
+              {likeCount}
+            </span>
+          )}
         </button>
 
         <div style={{ flexShrink:0, minWidth:60, textAlign:'center',
@@ -832,8 +857,8 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           <button onClick={handleShare} aria-label="Partager ce lieu"
             style={{ height:46, border:'1px solid rgba(20,32,51,0.10)', borderRadius:14,
               background:'#fff', cursor:'pointer', display:'flex', alignItems:'center',
-              justifyContent:'center', fontSize:18, color:'#0b1f3a' }}>
-            ↗
+              justifyContent:'center', gap:6, padding:'0 14px', color:'#0b1f3a' }}>
+            <Share2 size={16} strokeWidth={2.2} />
           </button>
         </div>
       </div>

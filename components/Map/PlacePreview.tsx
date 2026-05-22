@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { Star, Navigation, X, ChevronUp, Sunrise, Sunset } from 'lucide-react'
+import { Star, Navigation, X, ChevronUp, Sunrise, Sunset, Share2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Place } from '@/types'
 
@@ -353,6 +353,19 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                   Y aller maintenant
                 </a>
               )}
+
+              {/* CTA partager */}
+              <button
+                onClick={async () => {
+                  const url = `https://hopsoleil.fr/place/${place.id}`
+                  if (navigator?.share) { try { await navigator.share({ title: place.name, url }); return } catch { /* cancelled */ } }
+                  if (navigator?.clipboard) { await navigator.clipboard.writeText(url) }
+                }}
+                className="mt-2 w-full flex items-center justify-center gap-2 rounded-2xl bg-creme py-3.5 text-[14px] font-outfit font-semibold text-nuit/70 border border-nuit/8 active:scale-[0.97] transition-transform"
+              >
+                <Share2 size={15} strokeWidth={2.2} />
+                Partager cette terrasse
+              </button>
             </div>
           </div>
         </div>

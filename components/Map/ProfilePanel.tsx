@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { ArrowLeft, LogOut, Heart, MessageSquare, Users, MapPin } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { ArrowLeft, LogOut, Heart, MessageSquare, Users, MapPin, Share2, Camera } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -132,6 +132,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const [error, setError]       = useState<string | null>(null)
   const [message, setMessage]   = useState<string | null>(null)
   const [friendEmail, setFriendEmail] = useState('')
+  const [friendSuggestions, setFriendSuggestions] = useState<{ id: string; username: string | null; display_name: string | null }[]>([])
+
+  // ── Avatar upload ──────────────────────────────────────────────────
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
 
   // ── Aperçu profil ami (à la demande) ───────────────────────────────
   const [friendProfileId, setFriendProfileId] = useState<string | null>(null)
@@ -217,6 +222,38 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
     fetchUserReviews(user.id)
   }, [user, fetchProfile, fetchFavorites, fetchFriends, fetchUserReviews])
 
+  // ── Friend search autocomplete ─────────────────────────────────────────────
+
+  useEffect(() => {
+    const q = friendEmail.trim().toLowerCase()
+    if (!q || q.length < 2) { setFriendSuggestions([]); return }
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, username, display_name')
+        .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
+        .neq('id', user?.id ?? '')
+        .limit(6)
+      setFriendSuggestions(data ?? [])
+    }, 300)
+    return () => clearTimeout(t)
+  }, [friendEmail, user?.id])
+
+  // ── Avatar upload ──────────────────────────────────────────────────────────
+
+  const handleAvatarUpload = useCallback(async (file: File) => {
+    if (!user) return
+    setAvatarUploading(true)
+    const ext = file.name.split('.').pop() ?? 'jpg'
+    const path = `${user.id}/avatar.${ext}`
+    const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+    if (upErr) { setError(upErr.message); setAvatarUploading(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
+    await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
+    setProfile(p => p ? { ...p, avatar_url: publicUrl } : p)
+    setAvatarUploading(false)
+  }, [user])
+
   // ── Auth actions ───────────────────────────────────────────────────────────
 
   async function handleLogin(e: React.FormEvent) {
@@ -285,6 +322,12 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   async function handleRejectFriend(friendshipId: string) {
     await supabase.from('friendships').update({ status: 'rejected' }).eq('id', friendshipId)
     setFriends(f => f.filter(x => x.id !== friendshipId))
+  }
+
+  async function handleRemoveFriend(friendshipId: string) {
+    await supabase.from('friendships').delete().eq('id', friendshipId)
+    setFriends(f => f.filter(x => x.id !== friendshipId))
+    setFriendProfileId(null)
   }
 
   // ── Render helpers ─────────────────────────────────────────────────────────
@@ -483,18 +526,42 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
         <div style={{ position: 'absolute', bottom: -15, left: -15, width: 70, height: 70,
           borderRadius: '50%', background: 'rgba(237,193,69,0.08)', pointerEvents: 'none' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
-          {/* Avatar — photo ou initiale */}
-          <div style={{
-            width: 54, height: 54, borderRadius: '50%', flexShrink: 0,
-            background: profile?.avatar_url ? 'transparent' : '#EDC145',
-            boxShadow: '0 0 0 3px rgba(237,193,69,0.45)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-          }}>
-            {profile?.avatar_url
-              // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={profile.avatar_url} alt={displayNameResolved} width={54} height={54} style={{ objectFit: 'cover' }} />
-              : <span style={{ fontSize: 22, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>{initiale}</span>
-            }
+          {/* Avatar — photo ou initiale + bouton upload */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <div style={{
+              width: 54, height: 54, borderRadius: '50%', flexShrink: 0,
+              background: profile?.avatar_url ? 'transparent' : '#EDC145',
+              boxShadow: '0 0 0 3px rgba(237,193,69,0.45)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+            }}>
+              {profile?.avatar_url
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={profile.avatar_url} alt={displayNameResolved} width={54} height={54} style={{ objectFit: 'cover' }} />
+                : <span style={{ fontSize: 22, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>{initiale}</span>
+              }
+            </div>
+            {/* Bouton upload photo */}
+            <button
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              aria-label="Changer la photo de profil"
+              style={{ position: 'absolute', bottom: -2, right: -4, width: 22, height: 22,
+                borderRadius: '50%', background: '#EDC145', border: '2px solid #1a3358',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.20)' }}
+            >
+              {avatarUploading
+                ? <span style={{ fontSize: 9, color: '#1F3A5F', fontWeight: 900 }}>…</span>
+                : <Camera size={11} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
+              }
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f) }}
+            />
           </div>
           <div>
             <p style={{ margin: 0, fontFamily: 'var(--font-bricolage)', fontWeight: 900, fontSize: 18, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
@@ -524,6 +591,25 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
             </div>
           ))}
         </div>
+        {/* Bouton partager son profil */}
+        {profile?.username && (
+          <button
+            onClick={() => {
+              const url = `https://hopsoleil.fr/u/${profile.username}`
+              if (navigator?.share) { navigator.share({ title: (profile.display_name ?? 'Mon profil') + ' sur HopSoleil', url }).catch(() => {}) }
+              else { navigator.clipboard.writeText(url).catch(() => {}) }
+            }}
+            style={{ marginTop: 14, position: 'relative', zIndex: 1, width: '100%', height: 36,
+              borderRadius: 10, border: '1px solid rgba(237,193,69,0.30)',
+              background: 'rgba(237,193,69,0.12)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12.5,
+              color: 'rgba(255,255,255,0.80)' }}
+          >
+            <Share2 size={13} strokeWidth={2.2} />
+            Partager mon profil
+          </button>
+        )}
       </div>
 
       {/* Tabs — DA v2 : actif = navy fond blanc, inactif = transparent */}
@@ -663,15 +749,55 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
           <>
             {/* Ajouter un ami par pseudo */}
             <p style={EYEBROW}>Ajouter un ami (par pseudo)</p>
-            <form onSubmit={handleAddFriend} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <form onSubmit={handleAddFriend} style={{ display: 'flex', gap: 8, marginBottom: friendSuggestions.length > 0 ? 0 : 16, position: 'relative' }}>
               <input style={{ ...INPUT, flex: 1 }} type="text" placeholder="@pseudo"
-                value={friendEmail} onChange={e => setFriendEmail(e.target.value)} />
+                value={friendEmail} onChange={e => { setFriendEmail(e.target.value); setError(null) }}
+                autoComplete="off" />
               <button type="submit" disabled={loading}
                 style={{ height: 46, padding: '0 16px', borderRadius: 12, border: 'none', cursor: 'pointer',
                   background: '#EDC145', color: '#1F3A5F', fontWeight: 900, fontFamily: 'var(--font-outfit)', flexShrink: 0 }}>
                 +
               </button>
             </form>
+            {/* Autocomplete dropdown */}
+            {friendSuggestions.length > 0 && (
+              <div style={{ background: '#fff', border: '1.5px solid rgba(31,58,95,0.12)',
+                borderRadius: '0 0 12px 12px', marginBottom: 16,
+                boxShadow: '0 4px 16px rgba(31,58,95,0.10)', overflow: 'hidden' }}>
+                {friendSuggestions.map((s, i) => (
+                  <button key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setFriendEmail(s.username ?? s.display_name ?? '')
+                      setFriendSuggestions([])
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      padding: '10px 14px', border: 'none', cursor: 'pointer', textAlign: 'left',
+                      background: 'transparent', fontFamily: 'var(--font-outfit)',
+                      borderTop: i > 0 ? '1px solid rgba(31,58,95,0.07)' : 'none' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(31,58,95,0.04)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <div style={{ width: 30, height: 30, borderRadius: '50%',
+                      background: 'rgba(237,193,69,0.18)', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 13, fontWeight: 900, color: '#1F3A5F' }}>
+                      {s.display_name?.charAt(0)?.toUpperCase() ?? '?'}
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: '#1F3A5F' }}>
+                        {s.display_name ?? s.username}
+                      </p>
+                      {s.username && (
+                        <p style={{ margin: 0, fontSize: 11, color: 'rgba(31,58,95,0.50)', fontWeight: 600 }}>
+                          @{s.username}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
             {error && <p style={{ margin: '-8px 0 12px', fontSize: 12, color: '#E05252', fontWeight: 700 }}>{error}</p>}
 
             {/* Demandes en attente */}
@@ -789,6 +915,18 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                             ))}
                           </>
                         )}
+                        {/* Bouton supprimer l'ami */}
+                        <button
+                          onClick={() => handleRemoveFriend(f.id)}
+                          style={{ marginTop: 8, width: '100%', height: 32, borderRadius: 10,
+                            border: '1.5px solid rgba(224,82,82,0.28)',
+                            background: 'rgba(224,82,82,0.07)',
+                            color: '#c04f4f', fontFamily: 'var(--font-outfit)',
+                            fontWeight: 800, fontSize: 12, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                        >
+                          Supprimer cet ami
+                        </button>
                       </div>
                     )}
                   </div>
