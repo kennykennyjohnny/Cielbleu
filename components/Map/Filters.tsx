@@ -2,12 +2,11 @@
 
 import type { FilterType } from '@/types'
 
+// Café et Ouvert retirés (trop instables)
 const FILTERS: { id: FilterType; label: string; icon: string }[] = [
   { id: 'sun',        label: 'Au soleil', icon: '☀️' },
-  { id: 'open',       label: 'Ouvert',    icon: '🟢' },
   { id: 'bar',        label: 'Bars',      icon: '🍺' },
   { id: 'restaurant', label: 'Restos',    icon: '🍽️' },
-  { id: 'cafe',       label: 'Cafés',     icon: '☕' },
   { id: 'park',       label: 'Parcs',     icon: '🌳' },
   { id: 'fontaine',   label: 'Eau',       icon: '💧' },
   { id: 'sanisette',  label: 'WC',        icon: '🚻' },
@@ -15,30 +14,24 @@ const FILTERS: { id: FilterType; label: string; icon: string }[] = [
 
 function activeStyle(id: FilterType): React.CSSProperties {
   if (id === 'sun') return {
-    background: 'rgba(237,193,69,0.20)',
+    background: 'rgba(237,193,69,0.22)',
     color: '#1F3A5F',
     border: '1.5px solid rgba(237,193,69,0.65)',
     boxShadow: '0 3px 12px rgba(237,193,69,0.28)',
   }
-  if (id === 'open') return {
-    background: 'rgba(52,168,83,0.14)',
-    color: '#1F3A5F',
-    border: '1.5px solid rgba(52,168,83,0.45)',
-    boxShadow: '0 3px 12px rgba(52,168,83,0.18)',
-  }
   if (id === 'fontaine') return {
-    background: 'rgba(58,134,255,0.14)',
+    background: 'rgba(58,134,255,0.16)',
     color: '#1F3A5F',
-    border: '1.5px solid rgba(58,134,255,0.45)',
+    border: '1.5px solid rgba(58,134,255,0.50)',
     boxShadow: '0 3px 12px rgba(58,134,255,0.18)',
   }
   if (id === 'sanisette') return {
-    background: 'rgba(123,97,255,0.14)',
+    background: 'rgba(123,97,255,0.16)',
     color: '#1F3A5F',
-    border: '1.5px solid rgba(123,97,255,0.45)',
+    border: '1.5px solid rgba(123,97,255,0.50)',
     boxShadow: '0 3px 12px rgba(123,97,255,0.18)',
   }
-  // bar, restaurant, cafe, park → navy plein
+  // bar, restaurant, park → navy plein
   return {
     background: '#1F3A5F',
     color: '#ffffff',
@@ -50,7 +43,7 @@ function activeStyle(id: FilterType): React.CSSProperties {
 interface FiltersProps {
   activeFilters: FilterType[]
   onToggle: (filter: FilterType) => void
-  compact?: boolean  // conservé pour compatibilité, ignoré
+  compact?: boolean
 }
 
 export default function Filters({ activeFilters, onToggle }: FiltersProps) {
@@ -59,9 +52,9 @@ export default function Filters({ activeFilters, onToggle }: FiltersProps) {
       role="group"
       aria-label="Filtres rapides"
       className="overflow-x-auto scrollbar-none"
-      style={{ paddingLeft: 14, paddingRight: 14, paddingBottom: 2 }}
+      style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 2 }}
     >
-      <div className="flex items-center min-w-max" style={{ gap: 7 }}>
+      <div className="flex items-center min-w-max" style={{ gap: 6 }}>
         {FILTERS.map(({ id, label, icon }) => {
           const isActive = activeFilters.includes(id)
           const s = isActive ? activeStyle(id) : null
@@ -75,11 +68,11 @@ export default function Filters({ activeFilters, onToggle }: FiltersProps) {
               className="inline-flex items-center whitespace-nowrap select-none transition-all duration-150 active:scale-[0.93]"
               style={{
                 gap: 5,
-                height: 36,
-                paddingLeft: 12,
-                paddingRight: 14,
+                height: 34,
+                paddingLeft: 11,
+                paddingRight: 13,
                 borderRadius: 999,
-                fontSize: 13,
+                fontSize: 12.5,
                 fontWeight: 700,
                 fontFamily: 'var(--font-outfit)',
                 letterSpacing: '-0.01em',
@@ -90,7 +83,7 @@ export default function Filters({ activeFilters, onToggle }: FiltersProps) {
                 boxShadow:  isActive ? s!.boxShadow  : 'none',
               }}
             >
-              <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>{icon}</span>
+              <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>{icon}</span>
               <span>{label}</span>
             </button>
           )

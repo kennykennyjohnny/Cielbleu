@@ -759,49 +759,39 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   }, [sunHour, sunLat, sunLng])
 
   // ── Visibilité couches fontaines / sanisettes / park-highlight ──────────
-  // Fontaines/sanisettes : toujours visibles au zoom ≥ 14.
-  // Filtre actif → setLayerZoomRange(id, 0, 24) = visible à tous les zooms.
-  // Park highlight : anneau vert derrière les pins parc quand filtre parc actif.
+  // Chaque couche n'est visible QUE si son filtre est explicitement activé.
+  // Sans filtre → couche cachée (pas de visibilité par défaut au zoom 14).
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
     const apply = () => {
-      // Quand un seul type est sélectionné, masquer complètement l'autre.
-      // Quand les deux sont actifs (ou aucun), les deux suivent leur minzoom habituel.
-      const fontaineSolo = showFontaines && !showSanisettes
-      const sanisetteSolo = showSanisettes && !showFontaines
-
-      // fontaines — visibilité + plage de zoom
+      // Fontaines — visible seulement si showFontaines actif
       if (map.getLayer('fontaines-layer')) {
         try {
-          const vis = sanisetteSolo ? 'none' : 'visible'
-          map.setLayoutProperty('fontaines-layer', 'visibility', vis)
-          if (vis === 'visible') map.setLayerZoomRange('fontaines-layer', showFontaines ? 0 : 14, 24)
+          map.setLayoutProperty('fontaines-layer', 'visibility', showFontaines ? 'visible' : 'none')
+          if (showFontaines) map.setLayerZoomRange('fontaines-layer', 0, 24)
         } catch { /* noop */ }
       }
       if (map.getLayer('fontaines-label')) {
         try {
-          const vis = sanisetteSolo ? 'none' : 'visible'
-          map.setLayoutProperty('fontaines-label', 'visibility', vis)
-          if (vis === 'visible') map.setLayerZoomRange('fontaines-label', showFontaines ? 0 : 15, 24)
+          map.setLayoutProperty('fontaines-label', 'visibility', showFontaines ? 'visible' : 'none')
+          if (showFontaines) map.setLayerZoomRange('fontaines-label', 0, 24)
         } catch { /* noop */ }
       }
-      // sanisettes — visibilité + plage de zoom
+      // Sanisettes — visible seulement si showSanisettes actif
       if (map.getLayer('sanisettes-layer')) {
         try {
-          const vis = fontaineSolo ? 'none' : 'visible'
-          map.setLayoutProperty('sanisettes-layer', 'visibility', vis)
-          if (vis === 'visible') map.setLayerZoomRange('sanisettes-layer', showSanisettes ? 0 : 14, 24)
+          map.setLayoutProperty('sanisettes-layer', 'visibility', showSanisettes ? 'visible' : 'none')
+          if (showSanisettes) map.setLayerZoomRange('sanisettes-layer', 0, 24)
         } catch { /* noop */ }
       }
       if (map.getLayer('sanisettes-label')) {
         try {
-          const vis = fontaineSolo ? 'none' : 'visible'
-          map.setLayoutProperty('sanisettes-label', 'visibility', vis)
-          if (vis === 'visible') map.setLayerZoomRange('sanisettes-label', showSanisettes ? 0 : 15, 24)
+          map.setLayoutProperty('sanisettes-label', 'visibility', showSanisettes ? 'visible' : 'none')
+          if (showSanisettes) map.setLayerZoomRange('sanisettes-label', 0, 24)
         } catch { /* noop */ }
       }
-      // parc
+      // Parc
       if (map.getLayer('park-highlight'))
         try { map.setLayoutProperty('park-highlight', 'visibility', showPark ? 'visible' : 'none') } catch { /* noop */ }
     }

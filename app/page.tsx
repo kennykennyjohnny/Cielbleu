@@ -302,7 +302,7 @@ export default function HomePage() {
         />
       </div>
 
-      {/* ══════════════ HEADER — météo gauche · logo centré · profil droit ══════════════ */}
+      {/* ══════ HEADER : météo gauche · logo centré · slider+profil droite ══════ */}
       <header
         className="absolute top-0 inset-x-0 z-20"
         style={{
@@ -318,86 +318,133 @@ export default function HomePage() {
             position: 'relative',
             display: 'flex',
             alignItems: 'center',
-            paddingLeft: 14,
-            paddingRight: 14,
-            paddingTop: 'max(env(safe-area-inset-top, 0px), 10px)',
-            paddingBottom: 10,
-            minHeight: 'calc(max(env(safe-area-inset-top, 0px), 10px) + 50px)',
+            gap: 8,
+            paddingLeft: 12,
+            paddingRight: 12,
+            paddingTop: 'max(env(safe-area-inset-top, 0px), 8px)',
+            paddingBottom: 8,
+            minHeight: 'calc(max(env(safe-area-inset-top, 0px), 8px) + 50px)',
           }}
         >
           {/* ── GAUCHE : météo détaillée ── */}
-          <div style={{ flex: '0 0 auto', zIndex: 1 }}>
+          <div style={{ flex: '0 0 auto', zIndex: 1, minWidth: 72 }}>
             {weatherForHour ? (
               <a
                 href="https://meteofrance.com/previsions-meteo-france/paris/75000"
                 target="_blank" rel="noopener noreferrer"
                 aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
-                className="inline-flex items-center gap-2"
+                className="inline-flex items-center gap-1.5"
                 style={{ textDecoration: 'none' }}
               >
-                <span aria-hidden="true" style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>
+                <span aria-hidden="true" style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>
                   {owmIconToEmoji(weatherForHour.icon)}
                 </span>
                 <span style={{ fontFamily: 'var(--font-outfit)' }}>
-                  <span style={{ display: 'block', fontSize: 18, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>
+                  <span style={{ display: 'block', fontSize: 16, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>
                     {weatherForHour.temp}°
                   </span>
                   <span style={{
-                    display: 'block', fontSize: 10, fontWeight: 600,
-                    color: 'rgba(31,58,95,0.48)', lineHeight: 1.3, marginTop: 1,
-                    maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    display: 'block', fontSize: 9.5, fontWeight: 600,
+                    color: 'rgba(31,58,95,0.45)', lineHeight: 1.3, marginTop: 1,
+                    maxWidth: 82, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
                     {weatherForHour.description}
                   </span>
                 </span>
               </a>
-            ) : (
-              <div style={{ width: 80 }} />
-            )}
+            ) : <div style={{ width: 72 }} />}
           </div>
 
-          {/* ── CENTRE : logo (positionné absolument) ── */}
+          {/* ── CENTRE : logo PNG fond transparent (mix-blend-mode) ── */}
           <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 1 }}>
             <button
               aria-label="HopSoleil — Retour à l'accueil"
               onClick={() => { handleClose(); setHomeViewCount(c => c + 1) }}
-              className="active:scale-[0.96] transition-transform"
+              className="active:scale-[0.95] transition-transform"
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'block' }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-full.jpg" alt="HopSoleil" style={{ height: 34, width: 'auto', display: 'block' }} />
+              <img
+                src="/logo-hopsoleil.png"
+                alt="HopSoleil"
+                style={{ height: 36, width: 'auto', display: 'block', mixBlendMode: 'multiply' }}
+              />
             </button>
           </div>
 
-          {/* ── DROITE : profil uniquement ── */}
-          <div style={{ flex: '0 0 auto', marginLeft: 'auto', zIndex: 1 }}>
+          {/* ── DROITE : slider heure + bouton profil ── */}
+          <div style={{ flex: '0 0 auto', marginLeft: 'auto', zIndex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+
+            {/* Slider pill compact */}
+            <div
+              className="inline-flex items-center gap-1.5 cb-hour-pill"
+              style={{
+                background: 'rgba(31,58,95,0.07)',
+                border: '1px solid rgba(31,58,95,0.12)',
+                borderRadius: 999,
+                padding: '5px 8px 5px 10px',
+                maxWidth: 'clamp(150px, 38vw, 240px)',
+              }}
+            >
+              <input
+                type="range" min={6} max={23.5} step={0.5}
+                value={hour}
+                onChange={(e) => setHour(parseFloat(e.target.value))}
+                className="cb-hour-slider cb-hour-slider-thin"
+                style={{ height: 20 }}
+                aria-label="Heure du soleil"
+              />
+              <span className="font-outfit shrink-0" style={{ fontSize: 11, fontWeight: 800, color: '#1F3A5F', minWidth: 30 }}>
+                {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
+              </span>
+              <button
+                onClick={() => setHour(nowHalfHour())}
+                aria-label="Maintenant"
+                className="shrink-0 inline-flex items-center gap-0.5 rounded-full font-bold transition-all duration-150 active:scale-[0.94]"
+                style={{
+                  fontSize: 10, paddingLeft: 6, paddingRight: 7, paddingTop: 3, paddingBottom: 3,
+                  background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.08)',
+                  color: '#1F3A5F',
+                  border: `1px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
+                  boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.35)' : 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Clock size={9} strokeWidth={2.5} />
+                <span className="hidden sm:inline" style={{ marginLeft: 2 }}>Maintenant</span>
+              </button>
+              {!loading && sunnyCount > 0 && (
+                <>
+                  <span style={{ width: 1, height: 12, background: 'rgba(31,58,95,0.15)', flexShrink: 0 }} />
+                  <span className="font-bold shrink-0" style={{ fontSize: 11, color: '#EDC145' }}>
+                    ☀{sunnyCount}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Bouton profil */}
             <button
               onClick={() => { setShowProfile(p => !p); setSelectedPlace(null); setSelectedAmenite(null) }}
               aria-label={userId ? 'Mon profil' : 'Se connecter'}
-              className="inline-flex items-center gap-1.5 rounded-full transition-all duration-150 active:scale-[0.94]"
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-full transition-all duration-150 active:scale-[0.94]"
               style={{
-                height: 38,
-                paddingLeft: userId ? 8 : 10,
-                paddingRight: 12,
+                height: 36, paddingLeft: userId ? 6 : 10, paddingRight: 10,
                 background: userId ? 'rgba(237,193,69,0.15)' : 'rgba(31,58,95,0.07)',
                 border: `1.5px solid ${userId ? 'rgba(237,193,69,0.45)' : 'rgba(31,58,95,0.10)'}`,
-                cursor: 'pointer',
-                fontFamily: 'var(--font-outfit)',
-                fontSize: 12,
-                fontWeight: 700,
-                color: '#1F3A5F',
+                cursor: 'pointer', fontFamily: 'var(--font-outfit)', fontSize: 12, fontWeight: 700, color: '#1F3A5F',
               }}
             >
-              <span
-                style={{
-                  width: 26, height: 26, borderRadius: '50%',
-                  background: userId ? '#EDC145' : 'rgba(31,58,95,0.10)',
+              {userId && (
+                <span style={{
+                  width: 24, height: 24, borderRadius: '50%', background: '#EDC145',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}
-              >
-                <UserCircle size={15} strokeWidth={2} style={{ color: userId ? '#1F3A5F' : 'rgba(31,58,95,0.45)' }} />
-              </span>
+                }}>
+                  <UserCircle size={14} strokeWidth={2} style={{ color: '#1F3A5F' }} />
+                </span>
+              )}
               <span className="hidden sm:block">{userId ? 'Profil' : 'Connexion'}</span>
+              {!userId && <UserCircle size={15} strokeWidth={2} style={{ color: 'rgba(31,58,95,0.45)' }} />}
             </button>
           </div>
         </div>
@@ -433,26 +480,31 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ══════════════ BOTTOM BAR : slider horaire · search · filtres ══════════════ */}
+      {/* ══════════════ BOTTOM BAR — floating pill centré ══════════════ */}
       {!selectedPlace && !selectedAmenite && (
-        <div className="absolute bottom-0 inset-x-0 z-20">
+        <div
+          className="absolute bottom-0 inset-x-0 z-20 flex justify-center"
+          style={{ padding: '0 12px', paddingBottom: 'max(env(safe-area-inset-bottom,0px), 10px)' }}
+        >
           <div
             style={{
+              width: '100%',
+              maxWidth: 480,
               background: 'rgba(255,248,234,0.97)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',
-              borderTop: '1px solid rgba(31,58,95,0.08)',
-              borderRadius: '22px 22px 0 0',
-              boxShadow: '0 -8px 36px rgba(31,58,95,0.11)',
-              paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)',
+              border: '1.5px solid rgba(31,58,95,0.10)',
+              borderRadius: 20,
+              boxShadow: '0 8px 32px rgba(31,58,95,0.13), 0 2px 8px rgba(31,58,95,0.06)',
+              overflow: 'hidden',
             }}
           >
-            {/* ── Suggestions ── */}
+            {/* Suggestions */}
             {searchQuery.trim() && suggestions.length > 0 && (
               <ul
                 role="listbox" aria-label="Lieux suggérés"
                 className="overflow-y-auto"
-                style={{ maxHeight: 210, borderBottom: '1px solid rgba(31,58,95,0.07)', background: 'rgba(255,248,234,0.98)' }}
+                style={{ maxHeight: 200, borderBottom: '1px solid rgba(31,58,95,0.07)' }}
               >
                 {suggestions.map((p) => {
                   const cp = p.address.match(/\b75(\d{3})\b/)
@@ -462,19 +514,16 @@ export default function HomePage() {
                     <li key={p.id} role="option">
                       <button
                         onClick={() => handlePlaceSelect(p)}
-                        className="w-full flex items-center gap-3 px-5 py-3 text-left transition"
-                        style={{ background: 'transparent' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(31,58,95,0.05)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[rgba(31,58,95,0.05)] transition"
                       >
-                        <span aria-hidden="true" className="text-[16px] shrink-0">{icon}</span>
+                        <span aria-hidden="true" className="text-[15px] shrink-0">{icon}</span>
                         <span className="flex-1 min-w-0">
-                          <span className="block font-bold text-[13.5px] truncate" style={{ color: '#1F3A5F' }}>{p.name}</span>
-                          <span className="block font-outfit text-[11px] truncate" style={{ color: 'rgba(31,58,95,0.50)' }}>
+                          <span className="block font-bold text-[13px] text-text-primary truncate">{p.name}</span>
+                          <span className="block font-outfit text-[11px] text-text-soft truncate">
                             {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
                           </span>
                         </span>
-                        {(p.currentScore ?? 0) >= 4 && <span aria-label="Au soleil" className="text-[13px] shrink-0">☀️</span>}
+                        {(p.currentScore ?? 0) >= 4 && <span aria-label="Au soleil" className="text-[12px] shrink-0">☀️</span>}
                       </button>
                     </li>
                   )
@@ -482,144 +531,47 @@ export default function HomePage() {
               </ul>
             )}
 
-            {/* ══ SLIDER HORAIRE — large, esthétique ══ */}
-            <div style={{ padding: '16px 16px 10px' }}>
-
-              {/* Ligne heure + compteur + bouton Maintenant */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                  <span style={{
-                    fontFamily: 'var(--font-bricolage)', fontVariationSettings: "'wdth' 75",
-                    fontSize: 24, fontWeight: 900, color: '#1F3A5F', letterSpacing: '-0.03em', lineHeight: 1,
-                  }}>
-                    {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
-                  </span>
-                  {!loading && sunnyCount > 0 && (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#EDC145', fontFamily: 'var(--font-outfit)' }}>
-                      · ☀ {sunnyCount} au soleil
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => setHour(nowHalfHour())}
-                  aria-label="Revenir à maintenant"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    height: 30, paddingLeft: 10, paddingRight: 12,
-                    borderRadius: 999,
-                    fontFamily: 'var(--font-outfit)', fontSize: 11.5, fontWeight: 800,
-                    background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.08)',
-                    color: '#1F3A5F',
-                    border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
-                    boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 3px 10px rgba(237,193,69,0.35)' : 'none',
-                    transition: 'all 0.15s ease',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <Clock size={11} strokeWidth={2.4} />
-                  Maintenant
-                </button>
-              </div>
-
-              {/* Track + range input */}
-              <div style={{ position: 'relative', height: 44, display: 'flex', alignItems: 'center' }}>
-                {/* Gradient track décoratif */}
-                <div
-                  aria-hidden="true"
-                  style={{
-                    position: 'absolute', left: 0, right: 0,
-                    top: '50%', transform: 'translateY(-50%)',
-                    height: 10, borderRadius: 9999, pointerEvents: 'none',
-                    background: 'linear-gradient(to right, #3d5a99 0%, #6f9bcd 14%, #ffd76a 38%, #ffb703 52%, #f77f00 72%, #e05252 86%, #1F3A5F 100%)',
-                    boxShadow: '0 2px 8px rgba(31,58,95,0.18)',
-                  }}
-                />
-                {/* Input range (thumb soleil, track transparent) */}
-                <input
-                  type="range" min={6} max={23.5} step={0.5}
-                  value={hour}
-                  onChange={(e) => setHour(parseFloat(e.target.value))}
-                  className="cb-hour-slider"
-                  style={{ width: '100%', position: 'relative', zIndex: 1, height: 44 }}
-                  aria-label="Heure du soleil"
-                />
-              </div>
-
-              {/* Quick jumps */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, padding: '0 2px' }}>
-                {[8, 12, 17, 21].map(h => {
-                  const active = Math.floor(hour) === h
-                  return (
-                    <button
-                      key={h}
-                      onClick={() => setHour(h)}
-                      style={{
-                        fontFamily: 'var(--font-outfit)', fontSize: 11, fontWeight: active ? 800 : 600,
-                        color: active ? '#1F3A5F' : 'rgba(31,58,95,0.40)',
-                        background: active ? 'rgba(237,193,69,0.20)' : 'transparent',
-                        border: active ? '1px solid rgba(237,193,69,0.50)' : '1px solid transparent',
-                        borderRadius: 999, padding: '3px 8px', cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      {h}h
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Séparateur */}
-            <div style={{ height: 1, background: 'rgba(31,58,95,0.07)', margin: '0 16px' }} />
-
-            {/* ── Recherche (centrée sur desktop) ── */}
-            <div
-              style={{
-                padding: '12px 14px 8px',
-                maxWidth: 560,
-                margin: '0 auto',
-                width: '100%',
-              }}
-            >
+            {/* ── Recherche ── */}
+            <div className="px-3 pt-3 pb-2">
               <div
-                className="flex items-center gap-3"
+                className="flex items-center gap-2.5"
                 style={{
                   background: 'rgba(31,58,95,0.07)',
-                  border: '1.5px solid rgba(31,58,95,0.10)',
-                  borderRadius: 14,
-                  padding: '0 14px',
-                  height: 48,
+                  border: '1px solid rgba(31,58,95,0.10)',
+                  borderRadius: 13,
+                  padding: '0 12px',
+                  height: 46,
                 }}
               >
-                <Search size={17} strokeWidth={2.3} style={{ color: 'rgba(31,58,95,0.35)', flexShrink: 0 }} />
+                <Search size={16} strokeWidth={2.3} style={{ color: 'rgba(31,58,95,0.35)', flexShrink: 0 }} />
                 <input
                   id="search-places" type="text"
-                  placeholder="Bar, café, terrasse, 11e…"
+                  placeholder="Bar, restaurant, 11e…"
                   aria-label="Rechercher un lieu"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Escape') { setSearchQuery(''); e.currentTarget.blur() } }}
                   className="flex-1 min-w-0 bg-transparent outline-none font-semibold placeholder:text-text-soft/55"
-                  style={{ fontSize: 14.5, fontFamily: 'var(--font-outfit)', color: '#1F3A5F' }}
+                  style={{ fontSize: 14, fontFamily: 'var(--font-outfit)', color: '#1F3A5F' }}
                 />
                 {searchQuery ? (
                   <button
                     onClick={() => setSearchQuery('')} aria-label="Effacer"
                     className="shrink-0 inline-flex items-center justify-center rounded-full"
-                    style={{ width: 24, height: 24, background: 'rgba(31,58,95,0.10)', color: '#1F3A5F' }}
+                    style={{ width: 22, height: 22, background: 'rgba(31,58,95,0.10)', color: '#1F3A5F' }}
                   >
-                    <X size={12} strokeWidth={2.5} />
+                    <X size={11} strokeWidth={2.5} />
                   </button>
                 ) : !loading && displayedPlaces.length > 0 ? (
-                  <span className="shrink-0 font-outfit font-semibold" style={{ fontSize: 11.5, color: 'rgba(31,58,95,0.30)', whiteSpace: 'nowrap' }}>
-                    {displayedPlaces.length} lieux
+                  <span className="shrink-0 font-outfit font-semibold" style={{ fontSize: 11, color: 'rgba(31,58,95,0.28)', whiteSpace: 'nowrap' }}>
+                    {displayedPlaces.length}
                   </span>
                 ) : null}
               </div>
             </div>
 
             {/* ── Filtres ── */}
-            <div style={{ paddingBottom: 2 }}>
+            <div style={{ paddingBottom: 10 }}>
               <Filters activeFilters={activeFilters} onToggle={toggleFilter} />
             </div>
           </div>
