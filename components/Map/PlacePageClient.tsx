@@ -133,6 +133,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
   const [commentText, setCommentText] = useState('')
   const [commentSending, setCommentSending] = useState(false)
   const [commentSent, setCommentSent] = useState(false)
+  const [commentError, setCommentError] = useState<string | null>(null)
   const [reviews, setReviews]       = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null }[]>([])
 
   // ── Favorites state ─────────────────────────────────────────────────────────
@@ -232,46 +233,77 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     setVoteToast(true); setTimeout(() => setVoteToast(false), 2000)
   }, [place.id, userId, deviceId, hour])
 
+  // ── Fetch reviews ────────────────────────────────────────────────────────────
+  const loadReviews = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('reviews')
+      .select('id, comment, created_at, user_id')
+      .eq('place_id', place.id)
+      .not('comment', 'is', null)
+      .neq('comment', '')
+      .order('created_at', { ascending: false })
+      .limit(10)
+    if (error || !data) return
+
+    // Batch-fetch display_names (profiles lisibles par tous)
+    const userIds = [...new Set(data.filter(r => r.user_id).map(r => r.user_id as string))]
+    const profileMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, display_name')
+        .in('id', userIds)
+      for (const p of profiles ?? []) {
+        profileMap[p.id] = p.display_name ?? 'Soleiliste'
+      }
+    }
+
+    setReviews(data.map(r => ({
+      id: r.id,
+      comment: r.comment,
+      created_at: r.created_at,
+      display_name: r.user_id ? (profileMap[r.user_id] ?? 'Soleiliste') : 'Anonyme',
+    })))
+  }, [place.id])
+
+  useEffect(() => { loadReviews() }, [loadReviews])
+
   const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     if (!userId || !commentText.trim()) return
     setCommentSending(true)
-    await supabase.from('reviews').insert({
+    setCommentError(null)
+
+    let { error } = await supabase.from('reviews').insert({
       place_id: place.id,
       user_id:  userId,
       device_id: deviceId,
-      rating: 4, // vote neutre par défaut — l'ensoleillement est le vrai critère
+      rating: 4,
       comment: commentText.trim(),
       is_anonymous: false,
     })
+
+    // Fallback : colonnes de base seulement (si migration_v2 pas encore appliquée)
+    if (error) {
+      const { error: err2 } = await supabase.from('reviews').insert({
+        place_id: place.id,
+        device_id: deviceId,
+        rating: 4,
+        comment: commentText.trim(),
+      })
+      error = err2 ?? null
+    }
+
     setCommentSending(false)
+    if (error) {
+      setCommentError('Erreur lors de la publication. Réessaie dans un instant.')
+      return
+    }
     setCommentSent(true)
     setCommentText('')
     setTimeout(() => setCommentSent(false), 3000)
-    // Recharge les avis
     loadReviews()
-  }, [userId, commentText, place.id, deviceId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Fetch reviews ────────────────────────────────────────────────────────────
-  const loadReviews = useCallback(async () => {
-    const { data } = await supabase
-      .from('reviews')
-      .select('id, comment, created_at, profile:profiles(display_name)')
-      .eq('place_id', place.id)
-      .not('comment', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(10)
-    if (data) {
-      setReviews(data.map((r: { id: string; comment: string | null; created_at: string; profile?: { display_name?: string | null } | null | { display_name?: string | null }[] }) => ({
-        id: r.id,
-        comment: r.comment,
-        created_at: r.created_at,
-        display_name: Array.isArray(r.profile) ? r.profile[0]?.display_name : (r.profile as { display_name?: string | null } | null)?.display_name,
-      })))
-    }
-  }, [place.id])
-
-  useEffect(() => { loadReviews() }, [loadReviews])
+  }, [userId, commentText, place.id, deviceId, loadReviews])
 
   // ── Favorites ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -686,6 +718,11 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                   >
                     {commentSending ? '…' : 'Publier mon avis'}
                   </button>
+                  {commentError && (
+                    <p style={{ margin: 0, fontSize: 12, color: '#E05252', fontWeight: 700, background: 'rgba(224,82,82,0.08)', padding: '7px 11px', borderRadius: 10 }}>
+                      {commentError}
+                    </p>
+                  )}
                 </form>
               )
           )

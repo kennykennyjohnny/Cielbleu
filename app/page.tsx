@@ -35,10 +35,20 @@ const TODAY_LABEL = (() => {
   return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(d)
 })()
 
+// "ven. 22 mai" — mobile compact
 const HEADER_DATE = (() => {
   const d = new Date()
-  // "ven. 22 mai" — compact pour le header
   return new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(d)
+})()
+
+// "vendredi" + "22 mai" — desktop 2 lignes
+const WEEKDAY_LABEL = (() => {
+  const d = new Date()
+  return new Intl.DateTimeFormat('fr-FR', { weekday: 'long' }).format(d)
+})()
+const DAY_MONTH_LABEL = (() => {
+  const d = new Date()
+  return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(d)
 })()
 
 export default function HomePage() {
@@ -336,48 +346,89 @@ export default function HomePage() {
           }}
         >
           {/* ── GAUCHE : date + météo ── */}
-          <div style={{ flex: '0 0 auto', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span
-              title={TODAY_LABEL}
-              style={{
-                fontFamily: 'var(--font-bricolage)',
-                fontSize: 9.5,
-                fontWeight: 800,
-                color: 'rgba(31,58,95,0.38)',
-                letterSpacing: '0.02em',
-                textTransform: 'capitalize',
-                whiteSpace: 'nowrap',
-                lineHeight: 1,
-              }}
-            >
-              {HEADER_DATE}
-            </span>
-            {weatherForHour ? (
-              <a
-                href="https://meteofrance.com/previsions-meteo-france/paris/75000"
-                target="_blank" rel="noopener noreferrer"
-                aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
-                className="inline-flex items-center gap-1.5"
-                style={{ textDecoration: 'none' }}
-              >
-                <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>
-                  {owmIconToEmoji(weatherForHour.icon)}
+          {isDesktop ? (
+            /* Desktop : date 2 lignes à G, séparateur, météo à D */
+            <div style={{ flex: '0 0 auto', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                <span title={TODAY_LABEL} style={{
+                  fontFamily: 'var(--font-bricolage)', fontSize: 11, fontWeight: 700,
+                  color: 'rgba(31,58,95,0.42)', textTransform: 'capitalize',
+                  letterSpacing: '0.01em', lineHeight: 1.2, whiteSpace: 'nowrap',
+                }}>
+                  {WEEKDAY_LABEL}
                 </span>
-                <span style={{ fontFamily: 'var(--font-outfit)' }}>
-                  <span style={{ display: 'block', fontSize: 15, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>
-                    {weatherForHour.temp}°
-                  </span>
-                  <span style={{
-                    display: 'block', fontSize: 9, fontWeight: 600,
-                    color: 'rgba(31,58,95,0.45)', lineHeight: 1.2, marginTop: 1,
-                    maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {weatherForHour.description}
-                  </span>
+                <span style={{
+                  fontFamily: 'var(--font-bricolage)', fontSize: 24, fontWeight: 900,
+                  color: '#1F3A5F', lineHeight: 0.9, letterSpacing: '-0.04em', whiteSpace: 'nowrap',
+                  textTransform: 'capitalize',
+                }}>
+                  {DAY_MONTH_LABEL}
                 </span>
-              </a>
-            ) : null}
-          </div>
+              </div>
+              <span style={{ width: 1, height: 34, background: 'rgba(31,58,95,0.10)', flexShrink: 0 }} />
+              {weatherForHour ? (
+                <a
+                  href="https://meteofrance.com/previsions-meteo-france/paris/75000"
+                  target="_blank" rel="noopener noreferrer"
+                  aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
+                  className="inline-flex items-center gap-2"
+                  style={{ textDecoration: 'none' }}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>
+                    {owmIconToEmoji(weatherForHour.icon)}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-outfit)' }}>
+                    <span style={{ display: 'block', fontSize: 17, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>
+                      {weatherForHour.temp}°
+                    </span>
+                    <span style={{
+                      display: 'block', fontSize: 10, fontWeight: 600,
+                      color: 'rgba(31,58,95,0.45)', lineHeight: 1.2, marginTop: 2,
+                      maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {weatherForHour.description}
+                    </span>
+                  </span>
+                </a>
+              ) : null}
+            </div>
+          ) : (
+            /* Mobile : compact empilé */
+            <div style={{ flex: '0 0 auto', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span title={TODAY_LABEL} style={{
+                fontFamily: 'var(--font-bricolage)', fontSize: 9.5, fontWeight: 800,
+                color: 'rgba(31,58,95,0.38)', letterSpacing: '0.02em',
+                textTransform: 'capitalize', whiteSpace: 'nowrap', lineHeight: 1,
+              }}>
+                {HEADER_DATE}
+              </span>
+              {weatherForHour ? (
+                <a
+                  href="https://meteofrance.com/previsions-meteo-france/paris/75000"
+                  target="_blank" rel="noopener noreferrer"
+                  aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
+                  className="inline-flex items-center gap-1.5"
+                  style={{ textDecoration: 'none' }}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>
+                    {owmIconToEmoji(weatherForHour.icon)}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-outfit)' }}>
+                    <span style={{ display: 'block', fontSize: 15, fontWeight: 900, color: '#1F3A5F', lineHeight: 1 }}>
+                      {weatherForHour.temp}°
+                    </span>
+                    <span style={{
+                      display: 'block', fontSize: 9, fontWeight: 600,
+                      color: 'rgba(31,58,95,0.45)', lineHeight: 1.2, marginTop: 1,
+                      maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {weatherForHour.description}
+                    </span>
+                  </span>
+                </a>
+              ) : null}
+            </div>
+          )}
 
           {/* ── CENTRE : logo ── */}
           <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 1 }}>
@@ -471,62 +522,59 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ── ROW 2 (mobile only) : slider full-width ── */}
-        {!isDesktop && (
-          <div style={{ padding: '0 14px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {/* Label gauche */}
+      </header>
+
+      {/* ── Slider mobile — bulle flottante détachée du header ── */}
+      {!isDesktop && (
+        <div
+          className="absolute inset-x-0 z-[18]"
+          style={{ top: 'calc(max(env(safe-area-inset-top, 0px), 8px) + 62px)', padding: '0 12px' }}
+        >
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,252,243,0.98)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1.5px solid rgba(237,193,69,0.42)',
+            borderRadius: 999,
+            padding: '7px 14px',
+            boxShadow: '0 6px 22px rgba(31,58,95,0.13), 0 2px 8px rgba(237,193,69,0.15)',
+          }}>
             <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 10, fontWeight: 800,
               color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>
               ☀ 6h
             </span>
-
-            {/* Slider track zone */}
-            <div style={{
-              flex: 1, minWidth: 0,
-              background: 'linear-gradient(90deg, rgba(237,193,69,0.12) 0%, rgba(31,58,95,0.06) 100%)',
-              border: '1.5px solid rgba(237,193,69,0.28)',
-              borderRadius: 999,
-              padding: '3px 10px',
-              boxShadow: '0 2px 10px rgba(237,193,69,0.10)',
-            }}>
-              <input
-                type="range" min={6} max={23.5} step={0.5}
-                value={hour}
-                onChange={(e) => setHour(parseFloat(e.target.value))}
-                className="cb-hour-slider w-full"
-                aria-label="Heure du soleil"
-              />
-            </div>
-
-            {/* Label droit */}
+            <input
+              type="range" min={6} max={23.5} step={0.5}
+              value={hour}
+              onChange={(e) => setHour(parseFloat(e.target.value))}
+              className="cb-hour-slider"
+              style={{ flex: 1, minWidth: 0 }}
+              aria-label="Heure du soleil"
+            />
             <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 10, fontWeight: 800,
               color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>
               🌙 23h
             </span>
-
-            {/* Heure courante + bouton maintenant */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-              <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 900,
-                color: '#1F3A5F', lineHeight: 1, minWidth: 34, textAlign: 'right' }}>
-                {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : '00'}
-              </span>
-              <button
-                onClick={() => setHour(nowHalfHour())}
-                aria-label="Heure actuelle"
-                className="inline-flex items-center justify-center rounded-full transition-all active:scale-[0.88]"
-                style={{
-                  width: 26, height: 26, flexShrink: 0,
-                  background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.08)',
-                  border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
-                  boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 10px rgba(237,193,69,0.40)' : 'none',
-                  color: '#1F3A5F',
-                }}
-              >
-                <Clock size={12} strokeWidth={2.5} />
-              </button>
-            </div>
-
-            {/* Compteur soleil */}
+            <span style={{ width: 1, height: 14, background: 'rgba(31,58,95,0.12)', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 900,
+              color: '#1F3A5F', lineHeight: 1, minWidth: 32, textAlign: 'right', flexShrink: 0 }}>
+              {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : '00'}
+            </span>
+            <button
+              onClick={() => setHour(nowHalfHour())}
+              aria-label="Heure actuelle"
+              className="inline-flex items-center justify-center rounded-full transition-all active:scale-[0.88]"
+              style={{
+                width: 26, height: 26, flexShrink: 0,
+                background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.08)',
+                border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
+                boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 3px 10px rgba(237,193,69,0.45)' : 'none',
+                color: '#1F3A5F',
+              }}
+            >
+              <Clock size={12} strokeWidth={2.5} />
+            </button>
             {!loading && sunnyCount > 0 && (
               <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 11, fontWeight: 800,
                 color: '#b87c00', flexShrink: 0, lineHeight: 1 }}>
@@ -534,8 +582,8 @@ export default function HomePage() {
               </span>
             )}
           </div>
-        )}
-      </header>
+        </div>
+      )}
 
       {/* État vide */}
       {!loading && displayedPlaces.length === 0 && !activeFilters.some(f => f === 'fontaine' || f === 'sanisette') && (
@@ -556,7 +604,7 @@ export default function HomePage() {
       {/* Message guidé quand filtre eau/WC actif sans autre filtre */}
       {!loading && activeFilters.some(f => f === 'fontaine' || f === 'sanisette') && displayedPlaces.length === 0 && (
         <div className="absolute inset-x-0 z-10 pointer-events-none flex justify-center px-6"
-          style={{ top: isDesktop ? 'calc(max(env(safe-area-inset-top,0px),10px) + 68px)' : 'calc(max(env(safe-area-inset-top,0px),10px) + 112px)' }}>
+          style={{ top: isDesktop ? 'calc(max(env(safe-area-inset-top,0px),10px) + 68px)' : 'calc(max(env(safe-area-inset-top,0px),10px) + 120px)' }}>
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-outfit text-xs font-bold"
             style={{ background: 'rgba(255,248,234,0.97)', border: '1.5px solid rgba(31,58,95,0.12)',
               boxShadow: '0 4px 16px rgba(31,58,95,0.08)', color: '#1F3A5F' }}>
