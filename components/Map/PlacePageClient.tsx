@@ -463,10 +463,13 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
             <span style={{ ...MINI_BADGE, background:'rgba(79,143,101,0.10)', color:'#3d8554' }}>
               {place.type === 'park' ? '🌳 Parc' : '● Terrasse'}
             </span>
-            <span style={{ ...MINI_BADGE }}>
-              {TYPE_LABEL[place.type] ?? place.type}
-              {place.arrondissement != null ? ` · ${place.arrondissement}${ordinal}` : ''}
-            </span>
+            {(place.type !== 'park' || place.arrondissement != null) && (
+              <span style={{ ...MINI_BADGE }}>
+                {place.type !== 'park' && (TYPE_LABEL[place.type] ?? place.type)}
+                {place.type !== 'park' && place.arrondissement != null && ' \u00B7 '}
+                {place.arrondissement != null && `${place.arrondissement}${ordinal}`}
+              </span>
+            )}
           </div>
 
           {/* Title (Fraunces) */}

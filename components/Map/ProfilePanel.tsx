@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ArrowLeft, LogOut, Heart, MessageSquare, Users, MapPin, Share2, Camera } from 'lucide-react'
+import { ArrowLeft, LogOut, Heart, MessageSquare, Users, MapPin, Share2, Camera, Settings } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -140,6 +140,11 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const [needsUsername, setNeedsUsername] = useState(false)
   const [newUsername, setNewUsername]     = useState('')
 
+  // ── Paramètres profil ──────────────────────────────────────────────
+  const [showSettings, setShowSettings]     = useState(false)
+  const [editDisplayName, setEditDisplayName] = useState('')
+  const [editUsername, setEditUsername]     = useState('')
+
   // ── Avatar upload ──────────────────────────────────────────────────
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -207,17 +212,31 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   }, [])
 
   const fetchFriends = useCallback(async (userId: string) => {
-    const { data } = await supabase
+    // friendships.requester_id references auth.users (not profiles),
+    // so we can't auto-join to profiles. Fetch in two steps.
+    const { data: rows } = await supabase
       .from('friendships')
-      .select(`
-        id, requester_id, addressee_id, status,
-        requester:profiles!friendships_requester_id_fkey(display_name, username),
-        addressee:profiles!friendships_addressee_id_fkey(display_name, username)
-      `)
+      .select('id, requester_id, addressee_id, status, created_at')
       .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
       .in('status', ['pending', 'accepted'])
-      .limit(30)
-    if (data) setFriends(data as unknown as FriendRequest[])
+      .limit(50)
+    if (!rows?.length) { setFriends([]); return }
+
+    const otherIds = [...new Set(
+      rows.flatMap(r => [r.requester_id, r.addressee_id])
+    )]
+    const { data: profileRows } = await supabase
+      .from('profiles')
+      .select('id, display_name, username')
+      .in('id', otherIds)
+    const pm: Record<string, { display_name: string | null; username: string | null }> =
+      Object.fromEntries((profileRows ?? []).map(p => [p.id, p]))
+
+    setFriends(rows.map(r => ({
+      ...r,
+      requester: pm[r.requester_id] ?? null,
+      addressee: pm[r.addressee_id] ?? null,
+    })) as unknown as FriendRequest[])
   }, [])
 
   useEffect(() => {
@@ -307,6 +326,20 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
       options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : '' },
     })
     if (error) { setError(error.message); setLoading(false) }
+  }
+
+  async function handleSaveSettings(e: React.FormEvent) {
+    e.preventDefault()
+    if (!user) return
+    setLoading(true); setError(null)
+    const username = editUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    const display_name = editDisplayName.trim()
+    const { error } = await supabase.from('profiles')
+      .update({ username: username || null, display_name: display_name || null })
+      .eq('id', user.id)
+    setLoading(false)
+    if (error) setError(error.code === '23505' ? 'Ce pseudo est déjà pris.' : error.message)
+    else { setProfile(p => p ? { ...p, username: username || null, display_name: display_name || null } : p); setShowSettings(false) }
   }
 
   async function handleSaveUsername(e: React.FormEvent) {
@@ -545,6 +578,65 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
 
   // ── LOGGED-IN PANEL ──────────────────────────────────────────────
 
+  // ── Paramètres ────────────────────────────────────────────────────
+  if (showSettings) return (
+    <div style={{ background: 'transparent', fontFamily: 'var(--font-outfit)', color: '#1F3A5F', padding: '0 0 80px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 0' }}>
+        <button onClick={() => { setShowSettings(false); setError(null) }}
+          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+          <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(31,58,95,0.07)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ArrowLeft size={16} strokeWidth={2.5} />
+          </div>
+        </button>
+        <p style={{ margin: 0, fontSize: 15, fontWeight: 900, letterSpacing: '-0.02em' }}>Paramètres du profil</p>
+      </div>
+
+      <form onSubmit={handleSaveSettings}
+        style={{ padding: '20px 16px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+        {/* Prénom / Pseudo affiché */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: 'rgba(31,58,95,0.45)' }}>
+            Prénom / Pseudo affiché
+          </label>
+          <input style={INPUT} type="text" placeholder="ex. Alex"
+            value={editDisplayName} onChange={e => { setEditDisplayName(e.target.value); setError(null) }}
+            maxLength={50} />
+          <p style={{ margin: 0, fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600, lineHeight: 1.4 }}>
+            Visible par tes amis et sur la carte.
+          </p>
+        </div>
+
+        {/* Identifiant unique */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: 'rgba(31,58,95,0.45)' }}>
+            Identifiant unique (@username)
+          </label>
+          <input style={INPUT} type="text" placeholder="ex. alex_soleil"
+            value={editUsername} onChange={e => { setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_')); setError(null) }}
+            minLength={2} maxLength={30} />
+          <p style={{ margin: 0, fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600, lineHeight: 1.4 }}>
+            Utilisé pour te retrouver et partager ton profil. Minuscules, chiffres, underscore.
+          </p>
+        </div>
+
+        {error && <p style={{ margin: 0, fontSize: 13, color: '#E05252', fontWeight: 700,
+          background: 'rgba(224,82,82,0.08)', padding: '8px 12px', borderRadius: 10 }}>{error}</p>}
+
+        <button type="submit" style={{ ...BTN_PRIMARY, marginTop: 4 }} disabled={loading}>
+          {loading ? '…' : 'Enregistrer'}
+        </button>
+        <button type="button" onClick={() => { setShowSettings(false); setError(null) }}
+          style={{ ...BTN_SECONDARY, fontSize: 13 }}>
+          Annuler
+        </button>
+      </form>
+    </div>
+  )
+
   // Étape pseudo manquant (ex. après connexion Google)
   if (needsUsername) return (
     <div style={{ background: 'transparent', fontFamily: 'var(--font-outfit)', color: '#1F3A5F', padding: '0 0 80px' }}>
@@ -593,6 +685,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const displayNameResolved = profile?.display_name ?? user.email?.split('@')[0] ?? 'Soleiliste'
 
   const pendingRequests = friends.filter(f => f.status === 'pending' && f.addressee_id === user.id)
+  const sentRequests    = friends.filter(f => f.status === 'pending' && f.requester_id === user.id)
   const acceptedFriends = friends.filter(f => f.status === 'accepted')
 
   // Initiale pour l'avatar généré
@@ -627,6 +720,14 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
               <Share2 size={13} strokeWidth={2} />
             </button>
           )}
+          <button
+            onClick={() => { setEditDisplayName(profile?.display_name ?? ''); setEditUsername(profile?.username ?? ''); setError(null); setShowSettings(true) }}
+            title="Paramètres"
+            style={{ background: 'rgba(31,58,95,0.06)', border: '1px solid rgba(31,58,95,0.10)', borderRadius: 10,
+              padding: '6px 10px', cursor: 'pointer', color: 'rgba(31,58,95,0.55)',
+              display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Settings size={13} strokeWidth={2} />
+          </button>
           <button onClick={handleLogout} title="Se déconnecter"
             style={{ background: 'rgba(31,58,95,0.06)', border: '1px solid rgba(31,58,95,0.10)', borderRadius: 10,
               padding: '6px 10px', cursor: 'pointer', color: 'rgba(31,58,95,0.55)',
@@ -1061,6 +1162,39 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
                 )
               })
             }
+
+            {/* Demandes envoyées en attente */}
+            {sentRequests.length > 0 && (
+              <>
+                <p style={{ ...EYEBROW, marginTop: 16 }}>Demandes envoyées</p>
+                {sentRequests.map(req => (
+                  <div key={req.id} style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%',
+                      background: 'rgba(237,193,69,0.18)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0, fontWeight: 900, fontSize: 14, color: '#1F3A5F' }}>
+                      {req.addressee?.display_name?.charAt(0)?.toUpperCase() ?? '?'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F' }}>
+                        {req.addressee?.display_name ?? '—'}
+                      </p>
+                      {req.addressee?.username && (
+                        <p style={{ margin: '1px 0 0', fontSize: 11, color: 'rgba(31,58,95,0.50)', fontWeight: 700 }}>
+                          @{req.addressee.username}
+                        </p>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(31,58,95,0.40)',
+                      background: 'rgba(31,58,95,0.06)', border: '1px solid rgba(31,58,95,0.10)',
+                      borderRadius: 8, padding: '4px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      En attente
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+
           </>
         )}
       </div>

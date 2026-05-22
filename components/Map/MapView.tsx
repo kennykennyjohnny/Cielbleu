@@ -257,30 +257,19 @@ function bearingFromBuildingPoly(
 }
 
 function drawParkPin(): { width: number; height: number; data: Uint8Array } {
-  const W = 60, H = 60
+  const W = 46, H = 46
   const canvas = document.createElement('canvas')
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')!
   const CX = W / 2, CY = H / 2
 
-  // Halo outer
-  ctx.beginPath()
-  ctx.arc(CX, CY, 27, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(46,168,77,0.16)'
-  ctx.fill()
-  // Halo inner
-  ctx.beginPath()
-  ctx.arc(CX, CY, 22, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(46,168,77,0.22)'
-  ctx.fill()
-
-  // Drop shadow + circle
+  // Circle with subtle drop shadow (no halo)
   ctx.save()
-  ctx.shadowColor = 'rgba(46,168,77,0.40)'
-  ctx.shadowBlur = 10
+  ctx.shadowColor = 'rgba(31,58,95,0.22)'
+  ctx.shadowBlur = 8
   ctx.shadowOffsetY = 3
   ctx.beginPath()
-  ctx.arc(CX, CY, 17, 0, Math.PI * 2)
+  ctx.arc(CX, CY - 1, 17, 0, Math.PI * 2)
   ctx.fillStyle = '#2ea84d'
   ctx.fill()
   ctx.restore()
@@ -288,7 +277,7 @@ function drawParkPin(): { width: number; height: number; data: Uint8Array } {
   // White border
   ctx.save()
   ctx.beginPath()
-  ctx.arc(CX, CY, 17, 0, Math.PI * 2)
+  ctx.arc(CX, CY - 1, 17, 0, Math.PI * 2)
   ctx.strokeStyle = 'rgba(255,255,255,0.95)'
   ctx.lineWidth = 2.5
   ctx.stroke()
@@ -299,7 +288,7 @@ function drawParkPin(): { width: number; height: number; data: Uint8Array } {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.font = '15px system-ui'
-  ctx.fillText('🌳', CX, CY + 1)
+  ctx.fillText('🌳', CX, CY)
 
   return { width: W, height: H, data: new Uint8Array(ctx.getImageData(0, 0, W, H).data.buffer) }
 }
