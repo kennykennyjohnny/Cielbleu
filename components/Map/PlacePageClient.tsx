@@ -925,29 +925,35 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           borderTop:'1px solid rgba(20,32,51,0.10)',
           boxShadow:'0 -4px 24px rgba(11,31,58,0.12)' }}>
 
-          {/* Primary: Ouvrir dans Google Maps — maps.google.com Universal Link → app sur iOS/Android */}
-          <a
-            href={gmapsUrl}
-            target="_blank" rel="noopener noreferrer"
+          {/* Primary: Ouvrir dans Google Maps — window.location.href requis pour Universal Links iOS */}
+          <button
+            onClick={() => { window.location.href = gmapsUrl }}
+            aria-label="Ouvrir dans Google Maps"
             style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:7,
               borderRadius:14, background:'#1F3A5F', color:'#fff',
-              fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, textDecoration:'none',
+              fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, border:'none',
+              cursor:'pointer', touchAction:'manipulation',
               boxShadow:'0 8px 20px rgba(31,58,95,0.28)' }}
           >
-            🗺️&nbsp;Google Maps
-          </a>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink:0 }}>
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+              <circle cx="12" cy="9" r="2.5" fill="white"/>
+            </svg>
+            Google Maps
+          </button>
 
-          {/* Secondary: Itinéraire → coordonnées GPS = ouvre l'app en navigation directe */}
-          <a
-            href={gmapsDirUrl}
-            target="_blank" rel="noopener noreferrer"
+          {/* Secondary: Itinéraire → window.location.href pour App Links Android + Universal Links iOS */}
+          <button
+            onClick={() => { window.location.href = gmapsDirUrl }}
+            aria-label="Y aller"
             style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
               borderRadius:14, background:'#EDC145', color:'#1F3A5F',
-              fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, textDecoration:'none',
+              fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, border:'none',
+              cursor:'pointer', touchAction:'manipulation',
               boxShadow:'0 8px 20px rgba(237,193,69,0.35)' }}
           >
             📍&nbsp;Y aller
-          </a>
+          </button>
 
           {/* Share */}
           <button onClick={handleShare} aria-label="Partager ce lieu"
