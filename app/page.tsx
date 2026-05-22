@@ -387,7 +387,6 @@ export default function HomePage() {
           homeView={homeViewCount}
           showFontaines={activeFilters.includes('fontaine')}
           showSanisettes={activeFilters.includes('sanisette')}
-          showPark={activeFilters.includes('park')}
           onAmeniteSelect={handleAmeniteSelect}
         />
       </div>

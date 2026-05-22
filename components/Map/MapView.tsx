@@ -357,13 +357,11 @@ interface Props {
   // true = affiche fontaines/sanisettes même dézoomé + highlight
   showFontaines?: boolean
   showSanisettes?: boolean
-  // true = anneau vert highlight derrière les pins parc
-  showPark?: boolean
   // Callback quand l'utilisateur clique sur une fontaine / sanisette
   onAmeniteSelect?: (amenite: AmeniteInfo | null) => void
 }
 
-export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes, showPark, onAmeniteSelect }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes, onAmeniteSelect }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
@@ -489,21 +487,6 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'text-font': ['DIN Offc Pro Bold', 'Arial Unicode MS Bold'],
         },
         paint: { 'text-color': '#ffffff' },
-      })
-
-      // Highlight parc — anneau vert derrière les pins parc quand filtre Parc actif
-      map.addLayer({
-        id: 'park-highlight', type: 'circle', source: 'places',
-        filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'type'], 'park']],
-        layout: { visibility: 'none' },
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 22, 14, 36, 16, 52],
-          'circle-color': '#52b788',
-          'circle-opacity': 0.15,
-          'circle-stroke-color': '#52b788',
-          'circle-stroke-width': 2.5,
-          'circle-stroke-opacity': 0.5,
-        },
       })
 
       // Pins individuels — symbol layer GPU-accelerated
@@ -813,7 +796,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           if (showFontaines) map.setLayerZoomRange('fontaines-label', 0, 24)
         } catch { /* noop */ }
       }
-      // Sanisettes — visible seulement si showSanisettes actif
+      // Sanisettes
       if (map.getLayer('sanisettes-layer')) {
         try {
           map.setLayoutProperty('sanisettes-layer', 'visibility', showSanisettes ? 'visible' : 'none')
@@ -826,9 +809,6 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           if (showSanisettes) map.setLayerZoomRange('sanisettes-label', 0, 24)
         } catch { /* noop */ }
       }
-      // Parc
-      if (map.getLayer('park-highlight'))
-        try { map.setLayoutProperty('park-highlight', 'visibility', showPark ? 'visible' : 'none') } catch { /* noop */ }
     }
 
     // Si les couches existent déjà (style chargé + layers ajoutés) → applique immédiatement.
@@ -841,7 +821,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       // Cleanup : évite les listeners stale si l'effet re-run avant le chargement
       return () => { map.off('style.load', apply) }
     }
-  }, [showFontaines, showSanisettes, showPark])
+  }, [showFontaines, showSanisettes])
 
   return (
     <div className="absolute inset-0">
