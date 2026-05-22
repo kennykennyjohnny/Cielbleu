@@ -321,48 +321,53 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
 
   function handleFileForCrop(file: File) {
     setShowAvatarChoice(false)
-    const url = URL.createObjectURL(file)
-    // Lire dimensions naturelles
-    const img = new window.Image()
-    img.onload = () => {
-      cropNaturalRef.current = { w: img.naturalWidth, h: img.naturalHeight }
-      const cover = Math.max(CROP_PREVIEW / img.naturalWidth, CROP_PREVIEW / img.naturalHeight)
-      setCropScale(cover)
+    const objectUrl = URL.createObjectURL(file)
+    const raw = new window.Image()
+    raw.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      // Downsample to max 720px — 256px avatar output needs no more
+      const DISP_MAX = 720
+      const scale = Math.min(DISP_MAX / raw.naturalWidth, DISP_MAX / raw.naturalHeight, 1)
+      const dw = Math.round(raw.naturalWidth  * scale)
+      const dh = Math.round(raw.naturalHeight * scale)
+      const cv = document.createElement('canvas')
+      cv.width = dw ; cv.height = dh
+      cv.getContext('2d')!.drawImage(raw, 0, 0, dw, dh)
+      cropNaturalRef.current = { w: dw, h: dh }
+      const coverScale = Math.max(CROP_PREVIEW / dw, CROP_PREVIEW / dh)
+      setCropScale(coverScale)
       setCropOffset({ x: 0, y: 0 })
-      setCropSrc(url)
+      setCropSrc(cv.toDataURL('image/jpeg', 0.92))
     }
-    img.src = url
+    raw.src = objectUrl
   }
 
-  async function handleCropConfirm() {
+  function handleCropConfirm() {
     if (!cropSrc) return
     const img = new window.Image()
-    img.onload = async () => {
+    img.onload = () => {
       const canvas = document.createElement('canvas')
       canvas.width  = CROP_OUT
       canvas.height = CROP_OUT
       const ctx = canvas.getContext('2d')!
 
-      // Clip circulaire
+      // Circular clip
       ctx.beginPath()
       ctx.arc(CROP_OUT / 2, CROP_OUT / 2, CROP_OUT / 2, 0, Math.PI * 2)
       ctx.clip()
 
-      // L'image est affichée dans un conteneur CROP_PREVIEW×CROP_PREVIEW
-      // avec transform: translate(ox, oy) scale(s), transform-origin: center
-      // → le coin haut-gauche de l'image en px display :
-      const { x: ox, y: oy } = cropOffset
-      const s = cropScale
-      const dispW = img.naturalWidth  * s
-      const dispH = img.naturalHeight * s
-      const imgLeft = CROP_PREVIEW / 2 + ox - dispW / 2
-      const imgTop  = CROP_PREVIEW / 2 + oy - dispH / 2
+      const s  = cropScale
+      const ox = cropOffset.x
+      const oy = cropOffset.y
+      const { w, h } = cropNaturalRef.current
 
-      // Le cercle de crop est centré dans le conteneur → son coin haut-gauche :
-      const circleLeft = CROP_PREVIEW / 2 - CROP_OUT / 2
-      const circleTop  = CROP_PREVIEW / 2 - CROP_OUT / 2
-
-      // Coordonnées source dans l'image naturelle
+      // Position of image top-left corner in the CROP_PREVIEW container
+      const imgLeft = CROP_PREVIEW / 2 + ox - (w * s) / 2
+      const imgTop  = CROP_PREVIEW / 2 + oy - (h * s) / 2
+      // Crop circle top-left in the CROP_PREVIEW container (centered)
+      const circleLeft = (CROP_PREVIEW - CROP_OUT) / 2
+      const circleTop  = (CROP_PREVIEW - CROP_OUT) / 2
+      // Source rect in the downsampled image
       const srcX = (circleLeft - imgLeft) / s
       const srcY = (circleTop  - imgTop)  / s
       const srcW = CROP_OUT / s
@@ -372,10 +377,8 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
 
       canvas.toBlob(async (blob) => {
         if (!blob) return
-        URL.revokeObjectURL(cropSrc)
         setCropSrc(null)
-        const cropped = new File([blob], 'avatar.jpg', { type: 'image/jpeg' })
-        await handleAvatarUpload(cropped)
+        await handleAvatarUpload(new File([blob], 'avatar.jpg', { type: 'image/jpeg' }))
       }, 'image/jpeg', 0.90)
     }
     img.src = cropSrc
@@ -1398,21 +1401,31 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
 
       {/* ── CROP MODAL ──────────────────────────────────────────────────────── */}
       {cropSrc && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9100, background: 'rgba(0,0,0,0.88)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'var(--font-outfit)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9100,
+          background: 'rgba(11,25,46,0.96)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', fontFamily: 'var(--font-outfit)',
+          padding: '0 24px' }}>
 
-          <p style={{ margin: '0 0 16px', color: '#fff', fontWeight: 800, fontSize: 14 }}>
+          <p style={{ margin: '0 0 20px', color: '#fff', fontWeight: 800, fontSize: 15 }}>
             Recadrer la photo
           </p>
 
-          {/* Zone de prévisualisation */}
-          <div style={{
-            width: CROP_PREVIEW, height: CROP_PREVIEW,
-            borderRadius: '50%', overflow: 'hidden', position: 'relative',
-            boxShadow: '0 0 0 9999px rgba(0,0,0,0.70)',
-            cursor: 'grab', userSelect: 'none', flexShrink: 0,
-          }}
+          {/* Zone de prévisualisation circulaire — background-image (pas de transform sur img géant) */}
+          <div
+            style={{
+              width: CROP_PREVIEW, height: CROP_PREVIEW,
+              borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+              outline: '3px solid rgba(255,255,255,0.55)',
+              cursor: 'grab', userSelect: 'none', touchAction: 'none',
+              backgroundImage: `url(${cropSrc})`,
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: `${Math.round(cropNaturalRef.current.w * cropScale)}px ${Math.round(cropNaturalRef.current.h * cropScale)}px`,
+              backgroundPosition: [
+                `${Math.round(CROP_PREVIEW / 2 + cropOffset.x - (cropNaturalRef.current.w * cropScale) / 2)}px`,
+                `${Math.round(CROP_PREVIEW / 2 + cropOffset.y - (cropNaturalRef.current.h * cropScale) / 2)}px`,
+              ].join(' '),
+            }}
             onPointerDown={e => {
               cropDragRef.current = { sx: e.clientX, sy: e.clientY, ox: cropOffset.x, oy: cropOffset.y }
               ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
@@ -1428,33 +1441,33 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
             onWheel={e => {
               e.preventDefault()
               const minS = Math.max(CROP_PREVIEW / cropNaturalRef.current.w, CROP_PREVIEW / cropNaturalRef.current.h)
-              setCropScale(s => Math.max(minS, Math.min(s - e.deltaY * 0.001, 8)))
+              setCropScale(s => Math.max(minS, Math.min(s * (e.deltaY < 0 ? 1.08 : 0.93), minS * 10)))
             }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={cropSrc}
-              alt=""
-              draggable={false}
-              style={{
-                position: 'absolute',
-                width: cropNaturalRef.current.w,
-                height: cropNaturalRef.current.h,
-                transform: `translate(calc(-50% + ${cropOffset.x}px), calc(-50% + ${cropOffset.y}px)) scale(${cropScale})`,
-                transformOrigin: 'center center',
-                top: '50%', left: '50%',
-                pointerEvents: 'none',
-              }}
+          />
+
+          {/* Slider zoom — accessible sur mobile comme sur desktop */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, width: CROP_PREVIEW }}>
+            <span style={{ fontSize: 18, color: 'rgba(255,255,255,0.50)', lineHeight: 1, flexShrink: 0 }}>−</span>
+            <input
+              type="range"
+              min={Math.max(CROP_PREVIEW / cropNaturalRef.current.w, CROP_PREVIEW / cropNaturalRef.current.h)}
+              max={Math.max(CROP_PREVIEW / cropNaturalRef.current.w, CROP_PREVIEW / cropNaturalRef.current.h) * 4}
+              step={0.001}
+              value={cropScale}
+              onChange={e => setCropScale(parseFloat(e.target.value))}
+              style={{ flex: 1, accentColor: '#EDC145', cursor: 'pointer', height: 4 }}
+              aria-label="Zoom"
             />
+            <span style={{ fontSize: 18, color: 'rgba(255,255,255,0.50)', lineHeight: 1, flexShrink: 0 }}>+</span>
           </div>
 
-          <p style={{ margin: '14px 0 20px', fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>
-            Glisse pour repositionner · molette pour zoomer
+          <p style={{ margin: '12px 0 22px', fontSize: 12, color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>
+            Glisse pour cadrer · ajuste le zoom
           </p>
 
           <div style={{ display: 'flex', gap: 12 }}>
             <button
-              onClick={() => { URL.revokeObjectURL(cropSrc); setCropSrc(null) }}
+              onClick={() => { setCropSrc(null) }}
               style={{ height: 46, padding: '0 24px', borderRadius: 14,
                 background: 'rgba(255,255,255,0.12)', border: '1.5px solid rgba(255,255,255,0.20)',
                 color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 14,
@@ -1463,12 +1476,14 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
             </button>
             <button
               onClick={handleCropConfirm}
+              disabled={avatarUploading}
               style={{ height: 46, padding: '0 28px', borderRadius: 14,
                 background: '#EDC145', border: 'none', color: '#1F3A5F',
                 cursor: 'pointer', fontWeight: 900, fontSize: 15,
                 fontFamily: 'var(--font-outfit)',
-                boxShadow: '0 6px 20px rgba(237,193,69,0.40)' }}>
-              Valider ✓
+                boxShadow: '0 6px 20px rgba(237,193,69,0.40)',
+                opacity: avatarUploading ? 0.7 : 1 }}>
+              {avatarUploading ? 'Enregistrement…' : 'Valider ✓'}
             </button>
           </div>
         </div>
