@@ -26,8 +26,8 @@ interface FriendRequest {
   requester_id: string
   addressee_id: string
   status: 'pending' | 'accepted' | 'rejected'
-  requester?: { display_name: string | null; username: string | null }
-  addressee?: { display_name: string | null; username: string | null }
+  requester?: { display_name: string | null; username: string | null; avatar_url?: string | null }
+  addressee?: { display_name: string | null; username: string | null; avatar_url?: string | null }
 }
 
 interface FriendReview {
@@ -142,7 +142,7 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
   const [message, setMessage]   = useState<string | null>(null)
   const [name, setName]         = useState('')  // prénom = pseudo (champ unique)
   const [friendEmail, setFriendEmail] = useState('')
-  const [friendSuggestions, setFriendSuggestions] = useState<{ id: string; username: string | null; display_name: string | null }[]>([])
+  const [friendSuggestions, setFriendSuggestions] = useState<{ id: string; username: string | null; display_name: string | null; avatar_url?: string | null }[]>([])
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null)
   const skipNextSearchRef = useRef(false)
 
@@ -248,9 +248,9 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
     )]
     const { data: profileRows } = await supabase
       .from('profiles')
-      .select('id, display_name, username')
+      .select('id, display_name, username, avatar_url')
       .in('id', otherIds)
-    const pm: Record<string, { display_name: string | null; username: string | null }> =
+    const pm: Record<string, { display_name: string | null; username: string | null; avatar_url?: string | null }> =
       Object.fromEntries((profileRows ?? []).map(p => [p.id, p]))
 
     // Dédupliquer les paires mutuelles : garder la plus pertinente
@@ -292,7 +292,7 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
     const t = setTimeout(async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('id, username, display_name')
+        .select('id, username, display_name, avatar_url')
         .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
         .neq('id', user?.id ?? '')
         .limit(6)
@@ -1137,21 +1137,17 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
                     <div style={{ width: 30, height: 30, borderRadius: '50%',
-                      background: 'rgba(237,193,69,0.18)', flexShrink: 0,
+                      background: s.avatar_url ? 'transparent' : 'rgba(237,193,69,0.18)', flexShrink: 0,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 13, fontWeight: 900, color: '#1F3A5F' }}>
-                      {s.display_name?.charAt(0)?.toUpperCase() ?? '?'}
+                      fontSize: 13, fontWeight: 900, color: '#1F3A5F', overflow: 'hidden' }}>
+                      {s.avatar_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={s.avatar_url} alt="" style={{ width: 30, height: 30, objectFit: 'cover' }} />
+                        : s.display_name?.charAt(0)?.toUpperCase() ?? '?'}
                     </div>
-                    <div>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: '#1F3A5F' }}>
-                        {s.display_name ?? s.username}
-                      </p>
-                      {s.username && (
-                        <p style={{ margin: 0, fontSize: 11, color: 'rgba(31,58,95,0.50)', fontWeight: 600 }}>
-                          @{s.username}
-                        </p>
-                      )}
-                    </div>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: '#1F3A5F' }}>
+                      {s.display_name ?? s.username}
+                    </p>
                   </button>
                 ))}
               </div>
@@ -1164,19 +1160,19 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
                 <p style={EYEBROW}>Demandes reçues</p>
                 {pendingRequests.map(req => (
                   <div key={req.id} style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(237,193,69,0.20)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                      👤
+                    <div style={{ width: 36, height: 36, borderRadius: '50%',
+                      background: req.requester?.avatar_url ? 'transparent' : 'rgba(237,193,69,0.20)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden',
+                      fontWeight: 900, fontSize: 14, color: '#1F3A5F' }}>
+                      {req.requester?.avatar_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={req.requester.avatar_url} alt="" style={{ width: 36, height: 36, objectFit: 'cover' }} />
+                        : req.requester?.display_name?.charAt(0)?.toUpperCase() ?? '👤'}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F' }}>
-                        {req.requester?.display_name ?? '—'}
+                        {req.requester?.display_name ?? req.requester?.username ?? '—'}
                       </p>
-                      {req.requester?.username && (
-                        <p style={{ margin: '1px 0 0', fontSize: 11, color: 'rgba(31,58,95,0.50)', fontWeight: 700 }}>
-                          @{req.requester.username}
-                        </p>
-                      )}
                     </div>
                     <button onClick={() => handleAcceptFriend(req.id)}
                       style={{ ...BTN_SECONDARY, width: 'auto', padding: '0 12px', height: 32, fontSize: 12 }}>
@@ -1223,20 +1219,19 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
                       style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
                         borderBottomLeftRadius: isExpanded ? 0 : undefined, borderBottomRightRadius: isExpanded ? 0 : undefined,
                         marginBottom: isExpanded ? 0 : 12 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(237,193,69,0.18)',
+                      <div style={{ width: 36, height: 36, borderRadius: '50%',
+                        background: p?.avatar_url ? 'transparent' : 'rgba(237,193,69,0.18)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                        fontWeight: 900, fontSize: 14, color: '#1F3A5F' }}>
-                        {p?.display_name?.charAt(0)?.toUpperCase() ?? '?'}
+                        fontWeight: 900, fontSize: 14, color: '#1F3A5F', overflow: 'hidden' }}>
+                        {p?.avatar_url
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <img src={p.avatar_url} alt="" style={{ width: 36, height: 36, objectFit: 'cover' }} />
+                          : p?.display_name?.charAt(0)?.toUpperCase() ?? '?'}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F' }}>
-                          {p?.display_name ?? '—'}
+                          {p?.display_name ?? p?.username ?? '—'}
                         </p>
-                        {p?.username && (
-                          <p style={{ margin: '1px 0 0', fontSize: 11, color: 'rgba(31,58,95,0.50)', fontWeight: 700 }}>
-                            @{p.username}
-                          </p>
-                        )}
                       </div>
                       <span style={{ fontSize: 14, color: 'rgba(31,58,95,0.35)', transition: 'transform 200ms',
                         transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'block' }}>▾</span>
@@ -1328,20 +1323,18 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
                 {sentRequests.map(req => (
                   <div key={req.id} style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 36, height: 36, borderRadius: '50%',
-                      background: 'rgba(237,193,69,0.18)',
+                      background: req.addressee?.avatar_url ? 'transparent' : 'rgba(237,193,69,0.18)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0, fontWeight: 900, fontSize: 14, color: '#1F3A5F' }}>
-                      {req.addressee?.display_name?.charAt(0)?.toUpperCase() ?? '?'}
+                      flexShrink: 0, fontWeight: 900, fontSize: 14, color: '#1F3A5F', overflow: 'hidden' }}>
+                      {req.addressee?.avatar_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={req.addressee.avatar_url} alt="" style={{ width: 36, height: 36, objectFit: 'cover' }} />
+                        : req.addressee?.display_name?.charAt(0)?.toUpperCase() ?? '?'}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F' }}>
-                        {req.addressee?.display_name ?? '—'}
+                        {req.addressee?.display_name ?? req.addressee?.username ?? '—'}
                       </p>
-                      {req.addressee?.username && (
-                        <p style={{ margin: '1px 0 0', fontSize: 11, color: 'rgba(31,58,95,0.50)', fontWeight: 700 }}>
-                          @{req.addressee.username}
-                        </p>
-                      )}
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(31,58,95,0.40)',
                       background: 'rgba(31,58,95,0.06)', border: '1px solid rgba(31,58,95,0.10)',

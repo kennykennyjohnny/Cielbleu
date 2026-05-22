@@ -68,6 +68,8 @@ export default function HomePage() {
   const [homeViewCount, setHomeViewCount] = useState(0)
   const [showProfile, setShowProfile] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null)
+  const prevShowProfileRef = useRef(false)
   const dragRef = useRef<{ y: number; mode: SheetMode } | null>(null)
   const headerRef = useRef<HTMLElement>(null)
   const [headerH, setHeaderH] = useState(0)
@@ -80,6 +82,22 @@ export default function HomePage() {
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  // ── Fetch avatar_url pour l'afficher dans le header ───────────────────
+  useEffect(() => {
+    if (!userId) { setProfileAvatarUrl(null); return }
+    supabase.from('profiles').select('avatar_url').eq('id', userId).single()
+      .then(({ data }) => setProfileAvatarUrl(data?.avatar_url ?? null))
+  }, [userId])
+
+  // Rafraîchir l'avatar quand le panel profil se ferme (upload éventuel)
+  useEffect(() => {
+    if (!showProfile && prevShowProfileRef.current && userId) {
+      supabase.from('profiles').select('avatar_url').eq('id', userId).single()
+        .then(({ data }) => setProfileAvatarUrl(data?.avatar_url ?? null))
+    }
+    prevShowProfileRef.current = showProfile
+  }, [showProfile, userId])
 
   // ── Météo ────────────────────────────────────────────────────────────────
   interface WeatherResponse {
@@ -656,12 +674,17 @@ export default function HomePage() {
                 border: `1.5px solid ${showProfile ? '#1F3A5F' : userId ? 'rgba(237,193,69,0.45)' : 'rgba(31,58,95,0.10)'}`,
                 boxShadow: showProfile ? '0 4px 14px rgba(31,58,95,0.25)' : userId ? '0 2px 8px rgba(237,193,69,0.18)' : 'none',
                 cursor: 'pointer',
+                overflow: 'hidden',
               }}
             >
-              <UserCircle
-                size={18} strokeWidth={2}
-                style={{ color: showProfile ? '#EDC145' : userId ? '#b87c00' : 'rgba(31,58,95,0.40)' }}
-              />
+              {userId && profileAvatarUrl
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={profileAvatarUrl} alt="" width={38} height={38} style={{ objectFit: 'cover', width: '100%', height: '100%' }} />
+                : <UserCircle
+                    size={18} strokeWidth={2}
+                    style={{ color: showProfile ? '#EDC145' : userId ? '#b87c00' : 'rgba(31,58,95,0.40)' }}
+                  />
+              }
             </button>
           </div>
         </div>
