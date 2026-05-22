@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, X, Clock } from 'lucide-react'
+import { Search, X, Clock, User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Filters from '@/components/Map/Filters'
 import PlacePageClient from '@/components/Map/PlacePageClient'
@@ -22,15 +22,9 @@ function nowHalfHour(): number {
 const MapView = dynamic(() => import('@/components/Map/MapView'), {
   ssr: false,
   loading: () => (
-    // Fond neutre crème pendant le chargement JS du bundle — disparaît vite
     <div className="absolute inset-0" style={{ background: '#fffcf3' }} />
   ),
 })
-
-const TODAY_LABEL = (() => {
-  const d = new Date()
-  return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(d)
-})()
 
 export default function HomePage() {
   const [places, setPlaces] = useState<Place[]>([])
@@ -38,7 +32,6 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // ── Lieu sélectionné (inline, sans navigation) ─────────────────────────
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
   const [selectedScores, setSelectedScores] = useState<{ time_slot: string; score: number }[]>([])
   const [selectedAmenite, setSelectedAmenite] = useState<AmeniteInfo | null>(null)
@@ -48,7 +41,7 @@ export default function HomePage() {
   const [homeViewCount, setHomeViewCount] = useState(0)
   const dragRef = useRef<{ y: number; mode: SheetMode } | null>(null)
 
-  // ── Météo ─────────────────────────────────────────────────────────────────────
+  // ── Météo ─────────────────────────────────────────────────────────────────
   interface WeatherResponse {
     current: { temp: number; icon: string; description: string } | null
     forecast: WeatherForecastEntry[]
@@ -62,12 +55,10 @@ export default function HomePage() {
       .catch(() => null)
   }, [])
 
-  // Entrée de prévision la plus proche de l'heure du slider
   const weatherForHour = useMemo(() => {
     if (!weather) return null
     const { current, forecast } = weather
     if (!forecast?.length) return current
-    // Utilise le champ `hour` (heure locale Paris 0-23) directement
     const targetH = Math.floor(hour)
     let best = forecast[0]
     let bestDiff = Math.abs((best.hour ?? 0) - targetH)
@@ -78,8 +69,6 @@ export default function HomePage() {
     return best
   }, [weather, hour])
 
-  // focusPlace mémoisé pour éviter de re-déclencher le flyTo de la carte
-  // à chaque rendu (ex. quand l'heure change dans le slider)
   const mapFocusPlace = useMemo(
     () => selectedPlace ? { lng: selectedPlace.lng, lat: selectedPlace.lat } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,7 +91,6 @@ export default function HomePage() {
       const m = now.getMinutes() < 30 ? '00' : '30'
       const timeSlot = `${String(h).padStart(2, '0')}:${m}`
 
-      // Pagination : Supabase limite à 1000 lignes par requête par défaut
       const PAGE = 1000
       let from = 0
       const allPlaces: Record<string, unknown>[] = []
@@ -143,7 +131,6 @@ export default function HomePage() {
     const typeFilters = activeFilters.filter((f): f is 'bar' | 'restaurant' | 'cafe' | 'park' =>
       ['bar', 'restaurant', 'cafe', 'park'].includes(f)
     )
-    // Quand seuls les filtres amenite (eau/WC) sont actifs → cacher tous les bars/restos
     const ameniteOnly = activeFilters.length > 0 &&
       activeFilters.every(f => f === 'fontaine' || f === 'sanisette')
     if (ameniteOnly) return []
@@ -172,7 +159,6 @@ export default function HomePage() {
       const wantsTerrasse = terrassSyns.some(s => q.includes(s))
       const wantsSun      = sunSyns.some(s => q.includes(s))
 
-      // Retire les mots-clés "structure" pour ne garder que la partie nom/quartier
       let textQ = q
       for (const syns of [...Object.values(typeSyns), sunSyns, terrassSyns]) {
         for (const s of syns) textQ = textQ.replace(s, ' ')
@@ -184,7 +170,6 @@ export default function HomePage() {
       if (wantsSun)      result = result.filter(p => (p.currentScore ?? 0) >= 4)
 
       if (textQ) {
-        // Détecte un numéro d'arrondissement écrit "11", "11e", "11ème"…
         const arrMatch = textQ.match(/^(\d{1,2})(?:e|er|ème|ère)?$/)
         const arrNum   = arrMatch ? parseInt(arrMatch[1]) : null
         result = result.filter((p) => {
@@ -192,7 +177,6 @@ export default function HomePage() {
           if (p.address.toLowerCase().includes(textQ)) return true
           if (arrNum !== null) {
             if (p.arrondissement === arrNum) return true
-            // Fallback : extraire l'arrondissement du code postal 750XX
             const cp = p.address.match(/\b75(\d{3})\b/)
             if (cp) {
               const arr = parseInt(cp[1])
@@ -206,11 +190,9 @@ export default function HomePage() {
     return result
   }, [places, activeFilters, searchQuery])
 
-  // Suggestions : top 6 lieux pour le dropdown sous la search
   const suggestions = useMemo(() => {
     if (!searchQuery.trim()) return []
     const q = searchQuery.trim().toLowerCase()
-    // Trie : matches sur le nom > matches sur l'adresse, puis par note Google
     return [...displayedPlaces]
       .map((p) => {
         const nameMatch = p.name.toLowerCase().includes(q) ? 100 : 0
@@ -235,7 +217,7 @@ export default function HomePage() {
 
   const handlePlaceSelect = useCallback(async (place: Place | null) => {
     if (!place) { setSelectedPlace(null); return }
-    setSelectedAmenite(null)  // ferme l'amenite si open
+    setSelectedAmenite(null)
     setSelectedPlace(place)
     setSearchQuery('')
     setSheetMode('half')
@@ -254,7 +236,7 @@ export default function HomePage() {
 
   const handleAmeniteSelect = useCallback((amenite: AmeniteInfo | null) => {
     setSelectedAmenite(amenite)
-    if (amenite) setSelectedPlace(null)  // ferme le panel lieu si open
+    if (amenite) setSelectedPlace(null)
   }, [])
 
   // Drag handle (bottom sheet mobile)
@@ -270,9 +252,14 @@ export default function HomePage() {
   }
   const onPointerUp = () => { dragRef.current = null }
 
+  // Heure affichée formatée
+  const hourLabel = `${String(Math.floor(hour)).padStart(2,'0')}h${hour % 1 ? '30' : ''}`
+  const isNow = Math.abs(hour - nowHalfHour()) < 0.3
+
   return (
     <main className="relative h-dvh w-full overflow-hidden">
-      {/* Carte plein écran */}
+
+      {/* ══════════════ CARTE plein écran (derrière tout) ══════════════ */}
       <div className="absolute inset-0" role="application" aria-label="Carte des terrasses ensoleillées à Paris">
         <MapView
           places={displayedPlaces}
@@ -288,174 +275,176 @@ export default function HomePage() {
         />
       </div>
 
-      {/* ─── Top bar : brand-pill (gauche) + radar count (droite) ─── */}
+      {/* ══════════════ HEADER BAND — crème, pleine largeur ══════════════ */}
       <header
-        className="absolute top-0 inset-x-0 z-20 pointer-events-none"
-        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)' }}
+        className="absolute top-0 inset-x-0 z-20"
+        style={{
+          background: 'rgba(255,252,243,0.97)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: '1px solid rgba(31,58,95,0.08)',
+          boxShadow: '0 2px 20px rgba(31,58,95,0.07)',
+        }}
       >
-        <div className="px-3 flex items-start justify-between gap-2 pointer-events-none">
-
-          {/* ── Colonne gauche : logo + widget météo ── */}
-          <div className="pointer-events-none flex flex-col gap-2">
-
-            {/* Brand pill — DA v2 navy/gold */}
-            <div
-              className="pointer-events-auto inline-flex items-center gap-1.5 pl-1 pr-3 py-1 rounded-full cursor-pointer"
-              aria-label="Home — HopSoleil"
-              role="button"
-              tabIndex={0}
-              onClick={() => { handleClose(); setHomeViewCount(c => c + 1) }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { handleClose(); setHomeViewCount(c => c + 1) } }}
+        <div
+          className="flex items-center gap-2 px-3"
+          style={{
+            paddingTop: 'max(env(safe-area-inset-top, 0px), 10px)',
+            paddingBottom: 10,
+            minHeight: 'calc(max(env(safe-area-inset-top, 0px), 10px) + 46px)',
+          }}
+        >
+          {/* ── Logo ── */}
+          <button
+            aria-label="HopSoleil — Retour à l'accueil"
+            onClick={() => { handleClose(); setHomeViewCount(c => c + 1) }}
+            className="inline-flex items-center gap-1.5 shrink-0 rounded-full active:scale-[0.96] transition-transform"
+            style={{ background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer' }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-hopsoleil.svg" alt="" width={32} height={32} style={{ display: 'block', flexShrink: 0 }} />
+            <span
+              className="font-extrabold leading-none"
               style={{
-                background: '#FFFFFF',
-                border: '1.5px solid rgba(31,58,95,0.12)',
-                boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
+                fontFamily: 'var(--font-bricolage)',
+                fontVariationSettings: "'wdth' 75",
+                letterSpacing: '-0.03em',
+                fontSize: 18,
+                color: '#1F3A5F',
               }}
             >
-              {/* Icône soleil DA v2 */}
-              <span
-                className="grid place-items-center w-8 h-8 rounded-full shrink-0"
-                style={{ background: '#EDC145', boxShadow: '0 3px 10px rgba(237,193,69,0.40)' }}
-                aria-hidden="true"
-              >
-                <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
-                  <line x1="12" y1="3" x2="12" y2="6" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
-                  <line x1="12" y1="18" x2="12" y2="21" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
-                  <line x1="3" y1="12" x2="6" y2="12" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
-                  <line x1="18" y1="12" x2="21" y2="12" stroke="#1F3A5F" strokeWidth="1.8" strokeLinecap="round"/>
-                  <line x1="5.6" y1="5.6" x2="7.8" y2="7.8" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
-                  <line x1="16.2" y1="16.2" x2="18.4" y2="18.4" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
-                  <line x1="18.4" y1="5.6" x2="16.2" y2="7.8" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
-                  <line x1="7.8" y1="16.2" x2="5.6" y2="18.4" stroke="#1F3A5F" strokeWidth="1.5" strokeLinecap="round"/>
-                  <circle cx="12" cy="12" r="4" fill="#1F3A5F"/>
-                </svg>
-              </span>
-              <span
-                className="font-extrabold text-[18px] leading-none"
-                style={{ fontFamily: 'var(--font-bricolage)', fontVariationSettings: "'wdth' 75", letterSpacing: '-0.03em', color: '#1F3A5F' }}
-              >
-                Hop<span style={{ color: '#EDC145' }}>Soleil</span>
-              </span>
-            </div>
+              Hop<span style={{ color: '#EDC145' }}>Soleil</span>
+            </span>
+          </button>
 
-            {/* Widget météo — indépendant du slider, plus détaillé */}
-            {weatherForHour && (
-              <a
-                href="https://meteofrance.com/previsions-meteo-france/paris/75000"
-                target="_blank" rel="noopener noreferrer"
-                aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
-                className="pointer-events-auto inline-flex items-center gap-2.5 font-outfit"
-                style={{
-                  textDecoration: 'none',
-                  background: '#FFFFFF',
-                  border: '1.5px solid rgba(31,58,95,0.12)',
-                  boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
-                  borderRadius: 16,
-                  padding: '8px 12px',
-                }}
-              >
-                <span aria-hidden="true" style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>
-                  {owmIconToEmoji(weatherForHour.icon)}
-                </span>
-                <span>
-                  <span style={{ display: 'block', fontSize: 17, fontWeight: 800, color: '#1F3A5F', lineHeight: 1 }}>
-                    {weatherForHour.temp}°
-                  </span>
-                  <span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'rgba(31,58,95,0.50)', lineHeight: 1.3, marginTop: 2, maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {weatherForHour.description}
-                  </span>
-                </span>
-                <span aria-hidden="true" style={{ fontSize: 9, fontWeight: 700, color: 'rgba(31,58,95,0.30)', alignSelf: 'flex-end', paddingBottom: 1 }}>
-                  Paris · {String(Math.floor(hour)).padStart(2,'0')}h
-                </span>
-              </a>
-            )}
-          </div>
+          {/* ── Météo compact (inline, à droite du logo) ── */}
+          {weatherForHour && (
+            <a
+              href="https://meteofrance.com/previsions-meteo-france/paris/75000"
+              target="_blank" rel="noopener noreferrer"
+              aria-label={`Météo Paris : ${weatherForHour.temp}°C`}
+              className="shrink-0 inline-flex items-center gap-1 font-outfit"
+              style={{
+                textDecoration: 'none',
+                background: 'rgba(31,58,95,0.06)',
+                borderRadius: 999,
+                padding: '4px 10px 4px 7px',
+                border: '1px solid rgba(31,58,95,0.09)',
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
+                {owmIconToEmoji(weatherForHour.icon)}
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: '#1F3A5F', lineHeight: 1 }}>
+                {weatherForHour.temp}°
+              </span>
+            </a>
+          )}
 
-          {/* ── Slider heure + Maintenant + count — DA v2, SANS météo ── */}
+          {/* ── Spacer ── */}
+          <div style={{ flex: 1 }} />
+
+          {/* ── Slider heure + Maintenant + compteur ── */}
           <div
-            className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shrink-0"
+            className="inline-flex items-center gap-1.5 shrink-0 cb-hour-pill"
             style={{
-              background: '#FFFFFF',
-              border: '1.5px solid rgba(31,58,95,0.12)',
-              boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
+              background: 'rgba(31,58,95,0.05)',
+              border: '1px solid rgba(31,58,95,0.10)',
+              borderRadius: 999,
+              padding: '5px 8px 5px 10px',
+              maxWidth: 'clamp(170px, 44vw, 280px)',
             }}
           >
             <input
               type="range" min={6} max={23.5} step={0.5}
               value={hour}
               onChange={(e) => setHour(parseFloat(e.target.value))}
-              className="cb-hour-slider"
-              style={{ width: 68, height: 20 }}
+              className="cb-hour-slider cb-hour-slider-thin"
+              style={{ height: 20 }}
               aria-label="Heure du soleil"
             />
-            {/* Heure sélectionnée */}
-            <span className="font-outfit shrink-0" style={{ fontSize: 10, fontWeight: 800, color: '#1F3A5F', minWidth: 26 }}>
-              {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
+            <span
+              className="font-outfit shrink-0"
+              style={{ fontSize: 11, fontWeight: 800, color: '#1F3A5F', minWidth: 32 }}
+            >
+              {hourLabel}
             </span>
             <button
               onClick={() => setHour(nowHalfHour())}
-              aria-label="Voir les terrasses en ce moment"
-              title="Voir les terrasses en ce moment"
-              className="shrink-0 inline-flex items-center gap-1 font-bold rounded-full transition-all duration-150 active:scale-[0.95]"
+              aria-label="Voir en ce moment"
+              className="shrink-0 inline-flex items-center gap-0.5 font-bold rounded-full transition-all duration-150 active:scale-[0.95]"
               style={{
-                fontSize: 10.5, paddingLeft: 7, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
-                background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.07)',
-                color: Math.abs(hour - nowHalfHour()) < 0.3 ? '#1F3A5F' : '#1F3A5F',
-                border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.50)' : 'transparent'}`,
-                boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.35)' : 'none',
+                fontSize: 10, paddingLeft: 6, paddingRight: 7, paddingTop: 3, paddingBottom: 3,
+                background: isNow ? '#EDC145' : 'rgba(31,58,95,0.08)',
+                color: '#1F3A5F',
+                border: `1px solid ${isNow ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
+                boxShadow: isNow ? '0 2px 8px rgba(237,193,69,0.38)' : 'none',
+                whiteSpace: 'nowrap',
               }}
             >
-              <Clock size={10} strokeWidth={2.5} />
-              Maintenant
+              <Clock size={9} strokeWidth={2.5} />
+              <span className="hidden sm:inline" style={{ marginLeft: 2 }}>Maintenant</span>
             </button>
-            {!loading && displayedPlaces.length > 0 && (
+
+            {/* Compteur soleil */}
+            {!loading && sunnyCount > 0 && (
               <>
-                <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(31,58,95,0.15)' }} />
-                <span className="font-bold text-[13px] leading-none" style={{ color: '#1F3A5F' }}>
-                  {displayedPlaces.length}
+                <span aria-hidden="true" style={{ width: 1, height: 12, background: 'rgba(31,58,95,0.15)', flexShrink: 0, alignSelf: 'center' }} />
+                <span
+                  className="font-bold shrink-0 hidden xs:inline"
+                  style={{ fontSize: 11, color: '#EDC145' }}
+                  title={`${sunnyCount} terrasses au soleil`}
+                >
+                  ☀{sunnyCount}
                 </span>
-                {sunnyCount > 0 && (
-                  <span className="font-bold text-[11px] leading-none flex items-center gap-0.5"
-                    style={{ color: '#EDC145' }}>
-                    <span aria-hidden="true">☀</span>{sunnyCount}
-                  </span>
-                )}
               </>
             )}
           </div>
-        </div>
 
-        {/* Date subtile sous le brand pill */}
-        <p className="mt-0.5 px-4 font-outfit text-[10px] uppercase tracking-[0.22em] pointer-events-none"
-          style={{ color: 'rgba(31,58,95,0.40)' }}>
-          {TODAY_LABEL}
-        </p>
+          {/* ── Profil ── */}
+          <button
+            aria-label="Mon profil"
+            className="shrink-0 inline-flex items-center justify-center rounded-full transition-all duration-150 active:scale-[0.94]"
+            style={{
+              width: 36, height: 36,
+              background: 'rgba(31,58,95,0.07)',
+              border: '1.5px solid rgba(31,58,95,0.10)',
+            }}
+          >
+            <User size={16} strokeWidth={2} style={{ color: '#1F3A5F' }} />
+          </button>
+        </div>
       </header>
 
       {/* État vide */}
       {!loading && displayedPlaces.length === 0 && !activeFilters.some(f => f === 'fontaine' || f === 'sanisette') && (
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-10 pointer-events-none flex justify-center px-6">
-          <div className="rounded-2xl bg-surface-0/95 px-6 py-4 shadow-lg max-w-xs text-center"
-            style={{ border: '1px solid rgba(20,32,51,0.10)' }}>
+          <div
+            className="rounded-2xl bg-surface-0/95 px-6 py-4 shadow-lg max-w-xs text-center"
+            style={{ border: '1px solid rgba(20,32,51,0.10)' }}
+          >
             <span aria-hidden="true" className="text-3xl">🌥</span>
-            <p className="mt-2 text-sm text-text-primary font-outfit font-bold">
-              Aucune terrasse trouvée
-            </p>
-            <p className="text-xs text-text-soft font-outfit mt-1">
-              Désactive un filtre ou modifie ta recherche.
-            </p>
+            <p className="mt-2 text-sm text-text-primary font-outfit font-bold">Aucune terrasse trouvée</p>
+            <p className="text-xs text-text-soft font-outfit mt-1">Désactive un filtre ou modifie ta recherche.</p>
           </div>
         </div>
       )}
 
-      {/* Message guidé quand filtre eau/WC actif sans autre filtre */}
+      {/* Tip zoom eau/WC */}
       {!loading && activeFilters.some(f => f === 'fontaine' || f === 'sanisette') && displayedPlaces.length === 0 && (
-        <div className="absolute inset-x-0 z-10 pointer-events-none flex justify-center px-6"
-          style={{ top: 'calc(max(env(safe-area-inset-top,0px),12px) + 70px)' }}>
-          <div className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-outfit text-xs font-bold"
-            style={{ background: '#FFFFFF', border: '1.5px solid rgba(31,58,95,0.12)',
-              boxShadow: '0 4px 16px rgba(31,58,95,0.08)', color: '#1F3A5F' }}>
+        <div
+          className="absolute inset-x-0 z-10 pointer-events-none flex justify-center px-6"
+          style={{ top: 'calc(max(env(safe-area-inset-top,0px),10px) + 66px)' }}
+        >
+          <div
+            className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-outfit text-xs font-bold"
+            style={{
+              background: 'rgba(255,252,243,0.96)',
+              border: '1.5px solid rgba(31,58,95,0.12)',
+              boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
+              color: '#1F3A5F',
+            }}
+          >
             {activeFilters.includes('fontaine') && <span>💧</span>}
             {activeFilters.includes('sanisette') && <span>🚺</span>}
             <span>Zoome pour voir les points d&apos;eau et sanitaires</span>
@@ -463,88 +452,132 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Badge météo supprimé — le widget météo est maintenant dans le header (colonne gauche) */}
-
-      {/* ─── Barre flottante compact : search + filtres + slider heure ─── */}
+      {/* ══════════════ BOTTOM BAR : search + filtres ══════════════ */}
       {!selectedPlace && !selectedAmenite && (
-      <div
-        className="absolute bottom-0 inset-x-0 z-20 pointer-events-none"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 10px)' }}
-      >
         <div
-          className="pointer-events-auto mx-3 rounded-2xl overflow-hidden"
-          style={{
-            background: 'rgba(255,255,255,0.97)',
-            border: '1.5px solid rgba(31,58,95,0.10)',
-            backdropFilter: 'blur(24px)',
-            boxShadow: '0 8px 32px rgba(31,58,95,0.10)',
-          }}
+          className="absolute bottom-0 inset-x-0 z-20"
+          style={{ paddingBottom: 0 }}
         >
-          {/* Suggestions */}
-          {searchQuery.trim() && suggestions.length > 0 && (
-            <ul
-              role="listbox" aria-label="Lieux suggérés"
-              className="overflow-y-auto bg-white/90"
-              style={{ maxHeight: 200, borderBottom: '1px solid rgba(31,58,95,0.07)' }}
-            >
-              {suggestions.map((p) => {
-                const cp = p.address.match(/\b75(\d{3})\b/)
-                const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
-                const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
-                return (
-                  <li key={p.id} role="option">
-                    <button
-                      onClick={() => handlePlaceSelect(p)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-2 transition"
-                    >
-                      <span aria-hidden="true" className="text-[16px] shrink-0">{icon}</span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block font-bold text-[13px] text-text-primary truncate">{p.name}</span>
-                        <span className="block font-outfit text-[11px] text-text-soft truncate">
-                          {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
+          <div
+            style={{
+              background: 'rgba(255,252,243,0.97)',
+              backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)',
+              borderTop: '1px solid rgba(31,58,95,0.09)',
+              borderRadius: '22px 22px 0 0',
+              boxShadow: '0 -6px 32px rgba(31,58,95,0.10)',
+              paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)',
+            }}
+          >
+            {/* Suggestions */}
+            {searchQuery.trim() && suggestions.length > 0 && (
+              <ul
+                role="listbox" aria-label="Lieux suggérés"
+                className="overflow-y-auto"
+                style={{
+                  maxHeight: 210,
+                  borderBottom: '1px solid rgba(31,58,95,0.07)',
+                  background: 'transparent',
+                }}
+              >
+                {suggestions.map((p) => {
+                  const cp = p.address.match(/\b75(\d{3})\b/)
+                  const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
+                  const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
+                  return (
+                    <li key={p.id} role="option">
+                      <button
+                        onClick={() => handlePlaceSelect(p)}
+                        className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-surface-2 transition"
+                      >
+                        <span aria-hidden="true" className="text-[16px] shrink-0">{icon}</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block font-bold text-[13.5px] text-text-primary truncate">{p.name}</span>
+                          <span className="block font-outfit text-[11px] text-text-soft truncate">
+                            {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
+                          </span>
                         </span>
-                      </span>
-                      {(p.currentScore ?? 0) >= 4 && <span aria-label="Au soleil" className="text-[13px] shrink-0">☀️</span>}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+                        {(p.currentScore ?? 0) >= 4 && (
+                          <span aria-label="Au soleil" className="text-[13px] shrink-0">☀️</span>
+                        )}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
 
-          {/* ── Recherche : centrée, compacte ── */}
-          <div className="flex justify-center px-3 pt-2 pb-1">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full w-full"
-              style={{ maxWidth: 220, background: 'rgba(31,58,95,0.05)', border: '1px solid rgba(31,58,95,0.10)' }}>
-              <Search size={13} strokeWidth={2.5} className="shrink-0 text-text-soft" />
-              <input
-                id="search-places" type="text"
-                placeholder="Bar, terrasse, café, 11e…"
-                aria-label="Rechercher un lieu"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Escape') { setSearchQuery(''); e.currentTarget.blur() } }}
-                className="flex-1 min-w-0 bg-transparent outline-none font-semibold text-text-primary placeholder:text-text-soft/70"
-                style={{ fontSize: 13 }}
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} aria-label="Effacer"
-                  className="p-0.5 rounded-full text-text-soft hover:bg-surface-2 shrink-0">
-                  <X size={12} strokeWidth={2.2} />
-                </button>
-              )}
+            {/* ── Barre de recherche (grande) ── */}
+            <div className="px-4 pt-4 pb-2">
+              <div
+                className="flex items-center gap-3"
+                style={{
+                  background: 'rgba(31,58,95,0.06)',
+                  border: '1.5px solid rgba(31,58,95,0.11)',
+                  borderRadius: 16,
+                  padding: '0 14px',
+                  height: 52,
+                  transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                }}
+                onFocus={() => {}}
+              >
+                <Search
+                  size={18}
+                  strokeWidth={2.3}
+                  style={{ color: 'rgba(31,58,95,0.38)', flexShrink: 0 }}
+                />
+                <input
+                  id="search-places"
+                  type="text"
+                  placeholder="Bar, café, terrasse, 11e…"
+                  aria-label="Rechercher un lieu"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setSearchQuery(''); e.currentTarget.blur() }
+                  }}
+                  className="flex-1 min-w-0 bg-transparent outline-none font-semibold text-text-primary placeholder:text-text-soft/60"
+                  style={{
+                    fontSize: 15,
+                    fontFamily: 'var(--font-outfit)',
+                    color: '#1F3A5F',
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Effacer la recherche"
+                    className="shrink-0 inline-flex items-center justify-center rounded-full transition"
+                    style={{
+                      width: 26, height: 26,
+                      background: 'rgba(31,58,95,0.10)',
+                      color: '#1F3A5F',
+                    }}
+                  >
+                    <X size={13} strokeWidth={2.4} />
+                  </button>
+                )}
+                {/* Compteur de résultats */}
+                {!loading && !searchQuery && displayedPlaces.length > 0 && (
+                  <span
+                    className="shrink-0 font-outfit font-bold"
+                    style={{ fontSize: 12, color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap' }}
+                  >
+                    {displayedPlaces.length} lieux
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* ── Filtres ── */}
+            <div className="pt-1 pb-1">
+              <Filters activeFilters={activeFilters} onToggle={toggleFilter} />
             </div>
           </div>
-
-          {/* ── Filtres ── */}
-          <div className="pb-2 pt-0" style={{ minHeight: 36 }}>
-            <Filters activeFilters={activeFilters} onToggle={toggleFilter} compact />
-          </div>
         </div>
-      </div>
       )}
 
-      {/* ─── Panel fontaine / sanisette (desktop : côté droit, mobile : bottom sheet) ─── */}
+      {/* ── Panel fontaine / sanisette ── */}
       {selectedAmenite && isDesktop && (
         <aside
           className="absolute top-0 right-0 z-30 h-dvh overflow-y-auto"
@@ -557,10 +590,7 @@ export default function HomePage() {
           }}
           role="complementary" aria-label="Détails du point d'intérêt"
         >
-          <FicheAmenitePanel
-            amenite={selectedAmenite}
-            onClose={() => setSelectedAmenite(null)}
-          />
+          <FicheAmenitePanel amenite={selectedAmenite} onClose={() => setSelectedAmenite(null)} />
         </aside>
       )}
 
@@ -582,15 +612,12 @@ export default function HomePage() {
             <span style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)', display: 'block' }} />
           </div>
           <div className="overflow-y-auto" style={{ height: 'calc(100% - 22px)' }}>
-            <FicheAmenitePanel
-              amenite={selectedAmenite}
-              onClose={() => setSelectedAmenite(null)}
-            />
+            <FicheAmenitePanel amenite={selectedAmenite} onClose={() => setSelectedAmenite(null)} />
           </div>
         </section>
       )}
 
-      {/* ─── Panel lieu sélectionné (desktop : côté droit, mobile : bottom sheet) ─── */}
+      {/* ── Panel lieu (desktop) ── */}
       {selectedPlace && isDesktop && (
         <aside
           className="absolute top-0 right-0 z-30 h-dvh overflow-y-auto"
@@ -613,6 +640,7 @@ export default function HomePage() {
         </aside>
       )}
 
+      {/* ── Panel lieu (mobile bottom sheet) ── */}
       {selectedPlace && !isDesktop && (
         <section
           className="absolute bottom-0 inset-x-0 z-30"
@@ -631,12 +659,11 @@ export default function HomePage() {
           <div
             onPointerDown={onPointerDown} onPointerMove={onPointerMove}
             onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-            role="separator" aria-label="Redimensionner (glisser haut/bas)"
+            role="separator" aria-label="Redimensionner"
             className="flex items-center justify-center cursor-grab active:cursor-grabbing"
             style={{ height: 22, touchAction: 'none' }}
           >
-            <span aria-hidden="true"
-              style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)' }} />
+            <span aria-hidden="true" style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)' }} />
           </div>
           <div className="overflow-y-auto" style={{ height: 'calc(100% - 22px)' }}>
             <PlacePageClient
