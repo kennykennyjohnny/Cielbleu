@@ -132,7 +132,8 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
   const [error, setError]       = useState<string | null>(null)
   const [message, setMessage]   = useState<string | null>(null)
   const [friendEmail, setFriendEmail] = useState('')
-  const [friendSuggestions, setFriendSuggestions] = useState<{ id: string; username: string | null; display_name: string | null }[]>([])  const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null)
+  const [friendSuggestions, setFriendSuggestions] = useState<{ id: string; username: string | null; display_name: string | null }[]>([])
+  const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null)
   const skipNextSearchRef = useRef(false)
 
   // ── Username setup (Google users) ──────────────────────────────────
