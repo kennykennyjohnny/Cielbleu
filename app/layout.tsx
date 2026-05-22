@@ -20,13 +20,14 @@ export const metadata: Metadata = {
   title: 'HopSoleil — Trouve ta terrasse au soleil à Paris',
   description:
     'Le radar des terrasses ensoleillées à Paris. Score soleil temps réel, vue 3D, fenêtre d’ensoleillement.',
-  metadataBase: new URL('https://hopsoleil.fr'),  icons: {
+  metadataBase: new URL('https://hopsoleil.fr'),
+  icons: {
     icon: [
-      { url: '/logo-icon.png', type: 'image/png', sizes: '512x512' },
-      { url: '/favicon.ico' },
+      { url: '/favicon-vdef.png', type: 'image/png', sizes: '192x192' },
+      { url: '/favicon.ico', sizes: '32x32' },
     ],
     apple: [
-      { url: '/logo-icon.png', sizes: '512x512', type: 'image/png' },
+      { url: '/favicon-vdef.png', sizes: '192x192', type: 'image/png' },
     ],
   },  openGraph: {
     title: 'HopSoleil ☀',
