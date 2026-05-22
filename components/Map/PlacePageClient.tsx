@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Clock, Share2 } from 'lucide-react'
 import type { Place } from '@/types'
@@ -134,7 +134,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
   const [commentSending, setCommentSending] = useState(false)
   const [commentSent, setCommentSent] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
-  const [reviews, setReviews]       = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null; user_id?: string | null }[]>([])
+  const [reviews, setReviews]       = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null; user_id?: string | null; photos?: string[] }[]>([])
   const [sunnyVoteCount, setSunnyVoteCount] = useState<number | null>(null)
 
   // ── Favorites state ─────────────────────────────────────────────────────────
@@ -246,7 +246,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
   const loadReviews = useCallback(async () => {
     const { data, error } = await supabase
       .from('reviews')
-      .select('id, comment, created_at, user_id')
+      .select('id, comment, created_at, user_id, photos')
       .eq('place_id', place.id)
       .not('comment', 'is', null)
       .neq('comment', '')
@@ -273,6 +273,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
       created_at: r.created_at,
       display_name: r.user_id ? (profileMap[r.user_id] ?? 'Soleiliste') : 'Anonyme',
       user_id: r.user_id ?? null,
+      photos: (r.photos as string[] | null) ?? [],
     })))
   }, [place.id])
 
@@ -296,6 +297,19 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     setCommentSending(true)
     setCommentError(null)
 
+    // Upload photos d'abord
+    const uploadedUrls: string[] = []
+    for (const file of reviewPhotos) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_')
+      const path = `${userId}/${Date.now()}-${safeName}`
+      const { error: upErr } = await supabase.storage
+        .from('review-photos').upload(path, file, { contentType: file.type })
+      if (!upErr) {
+        const { data: { publicUrl } } = supabase.storage.from('review-photos').getPublicUrl(path)
+        uploadedUrls.push(publicUrl)
+      }
+    }
+
     let { error } = await supabase.from('reviews').insert({
       place_id: place.id,
       user_id:  userId,
@@ -303,6 +317,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
       rating: 4,
       comment: commentText.trim(),
       is_anonymous: false,
+      photos: uploadedUrls,
     })
 
     // Fallback : colonnes de base seulement (si migration_v2 pas encore appliquée)
@@ -312,6 +327,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         device_id: deviceId,
         rating: 4,
         comment: commentText.trim(),
+        photos: uploadedUrls,
       })
       error = err2 ?? null
     }
@@ -323,9 +339,12 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     }
     setCommentSent(true)
     setCommentText('')
+    reviewPhotoUrls.forEach(url => URL.revokeObjectURL(url))
+    setReviewPhotos([])
+    setReviewPhotoUrls([])
     setTimeout(() => setCommentSent(false), 3000)
     loadReviews()
-  }, [userId, commentText, place.id, deviceId, loadReviews])
+  }, [userId, commentText, place.id, deviceId, reviewPhotos, reviewPhotoUrls, loadReviews])
 
   // ── Favorites ────────────────────────────────────────────────────────────────
   const [likeCount, setLikeCount] = useState<number>(0)
@@ -567,6 +586,15 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                       borderLeft:'3px solid rgba(237,193,69,0.55)', paddingLeft:10 }}>
                       {r.comment}
                     </p>
+                    {r.photos && r.photos.length > 0 && (
+                      <div style={{ display:'flex', gap:6, marginTop:10, flexWrap:'wrap' }}>
+                        {r.photos.map((photoUrl, pi) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img key={pi} src={photoUrl} alt=""
+                            style={{ width:80, height:62, borderRadius:8, objectFit:'cover', display:'block' }} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -774,6 +802,64 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                       color:'#1F3A5F', resize:'none', outline:'none', boxSizing:'border-box',
                     }}
                   />
+
+                  {/* ─ Photos ─ */}
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+                    {reviewPhotoUrls.map((url, i) => (
+                      <div key={i} style={{ position:'relative', width:64, height:64,
+                        borderRadius:10, overflow:'hidden', flexShrink:0 }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={`Photo ${i+1}`}
+                          style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            URL.revokeObjectURL(url)
+                            setReviewPhotos(p => p.filter((_, j) => j !== i))
+                            setReviewPhotoUrls(p => p.filter((_, j) => j !== i))
+                          }}
+                          style={{ position:'absolute', top:3, right:3, width:18, height:18,
+                            borderRadius:'50%', border:'none', background:'rgba(11,31,58,0.72)',
+                            color:'#fff', cursor:'pointer', fontSize:11, lineHeight:1,
+                            display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}
+                          aria-label="Supprimer cette photo"
+                        >×</button>
+                      </div>
+                    ))}
+                    {reviewPhotos.length < 3 && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{ width:64, height:64, borderRadius:10,
+                          border:'1.5px dashed rgba(31,58,95,0.20)',
+                          background:'rgba(31,58,95,0.04)', cursor:'pointer',
+                          display:'flex', flexDirection:'column', alignItems:'center',
+                          justifyContent:'center', gap:3, color:'rgba(31,58,95,0.45)',
+                          flexShrink:0 }}
+                        aria-label="Ajouter une photo"
+                      >
+                        <span aria-hidden style={{ fontSize:20 }}>📷</span>
+                        <span style={{ fontSize:9, fontFamily:'var(--font-outfit)', fontWeight:700, lineHeight:1 }}>
+                          {reviewPhotos.length > 0 ? `${reviewPhotos.length}/3` : 'Photo'}
+                        </span>
+                      </button>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display:'none' }}
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (!file || reviewPhotos.length >= 3) return
+                        const url = URL.createObjectURL(file)
+                        setReviewPhotos(p => [...p, file])
+                        setReviewPhotoUrls(p => [...p, url])
+                        e.target.value = ''
+                      }}
+                    />
+                  </div>
+
                   <button
                     type="submit"
                     disabled={commentSending || !commentText.trim()}

@@ -4,7 +4,7 @@ import { useCallback, useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { Search, X } from 'lucide-react'
+import { Search, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PlacePageClient from './PlacePageClient'
 import type { Place } from '@/types'
@@ -244,18 +244,19 @@ export default function PlacePageShell({ place, scores }: Props) {
           role="dialog" aria-label={`Détails de ${place.name}`}
         >
           {/* ── Drag handle bar ── */}
-          <div style={{ height: 40, flexShrink: 0, display: 'flex', alignItems: 'center',
-            padding: '0 10px', gap: 8, borderBottom: '1px solid rgba(20,32,51,0.07)' }}>
+          <div style={{ height: 36, flexShrink: 0, display: 'flex', alignItems: 'center',
+            padding: '0 12px', borderBottom: '1px solid rgba(20,32,51,0.06)' }}>
+            {/* × Fermer */}
             <button
               onClick={() => router.push('/')}
-              style={{ height: 30, padding: '0 11px', borderRadius: 9,
-                border: '1.5px solid rgba(20,32,51,0.12)',
-                background: 'rgba(20,32,51,0.05)', cursor: 'pointer',
-                fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12,
-                color: '#0b1f3a', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+              aria-label="Fermer"
+              style={{ width: 28, height: 28, borderRadius: '50%', border: 'none',
+                background: 'rgba(20,32,51,0.07)', cursor: 'pointer', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              ← Fermer
+              <X size={13} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
             </button>
+            {/* Poignée centrale — drag */}
             <div
               onPointerDown={onPointerDown} onPointerMove={onPointerMove}
               onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
@@ -264,17 +265,20 @@ export default function PlacePageShell({ place, scores }: Props) {
                 justifyContent: 'center', touchAction: 'none', cursor: 'grab' }}
             >
               <span aria-hidden="true"
-                style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)' }} />
+                style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(20,32,51,0.15)' }} />
             </div>
+            {/* ↓/↑ Agrandir / réduire */}
             <button
-              onClick={() => setMode(m => m === 'full' ? 'half' : 'peek')}
-              style={{ height: 30, padding: '0 11px', borderRadius: 9,
-                border: '1.5px solid rgba(20,32,51,0.12)',
-                background: 'rgba(20,32,51,0.05)', cursor: 'pointer',
-                fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12,
-                color: '#0b1f3a', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+              onClick={() => setMode(m => m === 'peek' ? 'full' : 'peek')}
+              aria-label={mode === 'peek' ? 'Agrandir' : 'Réduire'}
+              style={{ width: 28, height: 28, borderRadius: '50%', border: 'none',
+                background: 'rgba(20,32,51,0.07)', cursor: 'pointer', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              ↓ Baisser
+              {mode === 'peek'
+                ? <ChevronUp   size={14} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
+                : <ChevronDown size={14} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
+              }
             </button>
           </div>
           {/* ── Content (PlacePageClient gère son propre scroll) ── */}

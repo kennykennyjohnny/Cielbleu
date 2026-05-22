@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, X, Clock, UserCircle, Compass } from 'lucide-react'
+import { Search, X, Clock, UserCircle, Compass, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getSunPosition } from '@/lib/suncalc'
 import Filters from '@/components/Map/Filters'
@@ -69,6 +69,8 @@ export default function HomePage() {
   const [showProfile, setShowProfile] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const dragRef = useRef<{ y: number; mode: SheetMode } | null>(null)
+  const headerRef = useRef<HTMLElement>(null)
+  const [headerH, setHeaderH] = useState(0)
 
   // ── Auth state — suivi global pour passer userId aux composants ──────
   useEffect(() => {
@@ -128,6 +130,15 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedPlace?.id],
   )
+
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setHeaderH(el.offsetHeight))
+    ro.observe(el)
+    setHeaderH(el.offsetHeight)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 900px)')
@@ -384,7 +395,7 @@ export default function HomePage() {
   return (
     <main className="relative h-dvh w-full overflow-hidden">
       {/* Carte plein écran */}
-      <div className="absolute inset-0" role="application" aria-label="Carte des terrasses ensoleillées à Paris">
+      <div className="absolute left-0 right-0 bottom-0" style={{ top: isDesktop ? headerH : 0 }} role="application" aria-label="Carte des terrasses ensoleillées à Paris">
         <MapView
           places={displayedPlaces}
           onPlaceSelect={handlePlaceSelect}
@@ -403,6 +414,7 @@ export default function HomePage() {
                      Row 2 = slider full-width
            Desktop : Row 1 = date+météo · logo · slider+profil          */}
       <header
+        ref={headerRef}
         className="absolute top-0 inset-x-0 z-20"
         style={{
           background: 'rgba(255,248,234,0.97)',
@@ -875,8 +887,10 @@ export default function HomePage() {
       {/* ─── Panel Profil (desktop : côté droit, mobile : bottom sheet) ─── */}
       {showProfile && isDesktop && (
         <aside
-          className="absolute top-0 right-0 z-40 h-dvh overflow-y-auto"
+          className="absolute right-0 z-40 overflow-y-auto"
           style={{
+            top: headerH,
+            height: `calc(100dvh - ${headerH}px)`,
             width: 420,
             background: 'rgba(255,252,243,0.97)',
             backdropFilter: 'blur(22px)',
@@ -923,8 +937,10 @@ export default function HomePage() {
       {/* ─── Panel fontaine / sanisette (desktop : côté droit, mobile : bottom sheet) ─── */}
       {selectedAmenite && isDesktop && (
         <aside
-          className="absolute top-0 right-0 z-30 h-dvh overflow-y-auto"
+          className="absolute right-0 z-30 overflow-y-auto"
           style={{
+            top: headerH,
+            height: `calc(100dvh - ${headerH}px)`,
             width: 420,
             background: 'rgba(255,252,243,0.97)',
             backdropFilter: 'blur(22px)',
@@ -973,8 +989,10 @@ export default function HomePage() {
       {/* ─── Panel lieu sélectionné (desktop : côté droit, mobile : bottom sheet) ─── */}
       {selectedPlace && isDesktop && (
         <aside
-          className="absolute top-0 right-0 z-30 h-dvh"
+          className="absolute right-0 z-30"
           style={{
+            top: headerH,
+            height: `calc(100dvh - ${headerH}px)`,
             width: 420,
             display: 'flex', flexDirection: 'column',
             background: 'rgba(255,252,243,0.97)',
@@ -1013,18 +1031,19 @@ export default function HomePage() {
           role="dialog" aria-label={`Détails de ${selectedPlace.name}`}
         >
           {/* ── Drag handle bar ── */}
-          <div style={{ height: 40, flexShrink: 0, display: 'flex', alignItems: 'center',
-            padding: '0 10px', gap: 8, borderBottom: '1px solid rgba(20,32,51,0.07)' }}>
+          <div style={{ height: 36, flexShrink: 0, display: 'flex', alignItems: 'center',
+            padding: '0 12px', borderBottom: '1px solid rgba(20,32,51,0.06)' }}>
+            {/* × Fermer */}
             <button
               onClick={handleClose}
-              style={{ height: 30, padding: '0 11px', borderRadius: 9,
-                border: '1.5px solid rgba(20,32,51,0.12)',
-                background: 'rgba(20,32,51,0.05)', cursor: 'pointer',
-                fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12,
-                color: '#0b1f3a', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+              aria-label="Fermer"
+              style={{ width: 28, height: 28, borderRadius: '50%', border: 'none',
+                background: 'rgba(20,32,51,0.07)', cursor: 'pointer', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              ← Fermer
+              <X size={13} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
             </button>
+            {/* Poignée centrale — drag */}
             <div
               onPointerDown={onPointerDown} onPointerMove={onPointerMove}
               onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
@@ -1033,17 +1052,20 @@ export default function HomePage() {
                 justifyContent: 'center', touchAction: 'none', cursor: 'grab' }}
             >
               <span aria-hidden="true"
-                style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)' }} />
+                style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(20,32,51,0.15)' }} />
             </div>
+            {/* ↓/↑ Agrandir / réduire */}
             <button
-              onClick={() => setSheetMode(m => m === 'full' ? 'half' : 'peek')}
-              style={{ height: 30, padding: '0 11px', borderRadius: 9,
-                border: '1.5px solid rgba(20,32,51,0.12)',
-                background: 'rgba(20,32,51,0.05)', cursor: 'pointer',
-                fontFamily: 'var(--font-outfit)', fontWeight: 800, fontSize: 12,
-                color: '#0b1f3a', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+              onClick={() => setSheetMode(m => m === 'peek' ? 'full' : 'peek')}
+              aria-label={sheetMode === 'peek' ? 'Agrandir' : 'Réduire'}
+              style={{ width: 28, height: 28, borderRadius: '50%', border: 'none',
+                background: 'rgba(20,32,51,0.07)', cursor: 'pointer', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              ↓ Baisser
+              {sheetMode === 'peek'
+                ? <ChevronUp   size={14} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
+                : <ChevronDown size={14} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
+              }
             </button>
           </div>
           {/* ── Content (PlacePageClient gère son propre scroll) ── */}
