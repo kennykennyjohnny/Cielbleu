@@ -15,9 +15,10 @@ export async function GET(request: NextRequest) {
       {
         cookies: {
           getAll: () => cookieStore.getAll(),
-          setAll: (cookiesToSet) => {
+          setAll: (cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) => {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              cookieStore.set(name, value, options as any)
             )
           },
         },
@@ -30,6 +31,5 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // En cas d'erreur, retour à la page principale
   return NextResponse.redirect(`${origin}/?auth_error=1`)
 }
