@@ -203,6 +203,11 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
 
   const ordinal = place.arrondissement === 1 ? 'er' : 'e'
 
+  // URLs Google Maps — maps.google.com = Universal Link iOS/Android → ouvre l'appli
+  // Coordonnées en destination plutôt que nom texte → plus fiable sur mobile
+  const gmapsUrl    = `https://maps.google.com/?q=${encodeURIComponent(place.name)}&ll=${place.lat},${place.lng}`
+  const gmapsDirUrl = `https://maps.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}&travelmode=walking`
+
   const sunSentence = SCORE_SENTENCES[currentScore] ?? ''
 
   // Score badge colors (hero top)
@@ -622,8 +627,8 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
             <p style={{ ...EYEBROW, marginBottom:10 }}>Voir le lieu</p>
             <div style={{ display:'grid', gap:8 }}>
 
-              {/* Google Maps — lien principal qui fonctionne sur iOS/Android/desktop */}
-              <a href={place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}`} target="_blank" rel="noopener noreferrer"
+              {/* Google Maps — maps.google.com = Universal Link → ouvre l'appli sur iOS/Android */}
+              <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
                 style={{ textDecoration:'none', display:'block',
                   borderRadius:18, overflow:'hidden',
                   background:'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)',
@@ -813,9 +818,9 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
           borderTop:'1px solid rgba(20,32,51,0.10)',
           boxShadow:'0 -4px 24px rgba(11,31,58,0.12)' }}>
 
-          {/* Primary: Ouvrir dans Google Maps — lien universel qui fonctionne sur iOS/Android/desktop */}
+          {/* Primary: Ouvrir dans Google Maps — maps.google.com Universal Link → app sur iOS/Android */}
           <a
-            href={place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}`}
+            href={gmapsUrl}
             target="_blank" rel="noopener noreferrer"
             style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:7,
               borderRadius:14, background:'#1F3A5F', color:'#fff',
@@ -825,9 +830,9 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
             🗺️&nbsp;Google Maps
           </a>
 
-          {/* Secondary: Itinéraire → ouvre Google Maps directions, mode marche */}
+          {/* Secondary: Itinéraire → coordonnées GPS = ouvre l'app en navigation directe */}
           <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place.name + ' ' + place.address)}&travelmode=walking`}
+            href={gmapsDirUrl}
             target="_blank" rel="noopener noreferrer"
             style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
               borderRadius:14, background:'#EDC145', color:'#1F3A5F',

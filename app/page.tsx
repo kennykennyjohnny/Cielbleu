@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, X, Clock, UserCircle } from 'lucide-react'
+import { Search, X, Clock, UserCircle, Compass } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getSunPosition } from '@/lib/suncalc'
 import Filters from '@/components/Map/Filters'
@@ -257,6 +257,17 @@ export default function HomePage() {
     () => displayedPlaces.filter((p) => (p.currentScore ?? 0) >= 4).length,
     [displayedPlaces]
   )
+
+  // ── Position du bouton "recentrer" — toujours au-dessus du panel ouvert ──
+  // Le bouton suit le bord supérieur du panel (même transition que le sheet)
+  // et reste visible quelle que soit la card ouverte.
+  const recenterBottom = useMemo(() => {
+    if (isDesktop) return '120px'
+    if (selectedPlace)  return `calc(${SHEET_HEIGHTS[sheetMode]} + 14px)`
+    if (selectedAmenite) return 'calc(62vh + 14px)'
+    if (showProfile)     return 'calc(90dvh + 14px)' // off-screen, OK
+    return 'calc(max(env(safe-area-inset-bottom, 0px), 10px) + 150px)'
+  }, [isDesktop, selectedPlace, sheetMode, selectedAmenite, showProfile])
 
   // ── Sync scores du slider (debounce 400 ms) ──────────────────────────────
   // Quand l'heure change, re-fetche sun_scores pour le nouveau créneau.
@@ -755,6 +766,32 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* ─── Bouton recentrer ─── toujours visible, flotte au-dessus du panel ── */}
+      <button
+        onClick={() => { setHomeViewCount(c => c + 1) }}
+        aria-label="Recentrer la carte sur Paris"
+        title="Recentrer"
+        className="active:scale-[0.88] transition-transform"
+        style={{
+          position: 'absolute',
+          right: 14,
+          bottom: recenterBottom,
+          zIndex: 22,
+          width: 42, height: 42,
+          borderRadius: '50%',
+          background: 'rgba(255,252,243,0.97)',
+          backdropFilter: 'blur(18px)',
+          WebkitBackdropFilter: 'blur(18px)',
+          border: '1.5px solid rgba(31,58,95,0.12)',
+          boxShadow: '0 4px 16px rgba(31,58,95,0.14)',
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'bottom 280ms cubic-bezier(0.2,0.8,0.2,1)',
+        }}
+      >
+        <Compass size={18} strokeWidth={2} style={{ color: '#1F3A5F' }} />
+      </button>
 
       {/* ─── Panel Profil (desktop : côté droit, mobile : bottom sheet) ─── */}
       {showProfile && isDesktop && (
