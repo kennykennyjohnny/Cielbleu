@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, X, Clock, UserCircle } from 'lucide-react'
+import { Search, X, Clock, UserCircle, User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Filters from '@/components/Map/Filters'
 import PlacePageClient from '@/components/Map/PlacePageClient'
@@ -302,156 +302,129 @@ export default function HomePage() {
         />
       </div>
 
-      {/* ─── Top bar : brand-pill (gauche) + radar count (droite) ─── */}
+      {/* ══════════════ HEADER BAND — crème, pleine largeur ══════════════ */}
       <header
-        className="absolute top-0 inset-x-0 z-20 pointer-events-none"
-        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)' }}
+        className="absolute top-0 inset-x-0 z-20"
+        style={{
+          background: 'rgba(255,252,243,0.97)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: '1px solid rgba(31,58,95,0.08)',
+          boxShadow: '0 2px 20px rgba(31,58,95,0.07)',
+        }}
       >
-        <div className="px-3 flex items-start justify-between gap-2 pointer-events-none">
+        <div
+          className="flex items-center gap-2 px-3"
+          style={{
+            paddingTop: 'max(env(safe-area-inset-top, 0px), 10px)',
+            paddingBottom: 10,
+            minHeight: 'calc(max(env(safe-area-inset-top, 0px), 10px) + 46px)',
+          }}
+        >
+          {/* ── Logo ── */}
+          <button
+            aria-label="HopSoleil — Retour à l'accueil"
+            onClick={() => { handleClose(); setHomeViewCount(c => c + 1) }}
+            className="shrink-0 active:scale-[0.96] transition-transform"
+            style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer' }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-full.jpg" alt="HopSoleil" style={{ height: 36, width: 'auto', display: 'block' }} />
+          </button>
 
-          {/* ── Colonne gauche : logo + widget météo ── */}
-          <div className="pointer-events-none flex flex-col gap-2">
-
-            {/* Brand pill — logo réel */}
-            <div
-              className="pointer-events-auto inline-flex items-center pl-2 pr-3 py-1.5 rounded-full cursor-pointer"
-              aria-label="Home — HopSoleil"
-              role="button"
-              tabIndex={0}
-              onClick={() => { handleClose(); setHomeViewCount(c => c + 1) }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { handleClose(); setHomeViewCount(c => c + 1) } }}
+          {/* ── Météo compact (inline, à droite du logo) ── */}
+          {weatherForHour && (
+            <a
+              href="https://meteofrance.com/previsions-meteo-france/paris/75000"
+              target="_blank" rel="noopener noreferrer"
+              aria-label={`Météo Paris : ${weatherForHour.temp}°C`}
+              className="shrink-0 inline-flex items-center gap-1 font-outfit"
               style={{
-                background: '#FFFFFF',
-                border: '1.5px solid rgba(31,58,95,0.12)',
-                boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
+                textDecoration: 'none',
+                background: 'rgba(31,58,95,0.06)',
+                borderRadius: 999,
+                padding: '4px 10px 4px 7px',
+                border: '1px solid rgba(31,58,95,0.09)',
               }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/logo-full.jpg"
-                alt="HopSoleil"
-                style={{ height: 38, width: 'auto', display: 'block' }}
-              />
-            </div>
+              <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
+                {owmIconToEmoji(weatherForHour.icon)}
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: '#1F3A5F', lineHeight: 1 }}>
+                {weatherForHour.temp}°
+              </span>
+            </a>
+          )}
 
-            {/* Widget météo — indépendant du slider, plus détaillé */}
-            {weatherForHour && (
-              <a
-                href="https://meteofrance.com/previsions-meteo-france/paris/75000"
-                target="_blank" rel="noopener noreferrer"
-                aria-label={`Météo Paris : ${weatherForHour.description}, ${weatherForHour.temp}°C`}
-                className="pointer-events-auto inline-flex items-center gap-2.5 font-outfit"
-                style={{
-                  textDecoration: 'none',
-                  background: '#FFFFFF',
-                  border: '1.5px solid rgba(31,58,95,0.12)',
-                  boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
-                  borderRadius: 16,
-                  padding: '8px 12px',
-                }}
-              >
-                <span aria-hidden="true" style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>
-                  {owmIconToEmoji(weatherForHour.icon)}
+          {/* ── Spacer ── */}
+          <div style={{ flex: 1 }} />
+
+          {/* ── Slider heure + Maintenant + compteur ── */}
+          <div
+            className="inline-flex items-center gap-1.5 shrink-0 cb-hour-pill"
+            style={{
+              background: 'rgba(31,58,95,0.05)',
+              border: '1px solid rgba(31,58,95,0.10)',
+              borderRadius: 999,
+              padding: '5px 8px 5px 10px',
+              maxWidth: 'clamp(170px, 44vw, 280px)',
+            }}
+          >
+            <input
+              type="range" min={6} max={23.5} step={0.5}
+              value={hour}
+              onChange={(e) => setHour(parseFloat(e.target.value))}
+              className="cb-hour-slider cb-hour-slider-thin"
+              style={{ height: 20 }}
+              aria-label="Heure du soleil"
+            />
+            <span className="font-outfit shrink-0" style={{ fontSize: 11, fontWeight: 800, color: '#1F3A5F', minWidth: 32 }}>
+              {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
+            </span>
+            <button
+              onClick={() => setHour(nowHalfHour())}
+              aria-label="Voir les terrasses en ce moment"
+              className="shrink-0 inline-flex items-center gap-0.5 font-bold rounded-full transition-all duration-150 active:scale-[0.95]"
+              style={{
+                fontSize: 10, paddingLeft: 6, paddingRight: 7, paddingTop: 3, paddingBottom: 3,
+                background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.08)',
+                color: '#1F3A5F',
+                border: `1px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
+                boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.38)' : 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Clock size={9} strokeWidth={2.5} />
+              <span className="hidden sm:inline" style={{ marginLeft: 2 }}>Maintenant</span>
+            </button>
+            {!loading && sunnyCount > 0 && (
+              <>
+                <span aria-hidden="true" style={{ width: 1, height: 12, background: 'rgba(31,58,95,0.15)', flexShrink: 0 }} />
+                <span className="font-bold shrink-0" style={{ fontSize: 11, color: '#EDC145' }} title={`${sunnyCount} terrasses au soleil`}>
+                  ☀{sunnyCount}
                 </span>
-                <span>
-                  <span style={{ display: 'block', fontSize: 17, fontWeight: 800, color: '#1F3A5F', lineHeight: 1 }}>
-                    {weatherForHour.temp}°
-                  </span>
-                  <span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: 'rgba(31,58,95,0.50)', lineHeight: 1.3, marginTop: 2, maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {weatherForHour.description}
-                  </span>
-                </span>
-                <span aria-hidden="true" style={{ fontSize: 9, fontWeight: 700, color: 'rgba(31,58,95,0.30)', alignSelf: 'flex-end', paddingBottom: 1 }}>
-                  Paris · {String(Math.floor(hour)).padStart(2,'0')}h
-                </span>
-              </a>
+              </>
             )}
           </div>
 
-          {/* ── Colonne droite : slider + profil (en ligne) ── */}
-          <div className="pointer-events-none flex flex-row items-center gap-2">
-
-            {/* Slider heure + Maintenant + count — DA v2 */}
-            <div
-              className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full shrink-0"
-              style={{
-                background: '#FFFFFF',
-                border: '1.5px solid rgba(31,58,95,0.12)',
-                boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
-              }}
-            >
-              <input
-                type="range" min={6} max={23.5} step={0.5}
-                value={hour}
-                onChange={(e) => setHour(parseFloat(e.target.value))}
-                className="cb-hour-slider"
-                style={{ width: 96, height: 20 }}
-                aria-label="Heure du soleil"
-              />
-              {/* Heure sélectionnée */}
-              <span className="font-outfit shrink-0" style={{ fontSize: 10, fontWeight: 800, color: '#1F3A5F', minWidth: 26 }}>
-                {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : ''}
-              </span>
-              <button
-                onClick={() => setHour(nowHalfHour())}
-                aria-label="Voir les terrasses en ce moment"
-                title="Voir les terrasses en ce moment"
-                className="shrink-0 inline-flex items-center gap-1 font-bold rounded-full transition-all duration-150 active:scale-[0.95]"
-                style={{
-                  fontSize: 10.5, paddingLeft: 7, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
-                  background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.07)',
-                  color: '#1F3A5F',
-                  border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.50)' : 'transparent'}`,
-                  boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.35)' : 'none',
-                }}
-              >
-                <Clock size={10} strokeWidth={2.5} />
-                Maintenant
-              </button>
-              {!loading && displayedPlaces.length > 0 && (
-                <>
-                  <span aria-hidden="true" className="w-px h-3.5 shrink-0" style={{ background: 'rgba(31,58,95,0.15)' }} />
-                  <span className="font-bold text-[13px] leading-none" style={{ color: '#1F3A5F' }}>
-                    {displayedPlaces.length}
-                  </span>
-                  {sunnyCount > 0 && (
-                    <span className="font-bold text-[11px] leading-none flex items-center gap-0.5"
-                      style={{ color: '#EDC145' }}>
-                      <span aria-hidden="true">☀</span>{sunnyCount}
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Bouton profil */}
-            <button
-              className="pointer-events-auto inline-flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full shrink-0"
-              onClick={() => { setShowProfile(p => !p); setSelectedPlace(null); setSelectedAmenite(null) }}
-              aria-label="Mon profil"
-              style={{
-                background: '#FFFFFF',
-                border: '1.5px solid rgba(31,58,95,0.12)',
-                boxShadow: '0 4px 16px rgba(31,58,95,0.08)',
-                cursor: 'pointer', position: 'relative',
-              }}
-            >
-              <span className="grid place-items-center w-7 h-7 rounded-full shrink-0"
-                style={{ background: userId ? '#EDC145' : 'rgba(31,58,95,0.08)' }}>
-                <UserCircle size={15} strokeWidth={2} style={{ color: userId ? '#1F3A5F' : 'rgba(31,58,95,0.45)' }} />
-              </span>
-              <span className="font-outfit font-bold text-[12px]" style={{ color: '#1F3A5F' }}>
-                {userId ? 'Profil' : 'Connexion'}
-              </span>
-            </button>
-          </div>{/* fin colonne droite */}
+          {/* ── Bouton profil ── */}
+          <button
+            onClick={() => { setShowProfile(p => !p); setSelectedPlace(null); setSelectedAmenite(null) }}
+            aria-label={userId ? 'Mon profil' : 'Connexion'}
+            className="shrink-0 inline-flex items-center justify-center rounded-full transition-all duration-150 active:scale-[0.94]"
+            style={{
+              width: 36, height: 36,
+              background: userId ? 'rgba(237,193,69,0.18)' : 'rgba(31,58,95,0.07)',
+              border: `1.5px solid ${userId ? 'rgba(237,193,69,0.50)' : 'rgba(31,58,95,0.10)'}`,
+              cursor: 'pointer',
+            }}
+          >
+            {userId
+              ? <UserCircle size={17} strokeWidth={2} style={{ color: '#1F3A5F' }} />
+              : <User size={16} strokeWidth={2} style={{ color: 'rgba(31,58,95,0.55)' }} />
+            }
+          </button>
         </div>
-
-        {/* Date subtile sous le brand pill */}
-        <p className="mt-0.5 px-4 font-outfit text-[10px] uppercase tracking-[0.22em] pointer-events-none"
-          style={{ color: 'rgba(31,58,95,0.40)' }}>
-          {TODAY_LABEL}
-        </p>
       </header>
 
       {/* État vide */}
@@ -484,88 +457,99 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Badge météo supprimé — le widget météo est maintenant dans le header (colonne gauche) */}
-
-      {/* ─── Barre flottante compact : search + filtres + slider heure ─── */}
+      {/* ══════════════ BOTTOM BAR : search + filtres ══════════════ */}
       {!selectedPlace && !selectedAmenite && (
-      <div
-        className="absolute bottom-0 inset-x-0 z-20 pointer-events-none"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 10px)' }}
-      >
-        <div
-          className="pointer-events-auto rounded-2xl overflow-hidden"
-          style={{
-            margin: '0 auto',
-            width: 'calc(100% - 24px)',
-            maxWidth: 500,
-            background: 'rgba(255,255,255,0.97)',
-            border: '1.5px solid rgba(31,58,95,0.10)',
-            backdropFilter: 'blur(24px)',
-            boxShadow: '0 8px 32px rgba(31,58,95,0.10)',
-          }}
-        >
-          {/* Suggestions */}
-          {searchQuery.trim() && suggestions.length > 0 && (
-            <ul
-              role="listbox" aria-label="Lieux suggérés"
-              className="overflow-y-auto bg-white/90"
-              style={{ maxHeight: 200, borderBottom: '1px solid rgba(31,58,95,0.07)' }}
-            >
-              {suggestions.map((p) => {
-                const cp = p.address.match(/\b75(\d{3})\b/)
-                const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
-                const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
-                return (
-                  <li key={p.id} role="option">
-                    <button
-                      onClick={() => handlePlaceSelect(p)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-2 transition"
-                    >
-                      <span aria-hidden="true" className="text-[16px] shrink-0">{icon}</span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block font-bold text-[13px] text-text-primary truncate">{p.name}</span>
-                        <span className="block font-outfit text-[11px] text-text-soft truncate">
-                          {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
+        <div className="absolute bottom-0 inset-x-0 z-20">
+          <div
+            style={{
+              background: 'rgba(255,252,243,0.97)',
+              backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)',
+              borderTop: '1px solid rgba(31,58,95,0.09)',
+              borderRadius: '22px 22px 0 0',
+              boxShadow: '0 -6px 32px rgba(31,58,95,0.10)',
+              paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)',
+            }}
+          >
+            {/* Suggestions */}
+            {searchQuery.trim() && suggestions.length > 0 && (
+              <ul
+                role="listbox" aria-label="Lieux suggérés"
+                className="overflow-y-auto"
+                style={{ maxHeight: 210, borderBottom: '1px solid rgba(31,58,95,0.07)' }}
+              >
+                {suggestions.map((p) => {
+                  const cp = p.address.match(/\b75(\d{3})\b/)
+                  const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
+                  const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
+                  return (
+                    <li key={p.id} role="option">
+                      <button
+                        onClick={() => handlePlaceSelect(p)}
+                        className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-surface-2 transition"
+                      >
+                        <span aria-hidden="true" className="text-[16px] shrink-0">{icon}</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block font-bold text-[13.5px] text-text-primary truncate">{p.name}</span>
+                          <span className="block font-outfit text-[11px] text-text-soft truncate">
+                            {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
+                          </span>
                         </span>
-                      </span>
-                      {(p.currentScore ?? 0) >= 4 && <span aria-label="Au soleil" className="text-[13px] shrink-0">☀️</span>}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+                        {(p.currentScore ?? 0) >= 4 && <span aria-label="Au soleil" className="text-[13px] shrink-0">☀️</span>}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
 
-          {/* ── Recherche : centrée, compacte ── */}
-          <div className="flex justify-center px-3 pt-2 pb-1">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full w-full"
-              style={{ maxWidth: 220, background: 'rgba(31,58,95,0.05)', border: '1px solid rgba(31,58,95,0.10)' }}>
-              <Search size={13} strokeWidth={2.5} className="shrink-0 text-text-soft" />
-              <input
-                id="search-places" type="text"
-                placeholder="Bar, terrasse, café, 11e…"
-                aria-label="Rechercher un lieu"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Escape') { setSearchQuery(''); e.currentTarget.blur() } }}
-                className="flex-1 min-w-0 bg-transparent outline-none font-semibold text-text-primary placeholder:text-text-soft/70"
-                style={{ fontSize: 13 }}
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} aria-label="Effacer"
-                  className="p-0.5 rounded-full text-text-soft hover:bg-surface-2 shrink-0">
-                  <X size={12} strokeWidth={2.2} />
-                </button>
-              )}
+            {/* ── Grande barre de recherche ── */}
+            <div className="px-4 pt-4 pb-2">
+              <div
+                className="flex items-center gap-3"
+                style={{
+                  background: 'rgba(31,58,95,0.06)',
+                  border: '1.5px solid rgba(31,58,95,0.11)',
+                  borderRadius: 16,
+                  padding: '0 14px',
+                  height: 52,
+                }}
+              >
+                <Search size={18} strokeWidth={2.3} style={{ color: 'rgba(31,58,95,0.38)', flexShrink: 0 }} />
+                <input
+                  id="search-places" type="text"
+                  placeholder="Bar, café, terrasse, 11e…"
+                  aria-label="Rechercher un lieu"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Escape') { setSearchQuery(''); e.currentTarget.blur() } }}
+                  className="flex-1 min-w-0 bg-transparent outline-none font-semibold placeholder:text-text-soft/60"
+                  style={{ fontSize: 15, fontFamily: 'var(--font-outfit)', color: '#1F3A5F' }}
+                />
+                {searchQuery ? (
+                  <button
+                    onClick={() => setSearchQuery('')} aria-label="Effacer la recherche"
+                    className="shrink-0 inline-flex items-center justify-center rounded-full"
+                    style={{ width: 26, height: 26, background: 'rgba(31,58,95,0.10)', color: '#1F3A5F' }}
+                  >
+                    <X size={13} strokeWidth={2.4} />
+                  </button>
+                ) : (
+                  !loading && displayedPlaces.length > 0 && (
+                    <span className="shrink-0 font-outfit font-bold" style={{ fontSize: 12, color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap' }}>
+                      {displayedPlaces.length} lieux
+                    </span>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* ── Filtres ── */}
+            <div className="pt-1 pb-1">
+              <Filters activeFilters={activeFilters} onToggle={toggleFilter} />
             </div>
           </div>
-
-          {/* ── Filtres ── */}
-          <div className="pb-2 pt-0" style={{ minHeight: 36 }}>
-            <Filters activeFilters={activeFilters} onToggle={toggleFilter} compact />
-          </div>
         </div>
-      </div>
       )}
 
       {/* ─── Panel Profil (desktop : côté droit, mobile : bottom sheet) ─── */}
