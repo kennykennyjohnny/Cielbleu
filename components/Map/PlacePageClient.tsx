@@ -134,7 +134,8 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
   const [commentSending, setCommentSending] = useState(false)
   const [commentSent, setCommentSent] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
-  const [reviews, setReviews]       = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null }[]>([])
+  const [reviews, setReviews]       = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null; user_id?: string | null }[]>([])
+  const [sunnyVoteCount, setSunnyVoteCount] = useState<number | null>(null)
 
   // ── Favorites state ─────────────────────────────────────────────────────────
   const [isFavorite, setIsFavorite]   = useState(false)
@@ -205,7 +206,10 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
 
   // URLs Google Maps — maps.google.com = Universal Link iOS/Android → ouvre l'appli
   // Coordonnées en destination plutôt que nom texte → plus fiable sur mobile
-  const gmapsUrl    = `https://maps.google.com/?q=${encodeURIComponent(place.name)}&ll=${place.lat},${place.lng}`
+  // google_place_id → lien direct fiche Google (plus fiable sur mobile)
+  const gmapsUrl    = place.google_place_id
+    ? `https://www.google.com/maps/place/?q=place_id:${place.google_place_id}`
+    : `https://maps.google.com/?q=${place.lat},${place.lng}(${encodeURIComponent(place.name)})`
   const gmapsDirUrl = `https://maps.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}&travelmode=walking`
 
   const sunSentence = SCORE_SENTENCES[currentScore] ?? ''
@@ -268,10 +272,23 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
       comment: r.comment,
       created_at: r.created_at,
       display_name: r.user_id ? (profileMap[r.user_id] ?? 'Soleiliste') : 'Anonyme',
+      user_id: r.user_id ?? null,
     })))
   }, [place.id])
 
   useEffect(() => { loadReviews() }, [loadReviews])
+
+  // ── Fetch sunny vote count ────────────────────────────────────────────────────
+  useEffect(() => {
+    supabase.from('sun_votes').select('id', { count: 'exact', head: true })
+      .eq('place_id', place.id).eq('is_sunny', true)
+      .then(({ count }) => { if (count != null) setSunnyVoteCount(count) })
+  }, [place.id])
+
+  const handleDeleteReview = useCallback(async (reviewId: string) => {
+    await supabase.from('reviews').delete().eq('id', reviewId).eq('user_id', userId!)
+    setReviews(prev => prev.filter(r => r.id !== reviewId))
+  }, [userId])
 
   const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -585,6 +602,17 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                         </span>
                       </div>
                       <span style={{ fontSize:13, color:'#EDC145', flexShrink:0 }}>☀</span>
+                      {userId && r.user_id === userId && (
+                        <button
+                          onClick={() => handleDeleteReview(r.id)}
+                          aria-label="Supprimer mon avis"
+                          style={{ flexShrink:0, background:'none', border:'none', cursor:'pointer',
+                            padding:'2px 4px', borderRadius:6, color:'rgba(224,82,82,0.65)',
+                            fontSize:15, lineHeight:1, transition:'color 150ms' }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
                     <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#1F3A5F', lineHeight:1.55,
                       borderLeft:'3px solid rgba(237,193,69,0.55)',
@@ -715,10 +743,18 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
               boxShadow: sunVote === 'sunny' ? '0 6px 16px rgba(237,193,69,0.35)' : 'none',
               border: sunVote === 'sunny' ? '1.5px solid rgba(237,193,69,0.60)' : '1.5px solid transparent',
               transition:'all 150ms',
+              display:'flex', alignItems:'center', justifyContent:'center', gap:6,
             }}
             aria-pressed={sunVote === 'sunny'}
           >
             ☀️ Ensoleillé
+            {sunnyVoteCount != null && sunnyVoteCount > 0 && (
+              <span style={{ fontSize:11, fontWeight:700, opacity:0.72,
+                background:'rgba(31,58,95,0.12)', borderRadius:999,
+                padding:'1px 7px', lineHeight:1.5 }}>
+                {sunnyVoteCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => handleSunVote(false)}

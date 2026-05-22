@@ -262,11 +262,11 @@ export default function HomePage() {
   // Le bouton suit le bord supérieur du panel (même transition que le sheet)
   // et reste visible quelle que soit la card ouverte.
   const recenterBottom = useMemo(() => {
-    if (isDesktop) return '120px'
+    if (isDesktop) return '165px'
     if (selectedPlace)  return `calc(${SHEET_HEIGHTS[sheetMode]} + 14px)`
     if (selectedAmenite) return 'calc(62vh + 14px)'
     if (showProfile)     return 'calc(90dvh + 14px)' // off-screen, OK
-    return 'calc(max(env(safe-area-inset-bottom, 0px), 10px) + 150px)'
+    return 'calc(max(env(safe-area-inset-bottom, 0px), 10px) + 190px)'
   }, [isDesktop, selectedPlace, sheetMode, selectedAmenite, showProfile])
 
   // ── Sync scores du slider (debounce 400 ms) ──────────────────────────────
@@ -673,12 +673,13 @@ export default function HomePage() {
       {!selectedPlace && !selectedAmenite && (
         <div
           className="absolute bottom-0 inset-x-0 z-20 flex justify-center"
-          style={{ padding: '0 12px', paddingBottom: 'max(env(safe-area-inset-bottom,0px), 10px)' }}
+          style={{ padding: '0 12px', paddingBottom: 'max(env(safe-area-inset-bottom,0px), 10px)', pointerEvents: 'none' }}
         >
           <div
             style={{
               width: '100%',
               maxWidth: 480,
+              pointerEvents: 'auto',
               background: 'rgba(255,248,234,0.97)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',

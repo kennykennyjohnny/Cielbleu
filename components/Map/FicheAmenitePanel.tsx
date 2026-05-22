@@ -28,7 +28,7 @@ const CHIP_STYLE = (color: string): React.CSSProperties => ({
 
 export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProfile }: Props) {
   const [svError, setSvError] = useState(false)
-  const [reviews, setReviews] = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null }[]>([])
+  const [reviews, setReviews] = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null; user_id?: string | null }[]>([])
   const [commentText, setCommentText] = useState('')
   const [commentSending, setCommentSending] = useState(false)
   const [commentSent, setCommentSent] = useState(false)
@@ -36,22 +36,31 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
   const ameniteKey = `${amenite.lat.toFixed(6)}_${amenite.lng.toFixed(6)}`
 
   const loadReviews = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('reviews')
-      .select('id, comment, created_at, profile:profiles(display_name)')
+      .select('id, comment, created_at, user_id')
       .eq('amenite_key', ameniteKey)
       .order('created_at', { ascending: false })
       .limit(20)
-    if (data) {
-      setReviews(data.map((r: { id: string; comment: string | null; created_at: string; profile?: { display_name?: string | null } | null | { display_name?: string | null }[] }) => ({
-        id: r.id,
-        comment: r.comment,
-        created_at: r.created_at,
-        display_name: Array.isArray(r.profile)
-          ? r.profile[0]?.display_name
-          : (r.profile as { display_name?: string | null } | null)?.display_name,
-      })))
+    if (error || !data) return
+    const userIds = [...new Set(data.map(r => r.user_id).filter(Boolean) as string[])]
+    const profileMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, display_name')
+        .in('id', userIds)
+      profiles?.forEach((p: { id: string; display_name?: string | null }) => {
+        if (p.display_name) profileMap[p.id] = p.display_name
+      })
     }
+    setReviews(data.map(r => ({
+      id: r.id,
+      comment: r.comment,
+      created_at: r.created_at,
+      user_id: r.user_id ?? null,
+      display_name: r.user_id ? (profileMap[r.user_id] ?? 'Soleiliste') : 'Anonyme',
+    })))
   }, [ameniteKey])
 
   useEffect(() => {
@@ -77,6 +86,11 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
     setCommentSent(true)
     setCommentText('')
     loadReviews()
+  }
+
+  const handleDeleteReview = async (reviewId: string) => {
+    await supabase.from('reviews').delete().eq('id', reviewId).eq('user_id', userId!)
+    setReviews(prev => prev.filter(r => r.id !== reviewId))
   }
 
   const p          = amenite.props
@@ -308,11 +322,22 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
                   borderRadius: 14, padding: '11px 13px',
                   background: 'rgba(31,58,95,0.04)', border: '1px solid rgba(31,58,95,0.08)',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                     <span style={{ fontSize: 12, fontWeight: 800, color: '#1F3A5F' }}>{r.display_name ?? 'Anonyme'}</span>
-                    <span style={{ fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600 }}>
-                      {new Date(r.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600 }}>
+                        {new Date(r.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                      </span>
+                      {userId && r.user_id === userId && (
+                        <button
+                          onClick={() => handleDeleteReview(r.id)}
+                          aria-label="Supprimer mon avis"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer',
+                            padding: '1px 4px', borderRadius: 6,
+                            color: 'rgba(224,82,82,0.65)', fontSize: 15, lineHeight: 1 }}
+                        >×</button>
+                      )}
+                    </div>
                   </div>
                   <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1F3A5F', lineHeight: 1.5 }}>{r.comment}</p>
                 </div>
