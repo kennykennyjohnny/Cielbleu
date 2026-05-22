@@ -137,6 +137,11 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
   const [reviews, setReviews]       = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null; user_id?: string | null; photos?: string[] }[]>([])
   const [sunnyVoteCount, setSunnyVoteCount] = useState<number | null>(null)
 
+  // ── Review photos state ─────────────────────────────────────────────────────
+  const [reviewPhotos, setReviewPhotos]       = useState<File[]>([])
+  const [reviewPhotoUrls, setReviewPhotoUrls] = useState<string[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   // ── Favorites state ─────────────────────────────────────────────────────────
   const [isFavorite, setIsFavorite]   = useState(false)
   const [favoriteId, setFavoriteId]   = useState<string | null>(null)
