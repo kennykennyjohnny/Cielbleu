@@ -170,7 +170,9 @@ export default function HomePage() {
   }, [])
 
   const displayedPlaces = useMemo(() => {
-    let result = places
+    // Exclure les commerces non-terrasse
+    const EXCLUDE_RE = /franprix|monoprix|carrefour|naturalia|biocoop|lidl|aldi|picard|tabac-presse|pharmacie|pressing|coiffure|coiffeur|kebab|mcdonald|burger.?king|\bkfc\b|\bsubway\b|domino|sushi|\bquick\b/i
+    let result = places.filter(p => !EXCLUDE_RE.test(p.name))
     const typeFilters = activeFilters.filter((f): f is 'bar' | 'restaurant' | 'cafe' | 'park' =>
       ['bar', 'restaurant', 'cafe', 'park'].includes(f)
     )
@@ -215,21 +217,34 @@ export default function HomePage() {
       if (wantsSun)      result = result.filter(p => (p.currentScore ?? 0) >= 4)
 
       if (textQ) {
-        // Détecte un numéro d'arrondissement écrit "11", "11e", "11ème"…
+        // Quartiers parisiens → arrondissements
+        const QUARTIERS: Record<string, number[]> = {
+          marais: [3, 4], bastille: [11, 12], montmartre: [18], pigalle: [9, 18],
+          oberkampf: [11], belleville: [19, 20], nation: [12], 'opéra': [9], opera: [9],
+          chatelet: [1, 4], 'âtelet': [1, 4], 'saint-germain': [6], 'germain': [6],
+          latin: [5], luxembourg: [5, 6], montparnasse: [14, 15], batignolles: [17],
+          canal: [10], republique: [10, 11], 'république': [10, 11],
+          madeleine: [8], champs: [8], trocadero: [16], 'trocadéro': [16],
+          passy: [16], auteuil: [16], bercy: [12], invalides: [7], eiffel: [7, 15],
+          grenelle: [15], gobelins: [13], denfert: [14], odeon: [6], 'ódéon': [6],
+          sentier: [2], temple: [3], 'ménilmontant': [20], menilmontant: [20],
+          charonne: [11, 20], popincourt: [11], 'sacré': [18], butte: [18],
+          'grands boulevards': [9, 10], 'saint-paul': [4], 'le marais': [3, 4],
+        }
+        // Arr. écrit "11", "11e", "11ème"…
         const arrMatch = textQ.match(/^(\d{1,2})(?:e|er|ème|ère)?$/)
         const arrNum   = arrMatch ? parseInt(arrMatch[1]) : null
+        const quartierArrs = Object.entries(QUARTIERS)
+          .filter(([q]) => textQ.includes(q)).flatMap(([, a]) => a)
         result = result.filter((p) => {
           if (p.name.toLowerCase().includes(textQ)) return true
           if (p.address.toLowerCase().includes(textQ)) return true
           if (arrNum !== null) {
             if (p.arrondissement === arrNum) return true
-            // Fallback : extraire l'arrondissement du code postal 750XX
             const cp = p.address.match(/\b75(\d{3})\b/)
-            if (cp) {
-              const arr = parseInt(cp[1])
-              if (arr === arrNum) return true
-            }
+            if (cp && parseInt(cp[1]) === arrNum) return true
           }
+          if (quartierArrs.length > 0 && p.arrondissement != null && quartierArrs.includes(p.arrondissement)) return true
           return false
         })
       }
@@ -284,20 +299,14 @@ export default function HomePage() {
         .from('sun_scores').select('place_id, score')
         .eq('month', month).eq('time_slot', slot)
 
-      if (data && data.length > 0) {
-        const byId = new Map(data.map(r => [r.place_id, r.score]))
-        setPlaces(prev => prev.map(p => ({
-          ...p, currentScore: byId.get(p.id) ?? p.currentScore ?? 3,
-        })))
-      } else {
-        // Fallback : score basé sur l'altitude du soleil (même pour tous, Paris)
-        const d = new Date()
-        d.setHours(hFloor, hour % 1 ? 30 : 0, 0, 0)
-        const pos = getSunPosition(d, 48.8566, 2.3522)
-        const alt = (pos.altitude * 180) / Math.PI
-        const s = pos.altitude <= 0 ? 0 : alt < 5 ? 2 : alt < 15 ? 3 : alt < 35 ? 4 : 5
-        setPlaces(prev => prev.map(p => ({ ...p, currentScore: s })))
-      }
+      // Toujours mettre à jour tous les lieux : DB score si dispo, sinon altitude solaire
+      const d = new Date()
+      d.setHours(hFloor, hour % 1 ? 30 : 0, 0, 0)
+      const pos = getSunPosition(d, 48.8566, 2.3522)
+      const alt = (pos.altitude * 180) / Math.PI
+      const altScore = pos.altitude <= 0 ? 0 : alt < 5 ? 2 : alt < 15 ? 3 : alt < 35 ? 4 : 5
+      const byId = new Map((data ?? []).map(r => [r.place_id, r.score]))
+      setPlaces(prev => prev.map(p => ({ ...p, currentScore: byId.get(p.id) ?? altScore })))
     }, 400)
     return () => window.clearTimeout(t)
   }, [hour]) // eslint-disable-line react-hooks/exhaustive-deps

@@ -458,84 +458,90 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
 
         {/* ── QUICK STATS (3 cols) ── */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:0 }}>
-          {([
-            { strong: place.google_rating != null ? place.google_rating.toFixed(1) : '—', label: 'Note' },
-            { strong: place.price_level ? '€'.repeat(place.price_level) : '—',            label: 'Prix' },
-            { strong: `${currentScore}/5`,                                                  label: 'Soleil' },
-          ] as const).map(({ strong, label }) => (
-            <div key={label} style={{ ...STAT_CARD }}>
-              <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
-                {strong}
-              </strong>
-              <span style={{ display:'block', marginTop:7, color:'#6f7a8a', fontSize:11,
-                fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
-                {label}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* ── TIMELINE SECTION ── */}
-        <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', margin:'14px 0 0', padding:'15px 0' }}>
-          <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between',
-            gap:14, marginBottom:12 }}>
-            <div>
-              <p style={{ ...EYEBROW }}>Ensoleillement aujourd&apos;hui</p>
-              <h2 style={{ margin:'4px 0 0', color:'#0b1f3a', fontSize:16, letterSpacing:'-0.02em',
-                fontWeight:700, fontFamily:'inherit' }}>
-                La terrasse est-elle au soleil ?
-              </h2>
-            </div>
-            <small style={{ color:'#6f7a8a', fontSize:12, fontWeight:750, flexShrink:0 }}>
-              Score {currentScore}/5
-            </small>
+          {/* Note — cliquable → fiche Google */}
+          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+            style={{ ...STAT_CARD, textDecoration:'none', display:'block', cursor:'pointer' }}>
+            <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
+              {place.google_rating != null ? place.google_rating.toFixed(1) : '—'}
+            </strong>
+            <span style={{ display:'block', marginTop:7, color:'#6f7a8a', fontSize:11,
+              fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+              Note <span style={{ fontSize:9, fontWeight:600, opacity:0.55, textTransform:'none', letterSpacing:0 }}>(google)</span>
+            </span>
+          </a>
+          {/* Prix — cliquable → fiche Google */}
+          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+            style={{ ...STAT_CARD, textDecoration:'none', display:'block', cursor:'pointer' }}>
+            <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
+              {place.price_level ? '€'.repeat(place.price_level) : '—'}
+            </strong>
+            <span style={{ display:'block', marginTop:7, color:'#6f7a8a', fontSize:11,
+              fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+              Prix
+            </span>
+          </a>
+          {/* Soleil */}
+          <div style={{ ...STAT_CARD }}>
+            <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
+              {currentScore}/5
+            </strong>
+            <span style={{ display:'block', marginTop:7, color:'#6f7a8a', fontSize:11,
+              fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+              Soleil
+            </span>
           </div>
-
-          {/* Timeline card with bars + now line */}
-          {timeline.length > 0 && (
-            <div style={{ position:'relative', height:74, borderRadius:22,
-              background:'rgba(255,255,255,0.78)', border:'1px solid rgba(20,32,51,0.10)',
-              padding:'14px 12px 10px', overflow:'hidden' }}>
-              {/* NOW red line */}
-              <div aria-hidden="true" style={{ position:'absolute', left:`${nowLinePct}%`,
-                top:9, height:42, borderLeft:'2px solid #ff6b5a',
-                boxShadow:'0 0 0 4px rgba(255,107,90,0.12)', zIndex:2 }} />
-              {/* Bars */}
-              <div style={{ display:'grid',
-                gridTemplateColumns:`repeat(${timeline.length}, 1fr)`,
-                gap:3, height:28, alignItems:'end' }}>
-                {timeline.map(s => {
-                  const hh = parseInt(s.time_slot.split(':')[0])
-                  const isActive = s.time_slot === currentHourSlot
-                  return (
-                    <button key={s.time_slot}
-                      onClick={() => setHour(hh)}
-                      aria-label={`${hh}h — ${SCORE_LABEL[s.score] ?? 'score ' + String(s.score)}`}
-                      aria-pressed={isActive}
-                      style={{ height: BAR_PX[s.score] ?? 8,
-                        borderRadius:'999px 999px 4px 4px',
-                        background: BAR_COLORS[s.score] ?? '#ccc',
-                        border:'none', padding:0, cursor:'pointer',
-                        opacity: isActive ? 1 : 0.65,
-                        outline: isActive ? '2px solid #ffb703' : 'none', outlineOffset:1,
-                        transition:'height 0.25s', minWidth:0 }}
-                    />
-                  )
-                })}
-              </div>
-              {/* Labels */}
-              <div style={{ display:'flex', justifyContent:'space-between', marginTop:9,
-                color:'#6f7a8a', fontSize:11, fontWeight:800 }}>
-                <span>8h</span><span>Maintenant</span><span>22h</span>
-              </div>
-            </div>
-          )}
-
-          {/* Sun sentence */}
-          <p style={{ margin:'10px 0 0', color:'#0b1f3a', fontSize:14, fontWeight:800, lineHeight:1.4 }}>
-            {sunSentence}
-          </p>
         </div>
+
+        {/* ── AVIS DES VISITEURS ── */}
+        {reviews.length > 0 && (
+          <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
+            <p style={{ ...EYEBROW, marginBottom:12 }}>Avis des visiteurs · {reviews.length}</p>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {reviews.map(r => {
+                const initiale = (r.display_name ?? 'A').charAt(0).toUpperCase()
+                return (
+                  <div key={r.id} style={{
+                    borderRadius:16, padding:'12px 14px',
+                    background:'rgba(255,255,255,0.82)',
+                    border:'1px solid rgba(20,32,51,0.08)',
+                    boxShadow:'0 2px 8px rgba(31,58,95,0.05)',
+                  }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                      <div style={{
+                        width:30, height:30, borderRadius:'50%', flexShrink:0,
+                        background:'rgba(237,193,69,0.18)',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        fontSize:12, fontWeight:900, color:'#b87c00',
+                      }}>{initiale}</div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <span style={{ fontSize:12, fontWeight:800, color:'#1F3A5F', display:'block', lineHeight:1.2 }}>
+                          {r.display_name ?? 'Anonyme'}
+                        </span>
+                        <span style={{ fontSize:10.5, color:'rgba(31,58,95,0.40)', fontWeight:600 }}>
+                          {new Date(r.created_at).toLocaleDateString('fr-FR', { day:'numeric', month:'long' })}
+                        </span>
+                      </div>
+                      <span style={{ fontSize:13, color:'#EDC145', flexShrink:0 }}>☀</span>
+                      {userId && r.user_id === userId && (
+                        <button onClick={() => handleDeleteReview(r.id)}
+                          aria-label="Supprimer mon avis"
+                          style={{ flexShrink:0, background:'none', border:'none', cursor:'pointer',
+                            padding:'2px 4px', borderRadius:6, color:'rgba(224,82,82,0.65)',
+                            fontSize:15, lineHeight:1 }}>
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#1F3A5F', lineHeight:1.55,
+                      borderLeft:'3px solid rgba(237,193,69,0.55)', paddingLeft:10 }}>
+                      {r.comment}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── HORAIRES ── */}
         {(() => {
@@ -567,64 +573,6 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
             </div>
           )
         })()}
-
-        {/* ── AVIS DES VISITEURS ── */}
-        {reviews.length > 0 && (
-          <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
-            <p style={{ ...EYEBROW, marginBottom:12 }}>
-              Avis des visiteurs · {reviews.length}
-            </p>
-            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-              {reviews.map(r => {
-                const initiale = (r.display_name ?? 'A').charAt(0).toUpperCase()
-                return (
-                  <div key={r.id} style={{
-                    borderRadius:16, padding:'12px 14px',
-                    background:'rgba(255,255,255,0.82)',
-                    border:'1px solid rgba(20,32,51,0.08)',
-                    boxShadow:'0 2px 8px rgba(31,58,95,0.05)',
-                  }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-                      <div style={{
-                        width:30, height:30, borderRadius:'50%', flexShrink:0,
-                        background:'rgba(237,193,69,0.18)',
-                        display:'flex', alignItems:'center', justifyContent:'center',
-                        fontSize:12, fontWeight:900, color:'#b87c00',
-                      }}>
-                        {initiale}
-                      </div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <span style={{ fontSize:12, fontWeight:800, color:'#1F3A5F', display:'block', lineHeight:1.2 }}>
-                          {r.display_name ?? 'Anonyme'}
-                        </span>
-                        <span style={{ fontSize:10.5, color:'rgba(31,58,95,0.40)', fontWeight:600 }}>
-                          {new Date(r.created_at).toLocaleDateString('fr-FR', { day:'numeric', month:'long' })}
-                        </span>
-                      </div>
-                      <span style={{ fontSize:13, color:'#EDC145', flexShrink:0 }}>☀</span>
-                      {userId && r.user_id === userId && (
-                        <button
-                          onClick={() => handleDeleteReview(r.id)}
-                          aria-label="Supprimer mon avis"
-                          style={{ flexShrink:0, background:'none', border:'none', cursor:'pointer',
-                            padding:'2px 4px', borderRadius:6, color:'rgba(224,82,82,0.65)',
-                            fontSize:15, lineHeight:1, transition:'color 150ms' }}
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                    <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#1F3A5F', lineHeight:1.55,
-                      borderLeft:'3px solid rgba(237,193,69,0.55)',
-                      paddingLeft:10 }}>
-                      {r.comment}
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
 
         {/* ── PHOTOS ── */}
         {photoRefs.length > 0 && (

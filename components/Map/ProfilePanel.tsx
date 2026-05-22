@@ -315,7 +315,7 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
               <img
                 src="/logo-icon.png"
                 alt="HopSoleil"
-                style={{ width: 72, height: 72, objectFit: 'contain', borderRadius: '50%' }}
+                style={{ width: '88%', height: '88%', objectFit: 'contain', display: 'block' }}
               />
             </div>
             <p style={{ margin: 0, fontFamily: 'var(--font-bricolage)', fontSize: 19, fontWeight: 900, color: '#fff', letterSpacing: '-0.03em' }}>
