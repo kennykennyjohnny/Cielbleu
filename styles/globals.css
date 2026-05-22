@@ -136,6 +136,12 @@ body {
   to   { transform: translateY(0); }
 }
 
+@keyframes pin-selected-pulse {
+  0%   { transform: scale(0.80); opacity: 1; }
+  60%  { transform: scale(1.50); opacity: 0; }
+  100% { transform: scale(1.50); opacity: 0; }
+}
+
 .mapboxgl-ctrl-attrib {
   background: rgba(255,253,247,0.78) !important;
   font-family: var(--font-outfit), sans-serif !important;

@@ -22,10 +22,10 @@ const WHITE = 'rgba(255,255,255,0.95)'
 // ── DA v2 Circular pins ───────────────────────────────────────────────────────
 // Score 5: gold circle + 8 rays (4 cardinal 0.6, 4 diag 0.4)
 // Score 4: gold circle + 4 cardinal rays 0.4
-// Score 3: gold circle 75% opacity, no rays
-// Score 2: navy 25% opacity, navy text
-// Score 1: navy 40% opacity, white text
-// Score 0: navy 70% opacity + moon icon
+// Score 3: gold circle, no rays
+// Score 2: navy 60% opacity, navy text
+// Score 1: navy 75% opacity, white text
+// Score 0: navy full opacity + moon icon
 function drawPinImage(score: number): { width: number; height: number; data: Uint8Array } {
   const W = 60, H = 60
   const canvas = document.createElement('canvas')
@@ -74,14 +74,12 @@ function drawPinImage(score: number): { width: number; height: number; data: Uin
   ctx.arc(CX, CY, R, 0, Math.PI * 2)
   if (score >= 3) {
     ctx.fillStyle = GOLD
-    ctx.globalAlpha = score === 3 ? 0.75 : 1.0
   } else if (score === 2) {
-    ctx.fillStyle = 'rgba(31,58,95,0.25)'
+    ctx.fillStyle = 'rgba(31,58,95,0.60)'
   } else if (score === 1) {
-    ctx.fillStyle = 'rgba(31,58,95,0.40)'
+    ctx.fillStyle = 'rgba(31,58,95,0.75)'
   } else {
     ctx.fillStyle = NAVY
-    ctx.globalAlpha = 0.70
   }
   ctx.fill()
   ctx.restore()
@@ -361,7 +359,7 @@ interface Props {
   onAmeniteSelect?: (amenite: AmeniteInfo | null) => void
 }
 
-export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes, onAmeniteSelect }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes, onAmeniteSelect, highlightPlaceId }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
@@ -371,6 +369,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
 
   // Sauvegarde la caméra avant le zoom focusPlace pour pouvoir revenir
   const returnCameraRef = useRef<{ center: [number, number]; zoom: number; pitch: number; bearing: number } | null>(null)
+  const selectedRingRef = useRef<mapboxgl.Marker | null>(null)
   const onAmeniteRef = useRef(onAmeniteSelect)
   onAmeniteRef.current = onAmeniteSelect
 
@@ -755,6 +754,31 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       padding:  { top: 0, bottom: 0, left: 0, right: 0 },
     })
   }, [homeView]) // eslint-disable-line
+
+  // ── Anneau animé autour du pin sélectionné ─────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    selectedRingRef.current?.remove()
+    selectedRingRef.current = null
+    if (!map || !highlightPlaceId) return
+
+    const place = placesRef.current.find(p => p.id === highlightPlaceId)
+    if (!place) return
+
+    // Anneau pulsant — cercle blanc + halo oré qui s'agrandit et disparaît
+    const el = document.createElement('div')
+    el.style.cssText = [
+      'width:58px', 'height:58px', 'border-radius:50%',
+      'border:3px solid rgba(255,255,255,0.92)',
+      'box-shadow:0 0 0 2.5px rgba(237,193,69,0.85), 0 0 18px rgba(237,193,69,0.40)',
+      'animation:pin-selected-pulse 1.7s ease-out infinite',
+      'pointer-events:none',
+    ].join(';')
+
+    selectedRingRef.current = new mapboxgl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([place.lng, place.lat])
+      .addTo(map)
+  }, [highlightPlaceId]) // eslint-disable-line
 
   // ── Soleil + ombres réalistes : suit `sunHour` heure par heure ────────
   // On utilise lat/lng du cinematicFocus (ou Paris par défaut) pour la
