@@ -301,21 +301,21 @@ export default function ProfilePanel({ onClose, onAuthChange }: Props) {
             borderRadius: '50%', background: 'rgba(237,193,69,0.14)', pointerEvents: 'none' }} />
           <div style={{ position: 'absolute', bottom: -20, left: -20, width: 90, height: 90,
             borderRadius: '50%', background: 'rgba(237,193,69,0.08)', pointerEvents: 'none' }} />
-          <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             {/* Logo HopSoleil */}
             <div style={{
-              width: 80, height: 80, borderRadius: '50%',
+              width: 88, height: 88, borderRadius: '50%',
               background: '#FFFFFF',
               boxShadow: '0 0 0 8px rgba(237,193,69,0.18), 0 12px 32px rgba(31,58,95,0.30)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 16px',
+              marginBottom: 16,
               overflow: 'hidden',
               flexShrink: 0,
             }}>
               <img
                 src="/logo-icon.png"
                 alt="HopSoleil"
-                style={{ width: '88%', height: '88%', objectFit: 'contain', display: 'block' }}
+                style={{ width: '100%', height: 'auto', display: 'block' }}
               />
             </div>
             <p style={{ margin: 0, fontFamily: 'var(--font-bricolage)', fontSize: 19, fontWeight: 900, color: '#fff', letterSpacing: '-0.03em' }}>
