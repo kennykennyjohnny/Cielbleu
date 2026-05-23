@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useCallback, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Star, X, Share2, Heart } from 'lucide-react'
+import { Star, X, Share2, Heart, Clock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { todayHoursLabel } from '@/lib/openingHours'
 import type { Place } from '@/types'
 
 // 3D map = client only, dynamic
@@ -197,6 +198,8 @@ export default function PlacePreview({ place, hour, onClose }: PlacePreviewProps
   const theme = SCORE_THEME[score] ?? SCORE_THEME[3]
   const rating = place.google_rating
   const priceLevel = place.price_level
+  const todayHours = todayHoursLabel(place.opening_hours as Record<string, unknown> | null | undefined, new Date().getDay())
+  const isClosed = todayHours ? /fermé/i.test(todayHours) : false
 
   // Indique si l'heure choisie est l'heure actuelle
   const isNow = useMemo(() => {
@@ -446,6 +449,49 @@ export default function PlacePreview({ place, hour, onClose }: PlacePreviewProps
                   </p>
                 </div>
               )}
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-3xl bg-white p-4 ring-1 ring-nuit/10 shadow-sm">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Note</p>
+                  <p className="mt-2 text-sm font-semibold text-nuit">{rating != null ? rating.toFixed(1) : '—'}</p>
+                </div>
+                <div className="rounded-3xl bg-white p-4 ring-1 ring-nuit/10 shadow-sm">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Prix</p>
+                  <p className="mt-2 text-sm font-semibold text-nuit">{priceLevel != null && priceLevel > 0 ? '€'.repeat(priceLevel) : '—'}</p>
+                </div>
+                <div className="rounded-3xl bg-white p-4 ring-1 ring-nuit/10 shadow-sm">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Quartier</p>
+                  <p className="mt-2 text-sm font-semibold text-nuit">{place.arrondissement != null ? `${place.arrondissement}${place.arrondissement === 1 ? 'er' : 'e'}` : '—'}</p>
+                </div>
+                <div className="rounded-3xl bg-white p-4 ring-1 ring-nuit/10 shadow-sm">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Type</p>
+                  <p className="mt-2 text-sm font-semibold text-nuit">{TYPE_LABEL[place.type] ?? place.type}</p>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <div className="rounded-3xl bg-white p-4 ring-1 ring-nuit/10 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Horaires aujourd'hui</p>
+                      {todayHours ? (
+                        <p className={`mt-2 text-sm font-semibold ${isClosed ? 'text-[#c44020]' : 'text-nuit'}`}>
+                          {todayHours}
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-sm font-semibold text-nuit">Non renseigné</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleOpenMaps}
+                      className="inline-flex items-center gap-2 rounded-full bg-nuit px-3 py-2 text-[12px] font-semibold text-creme transition hover:bg-nuit/95"
+                    >
+                      <Clock size={14} strokeWidth={2} />
+                      Voir
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               <div className="mt-5">
                 <div className="flex items-center justify-between gap-3">

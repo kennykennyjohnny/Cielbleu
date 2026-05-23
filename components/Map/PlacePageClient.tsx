@@ -9,27 +9,9 @@ import { todayHoursLabel } from '@/lib/openingHours'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const SCORE_LABEL: Record<number, string> = {
-  0: 'Nuit', 1: 'À l\u2019ombre', 2: 'Peu ensoleillé',
-  3: 'Ensoleillement', 4: 'Très lumineux', 5: 'Plein soleil',
-}
-
-const SCORE_SENTENCES: Record<number, string> = {
-  0: 'Nuit tombée — terrasse probablement fermée.',
-  1: 'La rue reste ombragée à cet horaire. Trop tôt ou trop tard.',
-  2: 'Mi-ombre pour l\u2019instant. Reste agréable avec une bière fraîche.',
-  3: 'Bon ensoleillement doux sur la terrasse.',
-  4: 'Très ensoleillée — profites-en, ça ne va pas durer !',
-  5: 'Plein soleil maintenant. C\u2019est le moment idéal.',
-}
-
 const TYPE_LABEL: Record<string, string> = {
   bar: 'Bar', restaurant: 'Restaurant', cafe: 'Café', park: 'Parc',
 }
-
-// Timeline bar height (px, inside 28px row) and colors by score 0..5
-const BAR_PX    = [4, 8, 12, 18, 24, 28]
-const BAR_COLORS = ['#102a4c', '#98a2b3', '#98a2b3', '#f77f00', '#ffd76a', '#ffb703']
 
 // ── Style constants ────────────────────────────────────────────────────────────
 
@@ -65,11 +47,6 @@ function halfHourToSlot(h: number): { slot: string; label: string; date: Date } 
   const d = new Date()
   d.setHours(hour, min, 0, 0)
   return { slot, label, date: d }
-}
-
-function nowHalfHour(): number {
-  const now = new Date()
-  return Math.max(6, Math.min(23.5, now.getHours() + (now.getMinutes() >= 30 ? 0.5 : 0)))
 }
 
 function fmtSlotStart(slot: string): string {
@@ -227,16 +204,6 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
     : `https://maps.google.com/?q=${place.lat},${place.lng}(${encodeURIComponent(place.name)})`
   const gmapsDirUrl = `https://maps.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}&travelmode=walking`
   const streetViewUrl = `https://maps.google.com/?cbll=${place.lat},${place.lng}&cbp=12,0,0,0,0&layer=c`
-
-  const sunSentence = SCORE_SENTENCES[currentScore] ?? ''
-
-  // Score badge colors (hero top)
-  const scoreBadgeStyle: React.CSSProperties =
-    currentScore >= 4
-      ? { background:'rgba(255,183,3,0.94)', color:'#0b1f3a', border:'1px solid rgba(255,255,255,0.72)' }
-      : currentScore >= 2
-        ? { background:'rgba(255,255,255,0.90)', color:'#0b1f3a', border:'1px solid rgba(20,32,51,0.12)' }
-        : { background:'rgba(10,25,42,0.88)',    color:'#a8c8e8', border:'1px solid rgba(255,255,255,0.12)' }
 
   const handleShare = useCallback(async () => {
     const url = `https://hopsoleil.fr/place/${place.id}`
