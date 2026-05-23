@@ -210,12 +210,6 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 z-30 bg-nuit/25 backdrop-blur-[2px]"
-        onClick={handleClose}
-      />
-
       {/* Sheet */}
       <div
         ref={sheetRef}
@@ -223,6 +217,7 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
         style={{
           transform: transformY,
           transition: 'transform 400ms cubic-bezier(0.32, 0.72, 0, 1)',
+          maxHeight: '92dvh',
         }}
       >
         <div className="mx-auto w-full sm:max-w-md sm:mb-3 sm:px-3">
@@ -307,29 +302,28 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
               </div>
 
               {/* ── Type + rating + price + arrondissement (peek) ────────── */}
-              <div className="flex items-center gap-1.5 flex-wrap mt-2.5 pb-3">
+              <div className="flex flex-wrap items-center gap-2 mt-3 pb-3 text-[11px]">
                 {place.has_terrace !== false && (
-                  <span className="flex items-center gap-1 rounded-full bg-[rgba(34,197,94,0.12)] px-2.5 py-0.5 text-[10px] font-outfit font-bold text-[#15803d] uppercase tracking-wide">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" />
+                  <span className="rounded-full bg-[rgba(34,197,94,0.12)] px-2.5 py-1 font-semibold text-[#15803d] uppercase tracking-[0.18em]">
                     Terrasse
                   </span>
                 )}
-                <span className="rounded-full bg-nuit/8 px-2.5 py-0.5 text-[10px] font-outfit font-semibold text-nuit uppercase tracking-wide">
+                <span className="rounded-full bg-nuit/8 px-2.5 py-1 font-semibold text-nuit uppercase tracking-[0.18em]">
                   {TYPE_LABEL[place.type] ?? place.type}
                 </span>
                 {rating != null && (
-                  <span className="flex items-center gap-0.5 text-[12px] font-outfit font-semibold text-nuit">
-                    <Star size={11} fill="#FFBE0B" stroke="#FFBE0B" />
+                  <span className="flex items-center gap-1 rounded-full bg-surface-1 px-2.5 py-1 font-semibold text-nuit">
+                    <Star size={12} fill="#FFBE0B" stroke="#FFBE0B" />
                     {rating.toFixed(1)}
                   </span>
                 )}
                 {priceLevel != null && priceLevel > 0 && (
-                  <span className="text-[12px] font-outfit font-medium text-gris">
-                    {'€'.repeat(priceLevel)}<span className="opacity-20">{'€'.repeat(4 - priceLevel)}</span>
+                  <span className="rounded-full bg-surface-1 px-2.5 py-1 font-semibold text-nuit">
+                    {'€'.repeat(priceLevel)}<span className="opacity-40">{'€'.repeat(4 - priceLevel)}</span>
                   </span>
                 )}
                 {place.arrondissement != null && (
-                  <span className="text-[12px] font-outfit text-gris">
+                  <span className="rounded-full bg-surface-1 px-2.5 py-1 font-semibold text-nuit uppercase tracking-[0.18em]">
                     {place.arrondissement}<sup>{place.arrondissement === 1 ? 'er' : 'e'}</sup>
                   </span>
                 )}
