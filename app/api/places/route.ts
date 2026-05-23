@@ -51,47 +51,49 @@ export async function GET(req: Request) {
     ?? `${String(now.getHours()).padStart(2, '0')}:${now.getMinutes() < 30 ? '00' : '30'}`
 
   const sb = getSupabase()
-
-  // ── Pagination serveur : tous les lieux Paris intramuros ─────────────────────
-  // Depuis cdg1 (Paris), chaque page Supabase ≈ 3-5 ms.
-  // ~13 400 lieux Paris / 1000 = ~14 pages × 5 ms = ~70 ms total.
   const PAGE = 1000
-  let from = 0
-  const allPlaces: PlaceSlim[] = []
 
-  // Lance les scores en parallèle dès le début (on n'attend pas les places)
-  const scoresPromise = sb
-    .from('sun_scores').select('place_id,score')
-    .eq('month', month).eq('time_slot', slot)
-
-  while (from < 25000) {  // sécurité : max 25 000 lieux
-    const { data, error } = await sb
-      .from('places').select(SLIM)
+  // Filtre géographique réutilisé pour chaque page
+  function pageQuery(from: number, withCount = false) {
+    const q = sb.from('places').select(SLIM, withCount ? { count: 'exact' } : undefined)
       .gte('lat', BBOX.latMin).lte('lat', BBOX.latMax)
       .gte('lng', BBOX.lngMin).lte('lng', BBOX.lngMax)
-      .range(from, from + PAGE - 1)
-
-    if (error || !data?.length) break
-    allPlaces.push(...(data as unknown as PlaceSlim[]))
-    if (data.length < PAGE) break
-    from += PAGE
+    return q.range(from, from + PAGE - 1)
   }
 
-  // Récupère les scores (requête lancée en parallèle dès le début)
-  const { data: scoreRows } = await scoresPromise
-  const scoreMap = new Map<string, number>(
-    ((scoreRows ?? []) as ScoreRow[]).map(r => [r.place_id, r.score])
-  )
+  // ── Étape 1 : scores + page 0 avec count exact — en parallèle ────────────────
+  const [scoresRes, page0Res] = await Promise.all([
+    sb.from('sun_scores').select('place_id,score').eq('month', month).eq('time_slot', slot),
+    pageQuery(0, true),
+  ])
 
-  if (allPlaces.length === 0) {
-    console.error('[/api/places] Aucun lieu retourné. Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 30))
+  const { data: page0, count } = page0Res
+  if (!page0?.length) {
+    console.error('[/api/places] Page 0 vide. URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 30))
     return NextResponse.json([], { status: 200 })
   }
 
-  const places = allPlaces.map(p => ({
-    ...p,
-    currentScore: scoreMap.get(p.id) ?? 3,
-  }))
+  // ── Étape 2 : pages restantes toutes en parallèle ─────────────────────────────
+  // count exact dispo → on sait exactement combien de pages lancer d'un coup.
+  // ~13 400 lieux / 1000 ≈ 14 pages → toutes fetched en 1 round-trip (~5 ms)
+  // au lieu de 14 round-trips séquentiels (~70 ms) : ×7 plus rapide.
+  const totalPages = Math.min(Math.ceil((count ?? 20000) / PAGE), 25)
+  const restPages = totalPages > 1
+    ? await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, i) => pageQuery((i + 1) * PAGE))
+      )
+    : []
+
+  const allPlaces: PlaceSlim[] = [
+    ...(page0 as unknown as PlaceSlim[]),
+    ...restPages.flatMap(r => (r.data ?? []) as unknown as PlaceSlim[]),
+  ]
+
+  const scoreMap = new Map<string, number>(
+    ((scoresRes.data ?? []) as ScoreRow[]).map(r => [r.place_id, r.score])
+  )
+
+  const places = allPlaces.map(p => ({ ...p, currentScore: scoreMap.get(p.id) ?? 3 }))
 
   return NextResponse.json(places, {
     headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' },

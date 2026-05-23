@@ -6,15 +6,20 @@ import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
 import type { Place } from '@/types'
 
-// ── Snap levels ───────────────────────────────────────────────────────────────
-// N = pixels visibles depuis le bas (handle + peek + action bar + contenu)
-// max() garantit qu'on ne dépasse pas le haut de l'écran sur petits devices
-const SNAP_Y: Record<1 | 2 | 3 | 4 | 5, string> = {
-  1: 'calc(92dvh - 180px)',                    // peek seul (badges + nom + barre)
-  2: 'calc(max(92dvh - 300px, 20dvh))',        // + score block  — 75% carte visible
-  3: 'calc(max(92dvh - 430px, 14dvh))',        // + stats + horaires — 50/50
-  4: 'calc(max(92dvh - 565px,  7dvh))',        // + avis — 25% carte visible
-  5: '0px',                                    // plein écran
+// ── Snap levels (10 niveaux) ──────────────────────────────────────────────────
+// N = pixels visibles depuis le bas. max() protège les petits écrans.
+// Entrée par défaut au niveau 3 (~320px visible).
+const SNAP_Y: Record<1|2|3|4|5|6|7|8|9|10, string> = {
+  1:  'calc(92dvh - 160px)',                   // peek minimal
+  2:  'calc(max(92dvh - 240px, 22dvh))',       // + adresse
+  3:  'calc(max(92dvh - 320px, 18dvh))',       // + score — défaut entrée
+  4:  'calc(max(92dvh - 400px, 14dvh))',       // + stats
+  5:  'calc(max(92dvh - 475px, 11dvh))',       // + horaires
+  6:  'calc(max(92dvh - 545px,  8dvh))',       // + début avis
+  7:  'calc(max(92dvh - 615px,  5dvh))',       // + avis complets
+  8:  'calc(max(92dvh - 685px,  3dvh))',       // + photos
+  9:  'calc(max(92dvh - 750px,  2dvh))',       // + community
+  10: '0px',                                   // plein écran
 }
 
 // ── Style constants (palette CielBleu — identique PlacePageClient) ────────────
@@ -99,9 +104,10 @@ interface PlacePreviewProps {
 export default function PlacePreview({ place, hour, onClose, userId = null, onOpenProfile }: PlacePreviewProps) {
 
   // ── Snap ─────────────────────────────────────────────────────────────────
-  const [snap, setSnap] = useState<1 | 2 | 3 | 4 | 5>(2)
+  type SnapLevel = 1|2|3|4|5|6|7|8|9|10
+  const [snap, setSnap] = useState<SnapLevel>(3)
   const [transformY, setTransformY] = useState('translateY(100%)')
-  const snapRef = useRef<1 | 2 | 3 | 4 | 5>(2)
+  const snapRef = useRef<SnapLevel>(3)
   const sheetRef = useRef<HTMLDivElement>(null)
   const dragState = useRef({ startY: 0, currentY: 0, dragging: false, startTime: 0 })
 
@@ -137,7 +143,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
   // ── Entry animation ───────────────────────────────────────────────────────
   useEffect(() => {
-    const id = requestAnimationFrame(() => setTransformY(`translateY(${SNAP_Y[2]})`))
+    const id = requestAnimationFrame(() => setTransformY(`translateY(${SNAP_Y[3]})`))
     return () => cancelAnimationFrame(id)
   }, [place.id])
 
@@ -295,7 +301,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   }, [userId, commentText, place.id, deviceId, reviewPhotos, reviewPhotoUrls, loadReviews])
 
   // ── Snap helpers ──────────────────────────────────────────────────────────
-  const snapTo = useCallback((target: 1 | 2 | 3 | 4 | 5) => {
+  const snapTo = useCallback((target: SnapLevel) => {
     snapRef.current = target; setSnap(target)
     setTransformY(`translateY(${SNAP_Y[target]})`)
   }, [])
@@ -328,20 +334,23 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
     const cur = snapRef.current
     const vH = typeof window !== 'undefined' ? window.innerHeight * 0.92 : 800
-    const px: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 180, 2: 300, 3: 430, 4: 565, 5: vH }
+    const px: Record<SnapLevel, number> = {
+      1: 160, 2: 240, 3: 320, 4: 400, 5: 475,
+      6: 545, 7: 615, 8: 685, 9: 750, 10: vH,
+    }
 
     // Swipe rapide vers le bas depuis snap 1 → fermer
     if (cur === 1 && (velocity > 0.5 || delta > 110)) { handleClose(); return }
 
     // Pixels visibles actuels + projection par momentum (200 ms)
-    const visibleNow = (px[cur] ?? 300) - delta
+    const visibleNow = (px[cur] ?? 320) - delta
     const projected  = visibleNow - velocity * 200
 
     let nearest = cur
     let minDist = Infinity
     for (const [k, val] of Object.entries(px) as [string, number][]) {
       const dist = Math.abs(val - projected)
-      if (dist < minDist) { minDist = dist; nearest = parseInt(k) as 1 | 2 | 3 | 4 | 5 }
+      if (dist < minDist) { minDist = dist; nearest = parseInt(k) as SnapLevel }
     }
     snapTo(nearest)
   }, [handleClose, snapTo])
@@ -373,33 +382,21 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
               onTouchEnd={handleTouchEnd}
               style={{ flexShrink: 0, touchAction: 'none', userSelect: 'none', cursor: 'grab' }}
             >
-              {/* Drag handle + dots indicateurs */}
+              {/* Drag handle */}
               <div
                 role="button" tabIndex={0} aria-label="Glisser pour agrandir ou réduire"
-                className="flex flex-col items-center pt-3 pb-2 select-none"
-                style={{ gap: 6 }}
+                className="flex items-center justify-center pt-3 pb-2 select-none"
                 onKeyDown={e => {
-                  if (e.key === 'ArrowUp') snapTo(Math.min(5, snap + 1) as 1 | 2 | 3 | 4 | 5)
-                  if (e.key === 'ArrowDown') snap === 1 ? handleClose() : snapTo((snap - 1) as 1 | 2 | 3 | 4 | 5)
+                  if (e.key === 'ArrowUp') snapTo(Math.min(10, snap + 1) as SnapLevel)
+                  if (e.key === 'ArrowDown') snap === 1 ? handleClose() : snapTo((snap - 1) as SnapLevel)
                 }}
               >
                 <div style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(11,31,58,0.18)' }} />
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} aria-hidden="true">
-                  {([1, 2, 3, 4, 5] as const).map(s => (
-                    <div key={s} style={{
-                      height: 4, borderRadius: 999,
-                      width: s === snap ? 14 : 4,
-                      background: s === snap ? 'rgba(11,31,58,0.50)' : 'rgba(11,31,58,0.14)',
-                      transition: 'width 220ms cubic-bezier(0.34,1.56,0.64,1), background 220ms',
-                    }} />
-                  ))}
-                </div>
               </div>
 
-              {/* Close button — curseur normal, stop propagation du drag */}
+              {/* Close button */}
               <button
                 onClick={handleClose}
-                onTouchStart={e => e.stopPropagation()}
                 aria-label="Fermer"
                 className="absolute top-3 right-4 z-20"
                 style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'rgba(20,32,51,0.08)', color: '#0b1f3a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'manipulation' }}
@@ -441,7 +438,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 38px 38px', gap: 7 }}>
                   <button
                     onClick={() => window.open(gmapsUrl, '_blank')}
-                    onTouchStart={e => e.stopPropagation()}
+
                     aria-label="Ouvrir dans Google Maps"
                     style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(31,58,95,0.22)' }}>
                     <svg width={12} height={12} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
@@ -452,14 +449,14 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                   </button>
                   <button
                     onClick={() => window.open(gmapsDirUrl, '_blank')}
-                    onTouchStart={e => e.stopPropagation()}
+
                     aria-label="Y aller"
                     style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(237,193,69,0.26)' }}>
                     📍&nbsp;Y aller
                   </button>
                   <button
                     onClick={handleToggleFavorite}
-                    onTouchStart={e => e.stopPropagation()}
+
                     aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} aria-pressed={isFavorite}
                     style={{ height: 38, borderRadius: 12, border: `1px solid ${isFavorite ? 'rgba(237,99,99,0.25)' : 'rgba(20,32,51,0.12)'}`, background: isFavorite ? 'rgba(255,99,99,0.16)' : 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1, touchAction: 'manipulation' }}>
                     <Heart size={14} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
@@ -467,7 +464,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                   </button>
                   <button
                     onClick={handleShare}
-                    onTouchStart={e => e.stopPropagation()}
+
                     aria-label="Partager ce lieu"
                     style={{ height: 38, borderRadius: 12, border: '1px solid rgba(20,32,51,0.12)', background: 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b1f3a', touchAction: 'manipulation' }}>
                     <Share2 size={13} strokeWidth={2.2} />
