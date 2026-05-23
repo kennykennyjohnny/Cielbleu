@@ -272,30 +272,30 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                   aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                   aria-pressed={isFavorite}
                   className={[
-                    'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl',
-                    'text-[11px] font-outfit font-semibold transition-colors touch-manipulation min-h-[36px]',
+                    'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border transition-colors touch-manipulation min-h-[42px]',
+                    'text-sm font-outfit font-semibold',
                     isFavorite
-                      ? 'bg-[rgba(255,107,107,0.12)] text-corail'
-                      : 'bg-nuit/5 text-nuit/55',
+                      ? 'bg-[rgba(255,107,107,0.14)] border-corail/20 text-corail'
+                      : 'bg-white border-nuit/10 text-nuit/80',
                   ].join(' ')}
                 >
-                  <Heart size={14} fill={isFavorite ? 'currentColor' : 'none'} strokeWidth={2} />
+                  <Heart size={15} fill={isFavorite ? 'currentColor' : 'none'} strokeWidth={2} />
                   <span>Favoris</span>
                 </button>
 
                 <button
                   onClick={handleShare}
                   aria-label="Partager cette terrasse"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-nuit/5 text-nuit/55 text-[11px] font-outfit font-semibold touch-manipulation active:bg-nuit/10 transition-colors min-h-[36px]"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-surface-1 border border-nuit/10 text-nuit/80 text-sm font-outfit font-semibold touch-manipulation active:bg-nuit/5 transition-colors min-h-[42px]"
                 >
-                  <Share2 size={14} strokeWidth={2} />
+                  <Share2 size={15} strokeWidth={2} />
                   <span>Partager</span>
                 </button>
 
                 <button
                   onClick={handleOpenMaps}
                   aria-label="Ouvrir dans Google Maps"
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-nuit/5 text-nuit/55 text-[11px] font-outfit font-semibold touch-manipulation active:bg-nuit/10 transition-colors min-h-[36px]"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-nuit text-creme text-sm font-outfit font-semibold touch-manipulation active:bg-nuit/90 transition-colors min-h-[42px]"
                 >
                   <svg width={14} height={14} viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
@@ -357,17 +357,17 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                         {SCORE_LABEL[score]}
                       </p>
                     </div>
-                    <div className="flex gap-0.5 items-end shrink-0">
+                    <div className={`flex gap-0.5 items-end shrink-0 ${theme.text}`}>
                       {[1, 2, 3, 4, 5].map((i) => (
                         <span
                           key={i}
-                          className="w-1.5 rounded-full"
+                          className={[
+                            'w-1.5 rounded-full transition-all duration-200',
+                            i <= score ? 'bg-current' : 'border border-current bg-transparent',
+                          ].join(' ')}
                           style={{
                             height: `${10 + i * 2.5}px`,
-                            backgroundColor: i <= score ? 'currentColor' : 'transparent',
-                            border: i > score ? '1px solid currentColor' : 'none',
-                            opacity: i <= score ? 0.9 : 0.2,
-                            color: theme.text.replace('text-', 'var(--color-'),
+                            opacity: i <= score ? 0.9 : 0.18,
                           }}
                         />
                       ))}
@@ -406,7 +406,7 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                             'rounded-full px-3 py-1.5 transition-colors touch-manipulation font-medium',
                             Math.floor(hour) === h
                               ? 'bg-nuit text-creme font-semibold'
-                              : 'bg-nuit/5 text-nuit/60',
+                              : 'bg-nuit/5 text-nuit/70',
                           ].join(' ')}
                         >
                           {h}h
@@ -422,6 +422,35 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                   </p>
                 </div>
               )}
+
+              <div className="mt-5 space-y-3">
+                <div className="rounded-3xl bg-surface-1 p-4 ring-1 ring-nuit/10 shadow-sm">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Infos rapides</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-nuit">
+                    <div className="rounded-3xl bg-white p-3 border border-nuit/10">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-gris">Note</p>
+                      <p className="mt-2 font-semibold">{rating != null ? rating.toFixed(1) : '—'}</p>
+                    </div>
+                    <div className="rounded-3xl bg-white p-3 border border-nuit/10">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-gris">Prix</p>
+                      <p className="mt-2 font-semibold">{priceLevel != null && priceLevel > 0 ? '€'.repeat(priceLevel) : '—'}</p>
+                    </div>
+                    <div className="rounded-3xl bg-white p-3 border border-nuit/10">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-gris">Quartier</p>
+                      <p className="mt-2 font-semibold">{place.arrondissement != null ? `${place.arrondissement}${place.arrondissement === 1 ? 'er' : 'e'}` : '—'}</p>
+                    </div>
+                    <div className="rounded-3xl bg-white p-3 border border-nuit/10">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-gris">Type</p>
+                      <p className="mt-2 font-semibold">{TYPE_LABEL[place.type] ?? place.type}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl bg-white p-4 ring-1 ring-nuit/10 shadow-sm">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Adresse</p>
+                  <p className="mt-2 text-sm font-semibold text-nuit leading-tight">{place.address}</p>
+                </div>
+              </div>
 
               {/* Vue 3D — uniquement en mode plein écran */}
               {snap === 3 && (
