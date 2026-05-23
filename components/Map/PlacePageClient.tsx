@@ -140,7 +140,16 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
   // ── Review photos state ─────────────────────────────────────────────────────
   const [reviewPhotos, setReviewPhotos]       = useState<File[]>([])
   const [reviewPhotoUrls, setReviewPhotoUrls] = useState<string[]>([])
+  const [lightboxPhoto, setLightboxPhoto]     = useState<{ url: string; caption?: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const openLightbox = useCallback((url: string, caption?: string) => {
+    setLightboxPhoto({ url, caption })
+  }, [])
+
+  const closeLightbox = useCallback(() => {
+    setLightboxPhoto(null)
+  }, [])
 
   // ── Favorites state ─────────────────────────────────────────────────────────
   const [isFavorite, setIsFavorite]   = useState(false)
@@ -207,6 +216,27 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     return place.photos.map(extractPhotoRef).filter((r): r is string => r !== null)
   }, [place.photos])
 
+  const reviewPhotoItems = useMemo(() => {
+    return reviews.flatMap((r) =>
+      (r.photos ?? []).map((photoUrl, pi) => ({
+        id: `review-${r.id}-${pi}`,
+        url: photoUrl,
+        type: 'review' as const,
+        caption: r.comment ? `${r.display_name}: ${r.comment}` : `${r.display_name} — Photo HopSoleil`,
+      }))
+    )
+  }, [reviews])
+
+  const galleryItems = useMemo(() => [
+    ...photoRefs.map((ref, i) => ({
+      id: `google-${i}`,
+      url: `/api/photo?ref=${encodeURIComponent(ref)}&w=1200`,
+      type: 'google' as const,
+      caption: 'Photo Google Maps',
+    })),
+    ...reviewPhotoItems,
+  ], [photoRefs, reviewPhotoItems])
+
   const ordinal = place.arrondissement === 1 ? 'er' : 'e'
 
   // URLs Google Maps — maps.google.com = Universal Link iOS/Android → ouvre l'appli
@@ -253,11 +283,15 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
       .from('reviews')
       .select('id, comment, created_at, user_id, photos')
       .eq('place_id', place.id)
-      .not('comment', 'is', null)
-      .neq('comment', '')
       .order('created_at', { ascending: false })
-      .limit(10)
+      .limit(20)
     if (error || !data) return
+
+    const filtered = data.filter(r => {
+      const hasComment = typeof r.comment === 'string' && r.comment.trim() !== ''
+      const hasPhotos = Array.isArray(r.photos) && r.photos.length > 0
+      return hasComment || hasPhotos
+    })
 
     // Batch-fetch display_names (profiles lisibles par tous)
     const userIds = [...new Set(data.filter(r => r.user_id).map(r => r.user_id as string))]
@@ -272,7 +306,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
       }
     }
 
-    setReviews(data.map(r => ({
+    setReviews(filtered.map(r => ({
       id: r.id,
       comment: r.comment,
       created_at: r.created_at,
@@ -298,7 +332,12 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
 
   const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!userId || !commentText.trim()) return
+    if (!userId || (!commentText.trim() && reviewPhotos.length === 0)) {
+      if (!commentText.trim() && reviewPhotos.length === 0) {
+        setCommentError('Ajoute un avis ou une photo avant de publier.')
+      }
+      return
+    }
     setCommentSending(true)
     setCommentError(null)
 
@@ -320,7 +359,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
       user_id:  userId,
       device_id: deviceId,
       rating: 4,
-      comment: commentText.trim(),
+      comment: commentText.trim() || null,
       is_anonymous: false,
       photos: uploadedUrls,
     })
@@ -584,14 +623,21 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                     </div>
                     <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#1F3A5F', lineHeight:1.55,
                       borderLeft:'3px solid rgba(237,193,69,0.55)', paddingLeft:10 }}>
-                      {r.comment}
+                      {r.comment ?? 'Photo partagée depuis HopSoleil'}
                     </p>
                     {r.photos && r.photos.length > 0 && (
                       <div style={{ display:'flex', gap:6, marginTop:10, flexWrap:'wrap' }}>
                         {r.photos.map((photoUrl, pi) => (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img key={pi} src={photoUrl} alt=""
-                            style={{ width:80, height:62, borderRadius:8, objectFit:'cover', display:'block' }} />
+                          <button
+                            key={pi}
+                            type="button"
+                            onClick={() => openLightbox(photoUrl, r.comment ? `${r.display_name}: ${r.comment}` : `${r.display_name} — Photo HopSoleil`)}
+                            style={{ width:80, height:62, borderRadius:8, overflow:'hidden', border:'none', padding:0, background:'none', cursor:'pointer' }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={photoUrl} alt={r.comment ?? 'Photo HopSoleil'}
+                              style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                          </button>
                         ))}
                       </div>
                     )}
@@ -634,23 +680,43 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         })()}
 
         {/* ── PHOTOS ── */}
-        {photoRefs.length > 0 && (
+        {galleryItems.length > 0 && (
           <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
             <p style={{ ...EYEBROW, marginBottom:10 }}>Photos</p>
             <div className="scrollbar-none"
-              style={{ display:'flex', gap:8, overflowX:'auto', scrollSnapType:'x mandatory' }}>
-              {photoRefs.map((ref, i) => (
-                <div key={i} style={{ flexShrink:0, borderRadius:16, overflow:'hidden',
-                  width:i===0?240:170, height:i===0?156:116, scrollSnapAlign:'start',
-                  boxShadow:'0 6px 20px rgba(11,31,58,0.14)' }}>
+              style={{ display:'flex', gap:8, overflowX:'auto', scrollSnapType:'x mandatory', paddingBottom:4 }}>
+              {galleryItems.map((item, i) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => openLightbox(item.url, item.caption)}
+                  style={{
+                    flexShrink:0,
+                    borderRadius:16,
+                    overflow:'hidden',
+                    width:i===0?240:170,
+                    height:i===0?156:116,
+                    scrollSnapAlign:'start',
+                    boxShadow:'0 6px 20px rgba(11,31,58,0.14)',
+                    border:'none',
+                    padding:0,
+                    background:'none',
+                    cursor:'pointer',
+                    position:'relative',
+                  }}
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/api/photo?ref=${encodeURIComponent(ref)}&w=600`}
-                    alt={`${place.name} — photo ${i + 1}`}
+                    src={item.url}
+                    alt={item.caption ?? `${place.name} — photo`}
                     style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
                     loading={i === 0 ? 'eager' : 'lazy'}
                   />
-                </div>
+                  <div style={{ position:'absolute', left:10, bottom:10, padding:'4px 8px', borderRadius:999,
+                    background:'rgba(0,0,0,0.55)', color:'#fff', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+                    {item.type === 'review' ? 'HopSoleil' : 'Google'}
+                  </div>
+                </button>
               ))}
             </div>
           </div>
@@ -862,12 +928,12 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
 
                   <button
                     type="submit"
-                    disabled={commentSending || !commentText.trim()}
+                    disabled={commentSending || (!commentText.trim() && reviewPhotos.length === 0)}
                     style={{
                       height:42, borderRadius:12, border:'none', cursor:'pointer',
                       fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:13,
-                      background: commentText.trim() ? '#1F3A5F' : 'rgba(31,58,95,0.08)',
-                      color: commentText.trim() ? '#fff' : 'rgba(31,58,95,0.35)',
+                      background: (commentText.trim() || reviewPhotos.length > 0) ? '#1F3A5F' : 'rgba(31,58,95,0.08)',
+                      color: (commentText.trim() || reviewPhotos.length > 0) ? '#fff' : 'rgba(31,58,95,0.35)',
                       transition:'all 150ms',
                     }}
                   >
@@ -898,6 +964,43 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
 
       </div>
       </div>{/* /scroll-wrapper */}
+
+      {lightboxPhoto && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={closeLightbox}
+          style={{
+            position:'fixed', inset:0, zIndex:60,
+            background:'rgba(11,31,58,0.72)', display:'flex', alignItems:'center', justifyContent:'center', padding:20,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{ position:'relative', width:'100%', maxWidth:960, maxHeight:'90vh', borderRadius:24, overflow:'hidden', background:'#0b1f3a' }}
+          >
+            <button
+              type="button"
+              onClick={closeLightbox}
+              style={{ position:'absolute', top:14, right:14, zIndex:10,
+                width:38, height:38, borderRadius:999, border:'none', background:'rgba(255,255,255,0.18)', color:'#fff', cursor:'pointer', fontSize:18 }}
+              aria-label="Fermer l'aperçu photo"
+            >
+              ×
+            </button>
+            <img
+              src={lightboxPhoto.url}
+              alt={lightboxPhoto.caption ?? 'Photo agrandie'}
+              style={{ width:'100%', height:'auto', maxHeight:'82vh', objectFit:'contain', display:'block', background:'#111' }}
+            />
+            {lightboxPhoto.caption && (
+              <div style={{ padding:'14px 18px', color:'#fff', fontSize:13, lineHeight:1.5, background:'rgba(0,0,0,0.35)' }}>
+                {lightboxPhoto.caption}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Vote toast */}
       {voteToast && (
