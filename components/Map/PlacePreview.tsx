@@ -362,20 +362,51 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
             {/* ── PEEK ZONE ─────────────────────────────────────────────────── */}
             <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
-              {/* Badges */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                {isSunny && sunWindow && (
-                  <span style={{ ...MINI_BADGE, background: '#fff1b8', color: '#5c3d00' }}>
-                    ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
+              {/* Badges + actions rapides sur la même ligne */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, paddingRight: 40 }}>
+                {/* Badges */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, flex: 1, minWidth: 0 }}>
+                  {isSunny && sunWindow && (
+                    <span style={{ ...MINI_BADGE, background: '#fff1b8', color: '#5c3d00' }}>
+                      ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
+                    </span>
+                  )}
+                  {place.has_terrace !== false && (
+                    <span style={{ ...MINI_BADGE, background: 'rgba(79,143,101,0.10)', color: '#3d8554' }}>● Terrasse</span>
+                  )}
+                  <span style={MINI_BADGE}>
+                    {TYPE_LABEL[place.type] ?? place.type}
+                    {place.arrondissement != null && ` · ${place.arrondissement}${ordinal}`}
                   </span>
-                )}
-                {place.has_terrace !== false && (
-                  <span style={{ ...MINI_BADGE, background: 'rgba(79,143,101,0.10)', color: '#3d8554' }}>● Terrasse</span>
-                )}
-                <span style={MINI_BADGE}>
-                  {TYPE_LABEL[place.type] ?? place.type}
-                  {place.arrondissement != null && ` · ${place.arrondissement}${ordinal}`}
-                </span>
+                </div>
+                {/* Actions rapides : ♥ Maps Share */}
+                <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                  <button
+                    onClick={handleToggleFavorite}
+                    aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    aria-pressed={isFavorite}
+                    style={{ width: 30, height: 30, borderRadius: '50%', border: `1.5px solid ${isFavorite ? 'rgba(210,45,61,0.30)' : 'rgba(20,32,51,0.14)'}`, background: isFavorite ? 'rgba(210,45,61,0.10)' : 'rgba(255,255,255,0.90)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                  >
+                    <Heart size={13} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
+                  </button>
+                  <button
+                    onClick={() => { window.location.href = gmapsUrl }}
+                    aria-label="Ouvrir dans Google Maps"
+                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid rgba(20,32,51,0.14)', background: 'rgba(255,255,255,0.90)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                  >
+                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+                      <circle cx="12" cy="9" r="2.5" fill="white"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={handleShare}
+                    aria-label="Partager ce lieu"
+                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid rgba(20,32,51,0.14)', background: 'rgba(255,255,255,0.90)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#1F3A5F' }}
+                  >
+                    <Share2 size={12} strokeWidth={2.3} />
+                  </button>
+                </div>
               </div>
               {/* Name */}
               <h2 style={{ margin: 0, fontFamily: 'var(--font-playfair)', fontWeight: 700, fontSize: 'clamp(20px,6vw,26px)', lineHeight: 1.05, letterSpacing: '-0.03em', color: '#0b1f3a', paddingRight: 44 }}>
