@@ -7,11 +7,14 @@ import { todayHoursLabel } from '@/lib/openingHours'
 import type { Place } from '@/types'
 
 // ── Snap levels ───────────────────────────────────────────────────────────────
-// Montre les N premiers px du card depuis le haut (handle + peek + action bar)
-const SNAP_Y: Record<1 | 2 | 3, string> = {
-  1: 'calc(92dvh - 200px)',  // peek : handle + badges + nom + adresse + barre
-  2: 'calc(max(92dvh - 620px, 8dvh))',  // demi-ouvert : +420px de contenu visible
-  3: '0px',                              // plein écran
+// N = pixels visibles depuis le bas (handle + peek + action bar + contenu)
+// max() garantit qu'on ne dépasse pas le haut de l'écran sur petits devices
+const SNAP_Y: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: 'calc(92dvh - 180px)',                    // peek seul (badges + nom + barre)
+  2: 'calc(max(92dvh - 300px, 20dvh))',        // + score block  — 75% carte visible
+  3: 'calc(max(92dvh - 430px, 14dvh))',        // + stats + horaires — 50/50
+  4: 'calc(max(92dvh - 565px,  7dvh))',        // + avis — 25% carte visible
+  5: '0px',                                    // plein écran
 }
 
 // ── Style constants (palette CielBleu — identique PlacePageClient) ────────────
@@ -96,9 +99,9 @@ interface PlacePreviewProps {
 export default function PlacePreview({ place, hour, onClose, userId = null, onOpenProfile }: PlacePreviewProps) {
 
   // ── Snap ─────────────────────────────────────────────────────────────────
-  const [snap, setSnap] = useState<1 | 2 | 3>(2)
+  const [snap, setSnap] = useState<1 | 2 | 3 | 4 | 5>(2)
   const [transformY, setTransformY] = useState('translateY(100%)')
-  const snapRef = useRef<1 | 2 | 3>(2)
+  const snapRef = useRef<1 | 2 | 3 | 4 | 5>(2)
   const sheetRef = useRef<HTMLDivElement>(null)
   const dragState = useRef({ startY: 0, currentY: 0, dragging: false })
 
@@ -292,7 +295,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   }, [userId, commentText, place.id, deviceId, reviewPhotos, reviewPhotoUrls, loadReviews])
 
   // ── Snap helpers ──────────────────────────────────────────────────────────
-  const snapTo = useCallback((target: 1 | 2 | 3) => {
+  const snapTo = useCallback((target: 1 | 2 | 3 | 4 | 5) => {
     snapRef.current = target; setSnap(target)
     setTransformY(`translateY(${SNAP_Y[target]})`)
   }, [])
@@ -317,8 +320,8 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
     dragState.current.dragging = false
     const delta = dragState.current.currentY
     const cur = snapRef.current
-    if (delta < -60) snapTo(Math.min(3, cur + 1) as 1 | 2 | 3)
-    else if (delta > 80) { if (cur === 1) handleClose(); else snapTo((cur - 1) as 1 | 2 | 3) }
+    if (delta < -50) snapTo(Math.min(5, cur + 1) as 1 | 2 | 3 | 4 | 5)
+    else if (delta > 60) { if (cur === 1) handleClose(); else snapTo((cur - 1) as 1 | 2 | 3 | 4 | 5) }
     else snapTo(cur)
   }
 
@@ -343,14 +346,27 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             {/* ── Drag handle ──────────────────────────────────────────────── */}
             <div
               role="button" tabIndex={0} aria-label="Glisser pour agrandir ou réduire"
-              className="flex justify-center pt-3 pb-2 shrink-0 touch-none select-none cursor-grab"
+              className="flex flex-col items-center pt-3 pb-2 shrink-0 touch-none select-none cursor-grab"
+              style={{ gap: 6 }}
               onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
               onKeyDown={e => {
-                if (e.key === 'ArrowUp') snapTo(Math.min(3, snap + 1) as 1 | 2 | 3)
-                if (e.key === 'ArrowDown') snap === 1 ? handleClose() : snapTo((snap - 1) as 1 | 2 | 3)
+                if (e.key === 'ArrowUp') snapTo(Math.min(5, snap + 1) as 1 | 2 | 3 | 4 | 5)
+                if (e.key === 'ArrowDown') snap === 1 ? handleClose() : snapTo((snap - 1) as 1 | 2 | 3 | 4 | 5)
               }}
             >
+              {/* Barre principale */}
               <div style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(11,31,58,0.18)' }} />
+              {/* Dots indicateurs de niveau */}
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} aria-hidden="true">
+                {([1, 2, 3, 4, 5] as const).map(s => (
+                  <div key={s} style={{
+                    height: 4, borderRadius: 999,
+                    width: s === snap ? 14 : 4,
+                    background: s === snap ? 'rgba(11,31,58,0.50)' : 'rgba(11,31,58,0.14)',
+                    transition: 'width 220ms cubic-bezier(0.34,1.56,0.64,1), background 220ms',
+                  }} />
+                ))}
+              </div>
             </div>
 
             {/* Close button */}
