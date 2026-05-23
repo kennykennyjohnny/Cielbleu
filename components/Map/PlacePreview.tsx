@@ -9,9 +9,9 @@ import type { Place } from '@/types'
 // ── Snap levels ───────────────────────────────────────────────────────────────
 // Montre les N premiers px du card depuis le haut (handle + peek + action bar)
 const SNAP_Y: Record<1 | 2 | 3, string> = {
-  1: 'calc(92dvh - 212px)',  // handle + peek + barre d'action
-  2: 'calc(max(92dvh - 490px, 20dvh))',  // + ~280px de contenu
-  3: '0px',                // plein écran
+  1: 'calc(92dvh - 200px)',  // peek : handle + badges + nom + adresse + barre
+  2: 'calc(max(92dvh - 620px, 8dvh))',  // demi-ouvert : +420px de contenu visible
+  3: '0px',                              // plein écran
 }
 
 // ── Style constants (palette CielBleu — identique PlacePageClient) ────────────
@@ -362,51 +362,20 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
             {/* ── PEEK ZONE ─────────────────────────────────────────────────── */}
             <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
-              {/* Badges + actions rapides sur la même ligne */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, paddingRight: 40 }}>
-                {/* Badges */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, flex: 1, minWidth: 0 }}>
-                  {isSunny && sunWindow && (
-                    <span style={{ ...MINI_BADGE, background: '#fff1b8', color: '#5c3d00' }}>
-                      ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
-                    </span>
-                  )}
-                  {place.has_terrace !== false && (
-                    <span style={{ ...MINI_BADGE, background: 'rgba(79,143,101,0.10)', color: '#3d8554' }}>● Terrasse</span>
-                  )}
-                  <span style={MINI_BADGE}>
-                    {TYPE_LABEL[place.type] ?? place.type}
-                    {place.arrondissement != null && ` · ${place.arrondissement}${ordinal}`}
+              {/* Badges */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, paddingRight: 40 }}>
+                {isSunny && sunWindow && (
+                  <span style={{ ...MINI_BADGE, background: '#fff1b8', color: '#5c3d00' }}>
+                    ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
                   </span>
-                </div>
-                {/* Actions rapides : ♥ Maps Share */}
-                <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-                  <button
-                    onClick={handleToggleFavorite}
-                    aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                    aria-pressed={isFavorite}
-                    style={{ width: 30, height: 30, borderRadius: '50%', border: `1.5px solid ${isFavorite ? 'rgba(210,45,61,0.30)' : 'rgba(20,32,51,0.14)'}`, background: isFavorite ? 'rgba(210,45,61,0.10)' : 'rgba(255,255,255,0.90)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                  >
-                    <Heart size={13} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
-                  </button>
-                  <button
-                    onClick={() => { window.location.href = gmapsUrl }}
-                    aria-label="Ouvrir dans Google Maps"
-                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid rgba(20,32,51,0.14)', background: 'rgba(255,255,255,0.90)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                  >
-                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
-                      <circle cx="12" cy="9" r="2.5" fill="white"/>
-                    </svg>
-                  </button>
-                  <button
-                    onClick={handleShare}
-                    aria-label="Partager ce lieu"
-                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid rgba(20,32,51,0.14)', background: 'rgba(255,255,255,0.90)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#1F3A5F' }}
-                  >
-                    <Share2 size={12} strokeWidth={2.3} />
-                  </button>
-                </div>
+                )}
+                {place.has_terrace !== false && (
+                  <span style={{ ...MINI_BADGE, background: 'rgba(79,143,101,0.10)', color: '#3d8554' }}>● Terrasse</span>
+                )}
+                <span style={MINI_BADGE}>
+                  {TYPE_LABEL[place.type] ?? place.type}
+                  {place.arrondissement != null && ` · ${place.arrondissement}${ordinal}`}
+                </span>
               </div>
               {/* Name */}
               <h2 style={{ margin: 0, fontFamily: 'var(--font-playfair)', fontWeight: 700, fontSize: 'clamp(20px,6vw,26px)', lineHeight: 1.05, letterSpacing: '-0.03em', color: '#0b1f3a', paddingRight: 44 }}>
@@ -424,28 +393,28 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             <div style={{ height: 1, background: 'rgba(20,32,51,0.08)', margin: '0 16px', flexShrink: 0 }} />
 
             {/* ── BARRE D'ACTIONS — toujours visible ────────────────────────── */}
-            <div style={{ flexShrink: 0, padding: '10px 14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 44px 44px', gap: 8 }}>
+            <div style={{ flexShrink: 0, padding: '7px 12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 38px 38px', gap: 7 }}>
                 <button onClick={() => { window.location.href = gmapsUrl }} aria-label="Ouvrir dans Google Maps"
-                  style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 13, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 5px 16px rgba(31,58,95,0.24)' }}>
-                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+                  style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(31,58,95,0.22)' }}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
                     <circle cx="12" cy="9" r="2.5" fill="white"/>
                   </svg>
                   Google Maps
                 </button>
                 <button onClick={() => { window.location.href = gmapsDirUrl }} aria-label="Y aller"
-                  style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 14, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 13, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 5px 16px rgba(237,193,69,0.28)' }}>
+                  style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(237,193,69,0.26)' }}>
                   📍&nbsp;Y aller
                 </button>
                 <button onClick={handleToggleFavorite} aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} aria-pressed={isFavorite}
-                  style={{ height: 44, borderRadius: 14, border: `1px solid ${isFavorite ? 'rgba(237,99,99,0.25)' : 'rgba(20,32,51,0.12)'}`, background: isFavorite ? 'rgba(255,99,99,0.16)' : 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1 }}>
-                  <Heart size={15} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
-                  {likeCount > 0 && <span style={{ fontSize: 9, fontWeight: 800, color: isFavorite ? '#D22D3D' : '#1F3A5F', lineHeight: 1 }}>{likeCount}</span>}
+                  style={{ height: 38, borderRadius: 12, border: `1px solid ${isFavorite ? 'rgba(237,99,99,0.25)' : 'rgba(20,32,51,0.12)'}`, background: isFavorite ? 'rgba(255,99,99,0.16)' : 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1 }}>
+                  <Heart size={14} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
+                  {likeCount > 0 && <span style={{ fontSize: 8, fontWeight: 800, color: isFavorite ? '#D22D3D' : '#1F3A5F', lineHeight: 1 }}>{likeCount}</span>}
                 </button>
                 <button onClick={handleShare} aria-label="Partager ce lieu"
-                  style={{ height: 44, borderRadius: 14, border: '1px solid rgba(20,32,51,0.12)', background: 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b1f3a' }}>
-                  <Share2 size={14} strokeWidth={2.2} />
+                  style={{ height: 38, borderRadius: 12, border: '1px solid rgba(20,32,51,0.12)', background: 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b1f3a' }}>
+                  <Share2 size={13} strokeWidth={2.2} />
                 </button>
               </div>
             </div>
@@ -454,8 +423,8 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             <div style={{ height: 1, background: 'rgba(20,32,51,0.08)', margin: '0 16px', flexShrink: 0 }} />
 
             {/* ── SCROLLABLE CONTENT ────────────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto overscroll-contain" style={{ minHeight: 0 }}>
-              <div style={{ padding: '14px 16px 0' }}>
+            <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', minHeight: 0 }}>
+              <div style={{ padding: '14px 16px 120px' }}>
 
                 {/* ── SCORE BLOCK ── */}
                 <div style={{
