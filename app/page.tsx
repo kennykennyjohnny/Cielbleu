@@ -211,32 +211,37 @@ export default function HomePage() {
       } catch { /* fall through vers Supabase direct */ }
 
       // ── Fallback : Supabase direct depuis le navigateur ──────────────────────
-      // Se déclenche si l'API route est indisponible ou renvoie un tableau vide.
-      // Colonnes slim : pas de photos/opening_hours → réponse ~200 KB vs ~7 MB avant.
+      // Déclenché si l'API route est indisponible. Filtre Paris intramuros.
       const SLIM = 'id,name,address,lat,lng,type,arrondissement,has_terrace,google_rating,price_level,google_place_id'
       const PAGE = 1000
+      const BBOX = { latMin: 48.810, latMax: 48.910, lngMin: 2.215, lngMax: 2.480 }
 
       try {
-        const [p0, p1, scoresRes] = await Promise.all([
-          supabase.from('places').select(SLIM)
-            .not('lat', 'is', null).not('lng', 'is', null).range(0, PAGE - 1),
-          supabase.from('places').select(SLIM)
-            .not('lat', 'is', null).not('lng', 'is', null).range(PAGE, PAGE * 2 - 1),
+        const allPlaces: Place[] = []
+        const [scoresRes] = await Promise.all([
           supabase.from('sun_scores').select('place_id,score')
             .eq('month', month).eq('time_slot', slot),
+          // Première page en parallèle avec les scores
+          (async () => {
+            let from = 0
+            while (from < 25000) {
+              const { data, error } = await supabase.from('places').select(SLIM)
+                .gte('lat', BBOX.latMin).lte('lat', BBOX.latMax)
+                .gte('lng', BBOX.lngMin).lte('lng', BBOX.lngMax)
+                .range(from, from + PAGE - 1)
+              if (error || !data?.length) break
+              allPlaces.push(...(data as Place[]))
+              if (data.length < PAGE) break
+              from += PAGE
+            }
+          })(),
         ])
-
-        const allPlaces = [
-          ...((p0.data ?? []) as Place[]),
-          ...((p1.data ?? []) as Place[]),
-        ]
         const scoreMap = new Map<string, number>(
           ((scoresRes.data ?? []) as { place_id: string; score: number }[]).map(r => [r.place_id, r.score])
         )
-        const enriched = allPlaces.map(p => ({ ...p, currentScore: scoreMap.get(p.id) ?? 3 }))
-        setPlaces(enriched)
+        setPlaces(allPlaces.map(p => ({ ...p, currentScore: scoreMap.get(p.id) ?? 3 })))
       } catch (err) {
-        console.error('Erreur chargement lieux:', err)
+        console.error('Erreur chargement lieux (fallback):', err)
       } finally {
         setLoading(false)
       }
