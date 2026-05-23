@@ -103,7 +103,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   const [transformY, setTransformY] = useState('translateY(100%)')
   const snapRef = useRef<1 | 2 | 3 | 4 | 5>(2)
   const sheetRef = useRef<HTMLDivElement>(null)
-  const dragState = useRef({ startY: 0, currentY: 0, dragging: false })
+  const dragState = useRef({ startY: 0, currentY: 0, dragging: false, startTime: 0 })
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const [scoresThisMonth, setScoresThisMonth] = useState<Record<string, number> | null>(null)
@@ -307,23 +307,44 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   }, [onClose])
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    dragState.current = { startY: e.touches[0].clientY, currentY: 0, dragging: true }
+    dragState.current = { startY: e.touches[0].clientY, currentY: 0, dragging: false, startTime: Date.now() }
   }
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!dragState.current.dragging || !sheetRef.current) return
+    if (!sheetRef.current) return
     const deltaY = e.touches[0].clientY - dragState.current.startY
+    // Seuil de 6px avant de considérer ça comme un drag (permet les taps sur boutons)
+    if (!dragState.current.dragging && Math.abs(deltaY) < 6) return
+    dragState.current.dragging = true
     dragState.current.currentY = deltaY
     sheetRef.current.style.transition = 'none'
     sheetRef.current.style.transform = `translateY(calc(${SNAP_Y[snapRef.current]} + ${Math.max(-80, deltaY)}px))`
   }
-  const handleTouchEnd = () => {
+  const handleTouchEnd = useCallback(() => {
+    if (!dragState.current.dragging) return
     dragState.current.dragging = false
     const delta = dragState.current.currentY
+    const elapsed = Math.max(16, Date.now() - dragState.current.startTime)
+    const velocity = delta / elapsed // px/ms : + = vers le bas = moins visible
+
     const cur = snapRef.current
-    if (delta < -50) snapTo(Math.min(5, cur + 1) as 1 | 2 | 3 | 4 | 5)
-    else if (delta > 60) { if (cur === 1) handleClose(); else snapTo((cur - 1) as 1 | 2 | 3 | 4 | 5) }
-    else snapTo(cur)
-  }
+    const vH = typeof window !== 'undefined' ? window.innerHeight * 0.92 : 800
+    const px: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 180, 2: 300, 3: 430, 4: 565, 5: vH }
+
+    // Swipe rapide vers le bas depuis snap 1 → fermer
+    if (cur === 1 && (velocity > 0.5 || delta > 110)) { handleClose(); return }
+
+    // Pixels visibles actuels + projection par momentum (200 ms)
+    const visibleNow = (px[cur] ?? 300) - delta
+    const projected  = visibleNow - velocity * 200
+
+    let nearest = cur
+    let minDist = Infinity
+    for (const [k, val] of Object.entries(px) as [string, number][]) {
+      const dist = Math.abs(val - projected)
+      if (dist < minDist) { minDist = dist; nearest = parseInt(k) as 1 | 2 | 3 | 4 | 5 }
+    }
+    snapTo(nearest)
+  }, [handleClose, snapTo])
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -343,100 +364,120 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             style={{ height: '92dvh', background: 'rgba(255,252,243,0.97)', backdropFilter: 'blur(18px)' }}
           >
 
-            {/* ── Drag handle ──────────────────────────────────────────────── */}
+            {/* ── ZONE DRAGGABLE — handle + peek + action bar ───────────────────
+                 touch-action:none sur le wrapper = toute la zone initie le drag.
+                 Les boutons internes gardent leurs clicks (threshold 6px avant drag).   */}
             <div
-              role="button" tabIndex={0} aria-label="Glisser pour agrandir ou réduire"
-              className="flex flex-col items-center pt-3 pb-2 shrink-0 touch-none select-none cursor-grab"
-              style={{ gap: 6 }}
-              onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
-              onKeyDown={e => {
-                if (e.key === 'ArrowUp') snapTo(Math.min(5, snap + 1) as 1 | 2 | 3 | 4 | 5)
-                if (e.key === 'ArrowDown') snap === 1 ? handleClose() : snapTo((snap - 1) as 1 | 2 | 3 | 4 | 5)
-              }}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              style={{ flexShrink: 0, touchAction: 'none', userSelect: 'none', cursor: 'grab' }}
             >
-              {/* Barre principale */}
-              <div style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(11,31,58,0.18)' }} />
-              {/* Dots indicateurs de niveau */}
-              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} aria-hidden="true">
-                {([1, 2, 3, 4, 5] as const).map(s => (
-                  <div key={s} style={{
-                    height: 4, borderRadius: 999,
-                    width: s === snap ? 14 : 4,
-                    background: s === snap ? 'rgba(11,31,58,0.50)' : 'rgba(11,31,58,0.14)',
-                    transition: 'width 220ms cubic-bezier(0.34,1.56,0.64,1), background 220ms',
-                  }} />
-                ))}
+              {/* Drag handle + dots indicateurs */}
+              <div
+                role="button" tabIndex={0} aria-label="Glisser pour agrandir ou réduire"
+                className="flex flex-col items-center pt-3 pb-2 select-none"
+                style={{ gap: 6 }}
+                onKeyDown={e => {
+                  if (e.key === 'ArrowUp') snapTo(Math.min(5, snap + 1) as 1 | 2 | 3 | 4 | 5)
+                  if (e.key === 'ArrowDown') snap === 1 ? handleClose() : snapTo((snap - 1) as 1 | 2 | 3 | 4 | 5)
+                }}
+              >
+                <div style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(11,31,58,0.18)' }} />
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} aria-hidden="true">
+                  {([1, 2, 3, 4, 5] as const).map(s => (
+                    <div key={s} style={{
+                      height: 4, borderRadius: 999,
+                      width: s === snap ? 14 : 4,
+                      background: s === snap ? 'rgba(11,31,58,0.50)' : 'rgba(11,31,58,0.14)',
+                      transition: 'width 220ms cubic-bezier(0.34,1.56,0.64,1), background 220ms',
+                    }} />
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Close button */}
-            <button onClick={handleClose} aria-label="Fermer"
-              className="absolute top-3 right-4 z-20 touch-manipulation"
-              style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'rgba(20,32,51,0.08)', color: '#0b1f3a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <X size={16} strokeWidth={2.5} />
-            </button>
+              {/* Close button — curseur normal, stop propagation du drag */}
+              <button
+                onClick={handleClose}
+                onTouchStart={e => e.stopPropagation()}
+                aria-label="Fermer"
+                className="absolute top-3 right-4 z-20"
+                style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', background: 'rgba(20,32,51,0.08)', color: '#0b1f3a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'manipulation' }}
+              >
+                <X size={16} strokeWidth={2.5} />
+              </button>
 
-            {/* ── PEEK ZONE ─────────────────────────────────────────────────── */}
-            <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
-              {/* Badges */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, paddingRight: 40 }}>
-                {isSunny && sunWindow && (
-                  <span style={{ ...MINI_BADGE, background: '#fff1b8', color: '#5c3d00' }}>
-                    ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
+              {/* ── PEEK ZONE ── */}
+              <div style={{ padding: '0 16px 12px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, paddingRight: 40 }}>
+                  {isSunny && sunWindow && (
+                    <span style={{ ...MINI_BADGE, background: '#fff1b8', color: '#5c3d00' }}>
+                      ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
+                    </span>
+                  )}
+                  {place.has_terrace !== false && (
+                    <span style={{ ...MINI_BADGE, background: 'rgba(79,143,101,0.10)', color: '#3d8554' }}>● Terrasse</span>
+                  )}
+                  <span style={MINI_BADGE}>
+                    {TYPE_LABEL[place.type] ?? place.type}
+                    {place.arrondissement != null && ` · ${place.arrondissement}${ordinal}`}
                   </span>
+                </div>
+                <h2 style={{ margin: 0, fontFamily: 'var(--font-playfair)', fontWeight: 700, fontSize: 'clamp(20px,6vw,26px)', lineHeight: 1.05, letterSpacing: '-0.03em', color: '#0b1f3a', paddingRight: 44 }}>
+                  {place.name}
+                </h2>
+                {place.address && (
+                  <p style={{ margin: '5px 0 0', color: '#6f7a8a', fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>
+                    {place.address}
+                  </p>
                 )}
-                {place.has_terrace !== false && (
-                  <span style={{ ...MINI_BADGE, background: 'rgba(79,143,101,0.10)', color: '#3d8554' }}>● Terrasse</span>
-                )}
-                <span style={MINI_BADGE}>
-                  {TYPE_LABEL[place.type] ?? place.type}
-                  {place.arrondissement != null && ` · ${place.arrondissement}${ordinal}`}
-                </span>
               </div>
-              {/* Name */}
-              <h2 style={{ margin: 0, fontFamily: 'var(--font-playfair)', fontWeight: 700, fontSize: 'clamp(20px,6vw,26px)', lineHeight: 1.05, letterSpacing: '-0.03em', color: '#0b1f3a', paddingRight: 44 }}>
-                {place.name}
-              </h2>
-              {/* Address */}
-              {place.address && (
-                <p style={{ margin: '5px 0 0', color: '#6f7a8a', fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>
-                  {place.address}
-                </p>
-              )}
-            </div>
 
-            {/* Divider */}
-            <div style={{ height: 1, background: 'rgba(20,32,51,0.08)', margin: '0 16px', flexShrink: 0 }} />
+              {/* Divider */}
+              <div style={{ height: 1, background: 'rgba(20,32,51,0.08)', margin: '0 16px' }} />
 
-            {/* ── BARRE D'ACTIONS — toujours visible ────────────────────────── */}
-            <div style={{ flexShrink: 0, padding: '7px 12px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 38px 38px', gap: 7 }}>
-                <button onClick={() => { window.location.href = gmapsUrl }} aria-label="Ouvrir dans Google Maps"
-                  style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(31,58,95,0.22)' }}>
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
-                    <circle cx="12" cy="9" r="2.5" fill="white"/>
-                  </svg>
-                  Google Maps
-                </button>
-                <button onClick={() => { window.location.href = gmapsDirUrl }} aria-label="Y aller"
-                  style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(237,193,69,0.26)' }}>
-                  📍&nbsp;Y aller
-                </button>
-                <button onClick={handleToggleFavorite} aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} aria-pressed={isFavorite}
-                  style={{ height: 38, borderRadius: 12, border: `1px solid ${isFavorite ? 'rgba(237,99,99,0.25)' : 'rgba(20,32,51,0.12)'}`, background: isFavorite ? 'rgba(255,99,99,0.16)' : 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1 }}>
-                  <Heart size={14} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
-                  {likeCount > 0 && <span style={{ fontSize: 8, fontWeight: 800, color: isFavorite ? '#D22D3D' : '#1F3A5F', lineHeight: 1 }}>{likeCount}</span>}
-                </button>
-                <button onClick={handleShare} aria-label="Partager ce lieu"
-                  style={{ height: 38, borderRadius: 12, border: '1px solid rgba(20,32,51,0.12)', background: 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b1f3a' }}>
-                  <Share2 size={13} strokeWidth={2.2} />
-                </button>
+              {/* ── BARRE D'ACTIONS ── */}
+              <div style={{ padding: '7px 12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 38px 38px', gap: 7 }}>
+                  <button
+                    onClick={() => window.open(gmapsUrl, '_blank')}
+                    onTouchStart={e => e.stopPropagation()}
+                    aria-label="Ouvrir dans Google Maps"
+                    style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(31,58,95,0.22)' }}>
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+                      <circle cx="12" cy="9" r="2.5" fill="white"/>
+                    </svg>
+                    Google Maps
+                  </button>
+                  <button
+                    onClick={() => window.open(gmapsDirUrl, '_blank')}
+                    onTouchStart={e => e.stopPropagation()}
+                    aria-label="Y aller"
+                    style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(237,193,69,0.26)' }}>
+                    📍&nbsp;Y aller
+                  </button>
+                  <button
+                    onClick={handleToggleFavorite}
+                    onTouchStart={e => e.stopPropagation()}
+                    aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} aria-pressed={isFavorite}
+                    style={{ height: 38, borderRadius: 12, border: `1px solid ${isFavorite ? 'rgba(237,99,99,0.25)' : 'rgba(20,32,51,0.12)'}`, background: isFavorite ? 'rgba(255,99,99,0.16)' : 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1, touchAction: 'manipulation' }}>
+                    <Heart size={14} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
+                    {likeCount > 0 && <span style={{ fontSize: 8, fontWeight: 800, color: isFavorite ? '#D22D3D' : '#1F3A5F', lineHeight: 1 }}>{likeCount}</span>}
+                  </button>
+                  <button
+                    onClick={handleShare}
+                    onTouchStart={e => e.stopPropagation()}
+                    aria-label="Partager ce lieu"
+                    style={{ height: 38, borderRadius: 12, border: '1px solid rgba(20,32,51,0.12)', background: 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b1f3a', touchAction: 'manipulation' }}>
+                    <Share2 size={13} strokeWidth={2.2} />
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {/* Divider */}
-            <div style={{ height: 1, background: 'rgba(20,32,51,0.08)', margin: '0 16px', flexShrink: 0 }} />
+              {/* Divider */}
+              <div style={{ height: 1, background: 'rgba(20,32,51,0.08)', margin: '0 16px' }} />
+            </div>{/* fin drag zone */}
 
             {/* ── SCROLLABLE CONTENT ────────────────────────────────────────── */}
             <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', minHeight: 0 }}>

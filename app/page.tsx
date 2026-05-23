@@ -190,38 +190,50 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    async function loadPlaces() {
+    // ── Cache localStorage ────────────────────────────────────────────────────
+    // Les données lieux sont quasi-statiques (noms, coords, types).
+    // On les cache 30 min côté client → affichage instantané au 2e chargement.
+    // Les scores soleil sont recalculés séparément par le slider effect.
+    const CACHE_KEY = 'cb_places_v3'
+    const CACHE_TTL = 30 * 60 * 1000 // 30 min
+
+    function saveCache(data: Place[]) {
+      try {
+        // Stocke sans currentScore (recalculé par le slider effect)
+        const slim = data.map(({ currentScore: _, ...p }) => p)
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ data: slim, ts: Date.now() }))
+      } catch { /* quota exceeded → silencieux */ }
+    }
+
+    async function fetchFresh(background = false) {
       const now   = new Date()
       const month = now.getMonth() + 1
       const h     = now.getHours()
       const m     = now.getMinutes() < 30 ? '00' : '30'
       const slot  = `${String(h).padStart(2, '0')}:${m}`
 
-      // ── Essai 1 : route API /api/places (cache CDN Vercel 30 s, co-localisée Paris) ──
+      // Essai 1 : route API /api/places (cache CDN Vercel 30 s)
       try {
         const res = await fetch(`/api/places?month=${month}&slot=${encodeURIComponent(slot)}`)
         if (res.ok) {
           const json = await res.json()
           if (Array.isArray(json) && json.length > 0) {
             setPlaces(json as Place[])
-            setLoading(false)
+            if (!background) setLoading(false)
+            saveCache(json as Place[])
             return
           }
         }
-      } catch { /* fall through vers Supabase direct */ }
+      } catch { /* fall through */ }
 
-      // ── Fallback : Supabase direct depuis le navigateur ──────────────────────
-      // Déclenché si l'API route est indisponible. Filtre Paris intramuros.
+      // Fallback : Supabase direct
       const SLIM = 'id,name,address,lat,lng,type,arrondissement,has_terrace,google_rating,price_level,google_place_id'
       const PAGE = 1000
       const BBOX = { latMin: 48.810, latMax: 48.910, lngMin: 2.215, lngMax: 2.480 }
-
       try {
         const allPlaces: Place[] = []
         const [scoresRes] = await Promise.all([
-          supabase.from('sun_scores').select('place_id,score')
-            .eq('month', month).eq('time_slot', slot),
-          // Première page en parallèle avec les scores
+          supabase.from('sun_scores').select('place_id,score').eq('month', month).eq('time_slot', slot),
           (async () => {
             let from = 0
             while (from < 25000) {
@@ -239,13 +251,37 @@ export default function HomePage() {
         const scoreMap = new Map<string, number>(
           ((scoresRes.data ?? []) as { place_id: string; score: number }[]).map(r => [r.place_id, r.score])
         )
-        setPlaces(allPlaces.map(p => ({ ...p, currentScore: scoreMap.get(p.id) ?? 3 })))
+        const result = allPlaces.map(p => ({ ...p, currentScore: scoreMap.get(p.id) ?? 3 }))
+        setPlaces(result)
+        saveCache(result)
       } catch (err) {
         console.error('Erreur chargement lieux (fallback):', err)
       } finally {
-        setLoading(false)
+        if (!background) setLoading(false)
       }
     }
+
+    async function loadPlaces() {
+      // Vérifie le cache localStorage
+      try {
+        const raw = localStorage.getItem(CACHE_KEY)
+        if (raw) {
+          const { data, ts } = JSON.parse(raw) as { data: Place[]; ts: number }
+          if (Date.now() - ts < CACHE_TTL && Array.isArray(data) && data.length > 0) {
+            // Affichage instantané depuis le cache
+            setPlaces(data)
+            setLoading(false)
+            // Rafraîchissement silencieux en arrière-plan
+            fetchFresh(true)
+            return
+          }
+        }
+      } catch { /* cache corrompu → rechargement normal */ }
+
+      // Pas de cache valide → chargement normal avec spinner
+      await fetchFresh(false)
+    }
+
     loadPlaces()
   }, [])
 
@@ -781,6 +817,36 @@ export default function HomePage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Spinner soleil — visible seulement au premier chargement (sans cache) ── */}
+      {loading && (
+        <>
+          <style>{`
+            @keyframes spin-sun { to { transform: rotate(360deg) } }
+            @keyframes pulse-glow {
+              0%, 100% { opacity: 0.7; transform: scale(1) }
+              50%       { opacity: 1;   transform: scale(1.08) }
+            }
+          `}</style>
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 30,
+            background: 'rgba(255,252,243,0.96)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 18, pointerEvents: 'none',
+          }}>
+            <div style={{ animation: 'spin-sun 2s linear infinite', fontSize: 52, lineHeight: 1 }} aria-hidden="true">☀️</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <p style={{ margin: 0, fontFamily: 'var(--font-outfit)', fontSize: 15, fontWeight: 800, color: '#1F3A5F' }}>
+                Chargement des terrasses…
+              </p>
+              <p style={{ margin: 0, fontFamily: 'var(--font-outfit)', fontSize: 12, fontWeight: 500, color: 'rgba(31,58,95,0.45)' }}>
+                Paris · {new Date().getFullYear()}
+              </p>
+            </div>
+          </div>
+        </>
       )}
 
       {/* État vide */}
