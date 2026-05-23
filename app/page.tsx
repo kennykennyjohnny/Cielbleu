@@ -1069,7 +1069,13 @@ export default function HomePage() {
       )}
 
       {selectedPlace && !isDesktop && (
-        <PlacePreview place={selectedPlace} hour={hour} onClose={handleClose} />
+        <PlacePreview
+          place={selectedPlace}
+          hour={hour}
+          onClose={handleClose}
+          userId={userId}
+          onOpenProfile={() => { setShowProfile(true); setSelectedPlace(null) }}
+        />
       )}
 
 
