@@ -66,7 +66,9 @@ export default function HomePage() {
   const [showProfile, setShowProfile] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null)
-  const prevShowProfileRef = useRef(false)
+  const prevShowProfileRef    = useRef(false)
+  // Bouton retour : true si on a pushé un état history pour le panel courant
+  const panelHistoryPushed = useRef(false)
   const headerRef = useRef<HTMLElement>(null)
   const [headerH, setHeaderH] = useState(0)
 
@@ -94,6 +96,31 @@ export default function HomePage() {
     }
     prevShowProfileRef.current = showProfile
   }, [showProfile, userId])
+
+  // ── Bouton retour natif : ferme le panel au lieu de quitter l'app ────────
+  // Quand un panel s'ouvre → on pousse une entrée dans l'historique navigateur.
+  // Quand l'utilisateur appuie sur ← → popstate → on ferme le panel.
+  useEffect(() => {
+    const anyOpen = !!(selectedPlace || showProfile || selectedAmenite)
+    if (anyOpen && !panelHistoryPushed.current) {
+      history.pushState({ hs: 'panel' }, '')
+      panelHistoryPushed.current = true
+    } else if (!anyOpen) {
+      panelHistoryPushed.current = false
+    }
+  }, [!!selectedPlace, showProfile, !!selectedAmenite]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const onPop = () => {
+      // Ferme tous les panels au lieu de naviguer vers la page précédente
+      setSelectedPlace(null)
+      setShowProfile(false)
+      setSelectedAmenite(null)
+      panelHistoryPushed.current = false
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   // ── Météo ────────────────────────────────────────────────────────────────
   interface WeatherResponse {
@@ -164,44 +191,25 @@ export default function HomePage() {
 
   useEffect(() => {
     async function loadPlaces() {
-      const now = new Date()
+      // ── Route API /api/places : colonnes slim + scores jointés côté serveur ──
+      // Cache CDN Vercel 30 s → chargement quasi-instantané pour la plupart des users.
+      // Avant migration_v5_performance.sql : fallback 2 requêtes parallèles côté serveur.
+      const now   = new Date()
       const month = now.getMonth() + 1
-      const h = now.getHours()
-      const m = now.getMinutes() < 30 ? '00' : '30'
-      const timeSlot = `${String(h).padStart(2, '0')}:${m}`
+      const h     = now.getHours()
+      const m     = now.getMinutes() < 30 ? '00' : '30'
+      const slot  = `${String(h).padStart(2, '0')}:${m}`
 
-      // Pagination : Supabase limite à 1000 lignes par requête par défaut
-      const PAGE = 1000
-      let from = 0
-      const allPlaces: Record<string, unknown>[] = []
-      while (true) {
-        const { data, error } = await supabase
-          .from('places').select('*')
-          .not('lat', 'is', null).not('lng', 'is', null)
-          .range(from, from + PAGE - 1)
-        if (error) { console.error('Erreur chargement lieux:', error.message); break }
-        if (!data || data.length === 0) break
-        allPlaces.push(...data)
-        if (data.length < PAGE) break
-        from += PAGE
+      try {
+        const res = await fetch(`/api/places?month=${month}&slot=${encodeURIComponent(slot)}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json() as Place[]
+        setPlaces(data)
+      } catch (err) {
+        console.error('Erreur chargement lieux:', err)
+      } finally {
+        setLoading(false)
       }
-
-      if (!allPlaces.length) { setLoading(false); return }
-
-      const { data: nowScores } = await supabase
-        .from('sun_scores').select('place_id, score')
-        .eq('month', month).eq('time_slot', timeSlot)
-
-      const scoreByPlace = new Map<string, number>()
-      for (const r of nowScores ?? []) scoreByPlace.set(r.place_id, r.score)
-
-      const enriched: Place[] = allPlaces.map((p) => ({
-        ...p,
-        currentScore: scoreByPlace.get((p as { id: string }).id) ?? 3,
-      } as Place))
-
-      setPlaces(enriched)
-      setLoading(false)
     }
     loadPlaces()
   }, [])
@@ -356,16 +364,30 @@ export default function HomePage() {
 
   const handlePlaceSelect = useCallback(async (place: Place | null) => {
     if (!place) { setSelectedPlace(null); return }
-    setSelectedAmenite(null)  // ferme l'amenite si open
-    setSelectedPlace(place)
+    setSelectedAmenite(null)
+    setSelectedPlace(place)   // affiche la card immédiatement avec les données slim
     setSearchQuery('')
-    const now = new Date()
-    const month = now.getMonth() + 1
-    const { data } = await supabase
-      .from('sun_scores').select('time_slot, score')
-      .eq('place_id', place.id).eq('month', month)
-      .order('time_slot')
-    setSelectedScores(data ?? [])
+    setSelectedScores([])     // vide les scores de la fiche précédente
+
+    // Charge en parallèle : données complètes (photos, horaires…) + scores du mois
+    const month = new Date().getMonth() + 1
+    const [{ data: fullPlace }, { data: scores }] = await Promise.all([
+      supabase.from('places').select('*').eq('id', place.id).single(),
+      supabase
+        .from('sun_scores').select('time_slot, score')
+        .eq('place_id', place.id).eq('month', month)
+        .order('time_slot'),
+    ])
+
+    // Mise à jour uniquement si l'utilisateur n'a pas cliqué ailleurs entretemps
+    if (fullPlace) {
+      setSelectedPlace(prev =>
+        prev?.id === place.id
+          ? ({ ...fullPlace, currentScore: prev.currentScore } as Place)
+          : prev
+      )
+    }
+    setSelectedScores(scores ?? [])
   }, [])
 
   const handleClose = useCallback(() => {
