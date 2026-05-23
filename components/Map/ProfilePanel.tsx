@@ -1093,9 +1093,10 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
                     borderLeft: '3px solid rgba(237,193,69,0.55)' }}>
                     {r.comment ?? (r.photos && r.photos.length > 0 ? 'Photo partagée depuis HopSoleil' : 'Aucun commentaire')}
                   </p>
-                  {r.photos && r.photos.length > 0 && (
+                  {Array.isArray(r.photos) && r.photos.length > 0 && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto', paddingBottom: 2 }}>
-                      {r.photos.map((url, index) => (
+                      {(r.photos as string[]).map((url, index) => (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img key={index} src={url} alt={`Photo avis ${index + 1}`} style={{ width: 100, height: 72, objectFit: 'cover', borderRadius: 14, flexShrink: 0 }} />
                       ))}
                     </div>

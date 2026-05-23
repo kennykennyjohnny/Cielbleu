@@ -1,19 +1,17 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useCallback, useState } from 'react'
-import dynamic from 'next/dynamic'
 import { X, Share2, Heart, Clock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
 import type { Place } from '@/types'
 
-const Terrace3DView = dynamic(() => import('./Terrace3DView'), { ssr: false })
-
 // ── Snap levels ───────────────────────────────────────────────────────────────
+// Montre les N premiers px du card depuis le haut (handle + peek + action bar)
 const SNAP_Y: Record<1 | 2 | 3, string> = {
-  1: 'calc(92dvh - 130px)',
-  2: 'calc(max(92dvh - 430px, 26dvh))',
-  3: '0px',
+  1: 'calc(92dvh - 212px)',  // handle + peek + barre d'action
+  2: 'calc(max(92dvh - 490px, 20dvh))',  // + ~280px de contenu
+  3: '0px',                // plein écran
 }
 
 // ── Style constants (palette CielBleu — identique PlacePageClient) ────────────
@@ -208,7 +206,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   }, [place.id, userId, deviceId])
 
   // ── Computed ──────────────────────────────────────────────────────────────
-  const { slot, label: hourLabel, date: displayedDate } = slotFromHalfHour(hour)
+  const { slot, label: hourLabel } = slotFromHalfHour(hour)
   const score = scoresThisMonth?.[slot] ?? place.currentScore ?? 3
   const isSunny = score >= 4
   const sunWindow = useMemo(() => scoresThisMonth ? computeSunWindow(scoresThisMonth) : null, [scoresThisMonth])
@@ -271,8 +269,14 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
     const uploadedUrls: string[] = []
     for (const file of reviewPhotos) {
       const path = `${userId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
-      const { error: upErr } = await supabase.storage.from('review-photos').upload(path, file, { contentType: file.type })
-      if (!upErr) uploadedUrls.push(supabase.storage.from('review-photos').getPublicUrl(path).data.publicUrl)
+      const { error: upErr } = await supabase.storage
+        .from('review-photos').upload(path, file, { contentType: file.type })
+      if (upErr) {
+        setCommentSending(false)
+        setCommentError(`Erreur upload photo : ${upErr.message}`)
+        return
+      }
+      uploadedUrls.push(supabase.storage.from('review-photos').getPublicUrl(path).data.publicUrl)
     }
     const { error } = await supabase.from('reviews').insert({
       place_id: place.id, user_id: userId, device_id: deviceId,
@@ -388,8 +392,38 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             {/* Divider */}
             <div style={{ height: 1, background: 'rgba(20,32,51,0.08)', margin: '0 16px', flexShrink: 0 }} />
 
+            {/* ── BARRE D'ACTIONS — toujours visible ────────────────────────── */}
+            <div style={{ flexShrink: 0, padding: '10px 14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 44px 44px', gap: 8 }}>
+                <button onClick={() => { window.location.href = gmapsUrl }} aria-label="Ouvrir dans Google Maps"
+                  style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 13, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 5px 16px rgba(31,58,95,0.24)' }}>
+                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+                    <circle cx="12" cy="9" r="2.5" fill="white"/>
+                  </svg>
+                  Google Maps
+                </button>
+                <button onClick={() => { window.location.href = gmapsDirUrl }} aria-label="Y aller"
+                  style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 14, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 13, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 5px 16px rgba(237,193,69,0.28)' }}>
+                  📍&nbsp;Y aller
+                </button>
+                <button onClick={handleToggleFavorite} aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} aria-pressed={isFavorite}
+                  style={{ height: 44, borderRadius: 14, border: `1px solid ${isFavorite ? 'rgba(237,99,99,0.25)' : 'rgba(20,32,51,0.12)'}`, background: isFavorite ? 'rgba(255,99,99,0.16)' : 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1 }}>
+                  <Heart size={15} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
+                  {likeCount > 0 && <span style={{ fontSize: 9, fontWeight: 800, color: isFavorite ? '#D22D3D' : '#1F3A5F', lineHeight: 1 }}>{likeCount}</span>}
+                </button>
+                <button onClick={handleShare} aria-label="Partager ce lieu"
+                  style={{ height: 44, borderRadius: 14, border: '1px solid rgba(20,32,51,0.12)', background: 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b1f3a' }}>
+                  <Share2 size={14} strokeWidth={2.2} />
+                </button>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: 'rgba(20,32,51,0.08)', margin: '0 16px', flexShrink: 0 }} />
+
             {/* ── SCROLLABLE CONTENT ────────────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto overscroll-contain" style={{ minHeight: 0, paddingBottom: 80 }}>
+            <div className="flex-1 overflow-y-auto overscroll-contain" style={{ minHeight: 0 }}>
               <div style={{ padding: '14px 16px 0' }}>
 
                 {/* ── SCORE BLOCK ── */}
@@ -625,47 +659,6 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                   )}
                 </div>
 
-                {/* Vue 3D (plein écran seulement) */}
-                {snap === 3 && (
-                  <div style={{ borderTop: '1px solid rgba(20,32,51,0.09)', paddingTop: 14, marginBottom: 14 }}>
-                    <p style={{ ...EYEBROW, marginBottom: 10 }}>Vue 3D</p>
-                    <div style={{ borderRadius: 18, overflow: 'hidden', height: 190 }}>
-                      <Terrace3DView lat={place.lat} lng={place.lng} score={score} date={displayedDate} />
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            </div>
-
-            {/* ── BARRE D'ACTIONS ───────────────────────────────────────────── */}
-            <div style={{ flexShrink: 0, borderTop: '1px solid rgba(20,32,51,0.09)', background: 'rgba(255,252,243,0.97)', backdropFilter: 'blur(18px)', paddingBottom: 'max(env(safe-area-inset-bottom,0px),10px)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 44px 44px', gap: 8, padding: '10px 14px' }}>
-                {/* Google Maps */}
-                <button onClick={() => { window.location.href = gmapsUrl }} aria-label="Ouvrir dans Google Maps"
-                  style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 13, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 6px 18px rgba(31,58,95,0.24)' }}>
-                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
-                    <circle cx="12" cy="9" r="2.5" fill="white"/>
-                  </svg>
-                  Google Maps
-                </button>
-                {/* Y aller */}
-                <button onClick={() => { window.location.href = gmapsDirUrl }} aria-label="Y aller"
-                  style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 14, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 13, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 6px 18px rgba(237,193,69,0.30)' }}>
-                  📍&nbsp;Y aller
-                </button>
-                {/* Favoris */}
-                <button onClick={handleToggleFavorite} aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} aria-pressed={isFavorite}
-                  style={{ height: 46, borderRadius: 14, border: `1px solid ${isFavorite ? 'rgba(237,99,99,0.25)' : 'rgba(20,32,51,0.12)'}`, background: isFavorite ? 'rgba(255,99,99,0.16)' : 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Heart size={16} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
-                  {likeCount > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: isFavorite ? '#D22D3D' : '#1F3A5F', marginLeft: 3 }}>{likeCount}</span>}
-                </button>
-                {/* Partager */}
-                <button onClick={handleShare} aria-label="Partager ce lieu"
-                  style={{ height: 46, borderRadius: 14, border: '1px solid rgba(20,32,51,0.12)', background: 'rgba(255,255,255,0.96)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b1f3a' }}>
-                  <Share2 size={15} strokeWidth={2.2} />
-                </button>
               </div>
             </div>
 
