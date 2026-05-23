@@ -48,6 +48,7 @@ interface FriendFavorite {
 interface UserReview {
   id: string
   comment: string | null
+  photos?: string[]
   created_at: string
   place_id: string | null
   place?: { name: string; address: string; type: string } | null
@@ -220,10 +221,8 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
   const fetchUserReviews = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from('reviews')
-      .select('id, comment, created_at, place_id, place:places(name, address, type)')
+      .select('id, comment, photos, created_at, place_id, place:places(name, address, type)')
       .eq('user_id', userId)
-      .not('comment', 'is', null)
-      .neq('comment', '')
       .order('created_at', { ascending: false })
       .limit(20)
     if (data) setUserReviews(data as unknown as UserReview[])
@@ -1092,8 +1091,15 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
                   <p style={{ margin: 0, fontSize: 13, color: '#1F3A5F', fontWeight: 600, lineHeight: 1.55,
                     background: 'rgba(255,255,255,0.75)', borderRadius: 10, padding: '8px 10px',
                     borderLeft: '3px solid rgba(237,193,69,0.55)' }}>
-                    {r.comment}
+                    {r.comment ?? (r.photos && r.photos.length > 0 ? 'Photo partagée depuis HopSoleil' : 'Aucun commentaire')}
                   </p>
+                  {r.photos && r.photos.length > 0 && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto', paddingBottom: 2 }}>
+                      {r.photos.map((url, index) => (
+                        <img key={index} src={url} alt={`Photo avis ${index + 1}`} style={{ width: 100, height: 72, objectFit: 'cover', borderRadius: 14, flexShrink: 0 }} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}

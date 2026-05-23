@@ -123,8 +123,7 @@ interface Props {
   onOpenProfile?: () => void
 }
 
-export default function PlacePageClient({ place, scores, hour, onHourChange, onClose, userId, onOpenProfile }: Props) {
-  const setHour = onHourChange
+export default function PlacePageClient({ place, scores, hour, onClose, userId, onOpenProfile }: Props) {
   const [shareToast, setShareToast] = useState(false)
 
   // ── Community section state ─────────────────────────────────────────────────
@@ -186,30 +185,11 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     return m
   }, [scores])
 
-  const { slot, label: hourLabel } = halfHourToSlot(hour)
+  const { slot } = halfHourToSlot(hour)
   const currentScore = scoreMap[slot] ?? place.currentScore ?? 3
-  const isNow   = Math.abs(hour - nowHalfHour()) < 0.26
   const isSunny = currentScore >= 4
 
   const sunWindow = useMemo(() => computeSunWindow(scores), [scores])
-
-  const timeline = useMemo(() =>
-    scores
-      .filter(s => {
-        const [hh] = s.time_slot.split(':').map(Number)
-        return hh >= 8 && hh <= 22 && s.time_slot.endsWith(':00')
-      })
-      .sort((a, b) => a.time_slot.localeCompare(b.time_slot)),
-    [scores]
-  )
-
-  // "now" red line position in timeline (8h-22h → 0-100%)
-  const nowLinePct = useMemo(() => {
-    const h = nowHalfHour()
-    return Math.max(0, Math.min(100, ((h - 8) / (22 - 8)) * 100))
-  }, [])
-
-  const currentHourSlot = `${String(Math.floor(hour)).padStart(2,'0')}:00`
 
   const photoRefs = useMemo(() => {
     if (!place.photos?.length) return []
@@ -246,6 +226,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     ? `https://www.google.com/maps/place/?q=place_id:${place.google_place_id}`
     : `https://maps.google.com/?q=${place.lat},${place.lng}(${encodeURIComponent(place.name)})`
   const gmapsDirUrl = `https://maps.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}&travelmode=walking`
+  const streetViewUrl = `https://maps.google.com/?cbll=${place.lat},${place.lng}&cbp=12,0,0,0,0&layer=c`
 
   const sunSentence = SCORE_SENTENCES[currentScore] ?? ''
 
@@ -484,28 +465,6 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         </button>
       </div>
 
-      {/* ═══════════ SLIDER HEURE — uniquement si scores calculés ═══════════ */}
-      {scores.length > 0 && (
-      <div style={{ padding:'0 16px 14px' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
-          <span style={{ fontSize:10, fontWeight:800, color:'#98a2b3',
-            letterSpacing:'0.10em', textTransform:'uppercase' }}>☀ 6h</span>
-          <span style={{ fontSize:10.5, fontWeight:700, color:'#6f7a8a' }}>
-            Glisse pour voir le soleil changer
-          </span>
-          <span style={{ fontSize:10, fontWeight:800, color:'#98a2b3',
-            letterSpacing:'0.10em', textTransform:'uppercase' }}>🌙 23h</span>
-        </div>
-        <input
-          type="range" min={6} max={23.5} step={0.5} value={hour}
-          onChange={e => setHour(parseFloat(e.target.value))}
-          className="cb-hour-slider w-full"
-          aria-label="Heure de la journée"
-          aria-valuetext={hourLabel}
-        />
-      </div>
-      )}
-
       {/* ═══════════ SCROLLABLE PANEL ═══════════ */}
       <div style={{ flex:1, overflowY:'auto', overscrollBehavior:'contain', minHeight:0 }}>
       <div style={{ maxWidth:520, margin:'0 auto', padding:'0 14px 24px' }}>
@@ -548,8 +507,8 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
         {/* ── QUICK STATS (3 cols) ── */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:0 }}>
           {/* Note — cliquable → fiche Google */}
-          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
-            style={{ ...STAT_CARD, textDecoration:'none', display:'block', cursor:'pointer' }}>
+          <button type="button" onClick={() => { window.location.href = gmapsUrl }}
+            style={{ ...STAT_CARD, textDecoration:'none', display:'block', cursor:'pointer', width:'100%', textAlign:'left' }}>
             <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
               {place.google_rating != null ? place.google_rating.toFixed(1) : '—'}
             </strong>
@@ -557,10 +516,10 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
               fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
               Note <span style={{ fontSize:9, fontWeight:600, opacity:0.55, textTransform:'none', letterSpacing:0 }}>(google)</span>
             </span>
-          </a>
+          </button>
           {/* Prix — cliquable → fiche Google */}
-          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
-            style={{ ...STAT_CARD, textDecoration:'none', display:'block', cursor:'pointer' }}>
+          <button type="button" onClick={() => { window.location.href = gmapsUrl }}
+            style={{ ...STAT_CARD, textDecoration:'none', display:'block', cursor:'pointer', width:'100%', textAlign:'left' }}>
             <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
               {place.price_level ? '€'.repeat(place.price_level) : '—'}
             </strong>
@@ -568,7 +527,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
               fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
               Prix
             </span>
-          </a>
+          </button>
           {/* Soleil */}
           <div style={{ ...STAT_CARD }}>
             <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
@@ -666,13 +625,13 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                   <span style={{ fontSize:13, fontWeight:700,
                     color: isClosed ? '#FF6B6B' : '#1B2838' }}>{hoursLabel}</span>
                 ) : (
-                  <a
-                    href={place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}`}
-                    target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize:13, fontWeight:700, color:'#1F3A5F', textDecoration:'none' }}
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}` }}
+                    style={{ fontSize:13, fontWeight:700, color:'#1F3A5F', textDecoration:'none', background:'none', border:'none', padding:0, cursor:'pointer' }}
                   >
                     Voir sur Google Maps →
-                  </a>
+                  </button>
                 )}
               </div>
             </div>
@@ -729,7 +688,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
             <div style={{ display:'grid', gap:8 }}>
 
               {/* Google Maps — maps.google.com = Universal Link → ouvre l'appli sur iOS/Android */}
-              <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+              <button type="button" onClick={() => { window.location.href = gmapsUrl }}
                 style={{ textDecoration:'none', display:'block',
                   borderRadius:18, overflow:'hidden',
                   background:'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)',
@@ -745,12 +704,12 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                   </div>
                   <span style={{ fontSize:18, flexShrink:0 }}>→</span>
                 </div>
-              </a>
+              </button>
 
               {/* Street View — miniature cliquable */}
-              <a
-                href={`https://maps.google.com/?cbll=${place.lat},${place.lng}&cbp=12,0,0,0,0&layer=c`}
-                target="_blank" rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => { window.location.href = streetViewUrl }}
                 style={{ textDecoration:'none', display:'block', borderRadius:18, overflow:'hidden',
                   boxShadow:'0 4px 16px rgba(5,150,105,0.14)',
                   border:'1px solid rgba(5,150,105,0.22)', position:'relative' }}>
@@ -775,7 +734,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
                   </div>
                   <span style={{ fontSize:18, color:'#fff' }}>→</span>
                 </div>
-              </a>
+              </button>
 
               {place.instagram_url && (
                 <a href={place.instagram_url} target="_blank" rel="noopener noreferrer"

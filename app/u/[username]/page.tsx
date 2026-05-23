@@ -17,6 +17,7 @@ interface Profile {
 interface Review {
   id: string
   comment: string | null
+  photos?: string[]
   created_at: string
   place?: { name: string; type: string } | null
 }
@@ -100,10 +101,8 @@ export default function UserProfilePage() {
         setLoading(false)
         supabase
           .from('reviews')
-          .select('id, comment, created_at, place:places(name, type)')
+          .select('id, comment, photos, created_at, place:places(name, type)')
           .eq('user_id', data.id)
-          .not('comment', 'is', null)
-          .neq('comment', '')
           .order('created_at', { ascending: false })
           .limit(5)
           .then(({ data: revs }) => setReviews((revs as unknown as Review[]) ?? []))
@@ -340,13 +339,18 @@ export default function UserProfilePage() {
                 <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: '#1F3A5F' }}>
                   {placeEmoji(r.place?.type ?? '')} {r.place?.name ?? '—'}
                 </p>
-                {r.comment && (
-                  <p style={{ margin: '6px 0 0', fontSize: 13, color: '#1F3A5F', fontWeight: 600,
-                    lineHeight: 1.5, borderLeft: '3px solid rgba(237,193,69,0.55)',
-                    paddingLeft: 10, background: 'rgba(255,255,255,0.70)', borderRadius: '0 8px 8px 0',
-                    padding: '6px 10px' }}>
-                    {r.comment}
-                  </p>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#1F3A5F', fontWeight: 600,
+                  lineHeight: 1.5, borderLeft: '3px solid rgba(237,193,69,0.55)',
+                  paddingLeft: 10, background: 'rgba(255,255,255,0.70)', borderRadius: '0 8px 8px 0',
+                  padding: '6px 10px' }}>
+                  {r.comment ?? (r.photos && r.photos.length > 0 ? 'Photo partagée depuis HopSoleil' : 'Aucun commentaire')}
+                </p>
+                {r.photos && r.photos.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto', paddingBottom: 2 }}>
+                    {r.photos.map((url, index) => (
+                      <img key={index} src={url} alt={`Photo avis ${index + 1}`} style={{ width: 110, height: 80, objectFit: 'cover', borderRadius: 16, flexShrink: 0 }} />
+                    ))}
+                  </div>
                 )}
                 <p style={{ margin: '6px 0 0', fontSize: 11, color: 'rgba(31,58,95,0.40)', fontWeight: 600 }}>
                   {new Date(r.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}

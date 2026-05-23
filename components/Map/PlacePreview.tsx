@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useCallback, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Star, X, Sunrise, Sunset, Share2, Heart } from 'lucide-react'
+import { Star, X, Share2, Heart } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Place } from '@/types'
 
@@ -11,11 +11,11 @@ const Terrace3DView = dynamic(() => import('./Terrace3DView'), { ssr: false })
 
 // ── Snap levels ─────────────────────────────────────────────────────────────
 // snap=1 : peek   (~116px visible = handle + titre + adresse)
-// snap=2 : medium (~430px visible = actions + type + score + slider)
+// snap=2 : medium (~430px visible = actions + type + score)
 // snap=3 : plein  (92dvh = tout + vue 3D)
 const SNAP_Y: Record<1 | 2 | 3, string> = {
   1: 'calc(92dvh - 160px)', // peek : handle + titre + adresse + action row + badges
-  2: 'calc(max(92dvh - 460px, 24dvh))', // medium : + score + slider
+  2: 'calc(max(92dvh - 420px, 28dvh))', // medium : + score + details
   3: '0px',
 }
 
@@ -46,6 +46,7 @@ const SCORE_THEME: Record<number, { bg: string; text: string }> = {
 
 interface PlacePreviewProps {
   place: Place
+  hour: number
   onClose: () => void
 }
 
@@ -60,7 +61,11 @@ function slotFromHalfHour(h: number): { slot: string; label: string; date: Date 
   return { slot, label, date: d }
 }
 
-export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
+function extractPhotoRef(url: string): string | null {
+  try { return new URL(url).searchParams.get('photo_reference') } catch { return null }
+}
+
+export default function PlacePreview({ place, hour, onClose }: PlacePreviewProps) {
   // ── Snap / transform ───────────────────────────────────────────────────────
   const [snap, setSnap] = useState<1 | 2 | 3>(2)
   const [transformY, setTransformY] = useState('translateY(100%)')
@@ -70,14 +75,6 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
   const [userId, setUserId] = useState<string | null>(null)
   const [isFavorite, setIsFavorite] = useState(false)
   const [favoriteId, setFavoriteId] = useState<string | null>(null)
-
-  // Slider horaire : valeur en heures (avec demis), 6.0 → 23.5
-  const initialHour = useMemo(() => {
-    const now = new Date()
-    const h = now.getHours() + (now.getMinutes() < 30 ? 0 : 0.5)
-    return Math.max(6, Math.min(23.5, h))
-  }, [])
-  const [hour, setHour] = useState<number>(initialHour)
 
   // Lazy-load des scores du mois courant pour cette place (48 lignes)
   const [scoresThisMonth, setScoresThisMonth] = useState<Record<string, number> | null>(null)
@@ -123,6 +120,75 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
       .then(({ data }) => { if (!cancelled && data) { setIsFavorite(true); setFavoriteId(data.id) } })
     return () => { cancelled = true }
   }, [userId, place.id])
+
+  const [reviews, setReviews] = useState<{ id: string; comment: string | null; created_at: string; display_name: string; photos: string[] }[]>([])
+
+  const photoRefs = useMemo(() => {
+    if (!place.photos?.length) return []
+    return place.photos.map(extractPhotoRef).filter((r): r is string => r !== null)
+  }, [place.photos])
+
+  const reviewPhotoItems = useMemo(() => {
+    return reviews.flatMap((review) =>
+      review.photos.map((photoUrl, index) => ({
+        id: `review-${review.id}-${index}`,
+        url: photoUrl,
+        caption: review.comment ? `${review.display_name}: ${review.comment}` : `${review.display_name} — Photo HopSoleil`,
+      }))
+    )
+  }, [reviews])
+
+  const galleryItems = useMemo(() => [
+    ...photoRefs.map((ref, i) => ({
+      id: `google-${i}`,
+      url: `/api/photo?ref=${encodeURIComponent(ref)}&w=900`,
+      caption: 'Photo Google Maps',
+    })),
+    ...reviewPhotoItems,
+  ], [photoRefs, reviewPhotoItems])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadReviews() {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('id, comment, created_at, user_id, photos')
+        .eq('place_id', place.id)
+        .order('created_at', { ascending: false })
+        .limit(6)
+      if (cancelled || error || !data) return
+
+      const filtered = data.filter((review) => {
+        const hasComment = typeof review.comment === 'string' && review.comment.trim().length > 0
+        const hasPhotos = Array.isArray(review.photos) && review.photos.length > 0
+        return hasComment || hasPhotos
+      })
+
+      const userIds = [...new Set(filtered.filter((r) => typeof r.user_id === 'string').map((r) => r.user_id as string))]
+      const profileMap: Record<string, string> = {}
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', userIds)
+        for (const profile of profiles ?? []) {
+          if (profile?.id) profileMap[profile.id] = profile.display_name ?? 'Soleiliste'
+        }
+      }
+
+      if (cancelled) return
+      setReviews(filtered.map((review) => ({
+        id: review.id,
+        comment: review.comment,
+        created_at: review.created_at,
+        display_name: typeof review.user_id === 'string' ? (profileMap[review.user_id] ?? 'Soleiliste') : 'Anonyme',
+        photos: Array.isArray(review.photos) ? review.photos : [],
+      })))
+    }
+
+    loadReviews()
+    return () => { cancelled = true }
+  }, [place.id])
 
   // Score affiché : lookup live dans les scores du mois (chargés à l'ouverture)
   const { slot, label: hourLabel, date: displayedDate } = slotFromHalfHour(hour)
@@ -242,7 +308,7 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
             <button
               onClick={handleClose}
               aria-label="Fermer"
-              className="absolute top-4 right-4 z-20 rounded-full bg-white/95 backdrop-blur w-11 h-11 flex items-center justify-center shadow-md text-nuit/80 active:scale-90 transition-transform touch-manipulation"
+              className="absolute top-4 right-4 z-20 rounded-full bg-white/95 w-11 h-11 flex items-center justify-center shadow-md text-nuit/80 active:scale-90 transition-transform touch-manipulation"
             >
               <X size={20} strokeWidth={2.4} />
             </button>
@@ -334,125 +400,141 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
             <div className="h-px bg-nuit/8 mx-4 shrink-0" />
 
             {/* ── CONTENU SCROLLABLE ───────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pt-4 pb-8">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-5 pt-4 pb-8" style={{ minHeight: 0 }}>
 
-              {/* Score block + slider */}
               {scoresThisMonth !== null && Object.keys(scoresThisMonth).length > 0 ? (
-                <>
-                  <div className={`mt-4 rounded-2xl ${theme.bg} px-5 py-4 flex items-center gap-4 transition-colors duration-300`}>
-                    <div className={`text-4xl font-playfair font-bold leading-none ${theme.text}`}>
-                      {score}
-                      <span className="text-base font-outfit font-medium opacity-60">/5</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-[10px] uppercase tracking-widest font-outfit font-bold ${theme.text} opacity-70`}>
-                        {isNow ? 'Maintenant' : `À ${hourLabel}`}
-                      </p>
-                      <p className={`text-sm font-outfit font-semibold ${theme.text} leading-tight truncate`}>
-                        {SCORE_LABEL[score]}
-                      </p>
-                    </div>
-                    <div className={`flex gap-0.5 items-end shrink-0 ${theme.text}`}>
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <span
-                          key={i}
-                          className={[
-                            'w-1.5 rounded-full transition-all duration-200',
-                            i <= score ? 'bg-current' : 'border border-current bg-transparent',
-                          ].join(' ')}
-                          style={{
-                            height: `${10 + i * 2.5}px`,
-                            opacity: i <= score ? 0.9 : 0.18,
-                          }}
-                        />
-                      ))}
-                    </div>
+                <div className={`mt-4 rounded-3xl px-5 py-4 flex items-center gap-4 ${theme.bg} transition-colors duration-300`}>
+                  <div className={`text-4xl font-playfair font-bold leading-none ${theme.text}`}>
+                    {score}
+                    <span className="text-base font-outfit font-medium opacity-70">/5</span>
                   </div>
-
-                  {/* Slider horaire */}
-                  <div className="mt-5">
-                    <div className="flex items-center justify-between text-[10px] uppercase tracking-widest font-outfit font-bold text-gris mb-2">
-                      <span className="flex items-center gap-1"><Sunrise size={12} />6h</span>
-                      <span className="text-nuit/60">Glisse pour explorer la journée</span>
-                      <span className="flex items-center gap-1">23h<Sunset size={12} /></span>
-                    </div>
-                    <div className="relative">
-                      <div
-                        className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2 rounded-full pointer-events-none"
-                        style={{ background: 'linear-gradient(to right, #5B6FA8 0%, #FFD976 22%, #FFBE0B 50%, #FF9500 75%, #2C3E54 100%)' }}
-                      />
-                      <input
-                        type="range"
-                        min={6}
-                        max={23.5}
-                        step={0.5}
-                        value={hour}
-                        onChange={(e) => setHour(parseFloat(e.target.value))}
-                        className="cb-hour-slider relative w-full appearance-none bg-transparent cursor-pointer"
-                        aria-label="Heure de la journée"
-                      />
-                    </div>
-                    <div className="flex justify-between mt-3 text-[12px] font-outfit">
-                      {[8, 12, 16, 20].map((h) => (
-                        <button
-                          key={h}
-                          onClick={() => setHour(h)}
-                          className={[
-                            'rounded-full px-3 py-1.5 transition-colors touch-manipulation font-medium',
-                            Math.floor(hour) === h
-                              ? 'bg-nuit text-creme font-semibold'
-                              : 'bg-nuit/5 text-nuit/70',
-                          ].join(' ')}
-                        >
-                          {h}h
-                        </button>
-                      ))}
-                    </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-[10px] uppercase tracking-[0.22em] font-semibold ${theme.text} opacity-70`}>
+                      {isNow ? 'Maintenant' : `À ${hourLabel}`}
+                    </p>
+                    <p className={`mt-1 text-sm font-semibold leading-tight ${theme.text}`}>
+                      {SCORE_LABEL[score]}
+                    </p>
+                    <p className="mt-2 text-[12px] text-nuit/70">
+                      {place.has_terrace !== false ? 'Terrasse disponible' : 'Terrasse non confirmée'}
+                    </p>
                   </div>
-                </>
-              ) : scoresThisMonth === null ? null : (
-                <div className="mt-4 rounded-2xl bg-nuit/5 px-4 py-3 text-center">
-                  <p className="text-[12px] font-outfit font-semibold text-nuit/50">
+                  <div className="flex flex-col gap-1 items-end">
+                    {rating != null && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-nuit shadow-sm">
+                        <Star size={14} fill="#FFBE0B" stroke="#FFBE0B" />
+                        {rating.toFixed(1)}
+                      </span>
+                    )}
+                    {place.arrondissement != null && (
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-gris">
+                        {place.arrondissement}{place.arrondissement === 1 ? 'er' : 'e'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : scoresThisMonth === null ? (
+                <div className="mt-4 rounded-3xl bg-white/95 border border-nuit/10 px-4 py-3 text-center">
+                  <p className="text-[12px] font-outfit font-semibold text-nuit/60">
+                    Charge les données de soleil…
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-3xl bg-[#fff8e8] px-4 py-3 text-center border border-[#f2d9a6]">
+                  <p className="text-[12px] font-outfit font-semibold text-[#6b5318]">
                     Score soleil non encore calculé pour ce lieu
                   </p>
                 </div>
               )}
 
+              <div className="mt-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Photos</p>
+                    <p className="mt-1 text-sm font-semibold text-nuit">{galleryItems.length} images</p>
+                  </div>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-nuit/50">
+                    Glisse
+                  </span>
+                </div>
+                {galleryItems.length > 0 ? (
+                  <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+                    {galleryItems.slice(0, 5).map((photo) => (
+                      <a key={photo.id} href={photo.url} target="_blank" rel="noreferrer"
+                        className="block shrink-0 overflow-hidden rounded-[22px] bg-[#f8f1e6]"
+                        style={{ minWidth: 120, minHeight: 120 }}>
+                        <img src={photo.url} alt={photo.caption} className="h-full w-full object-cover" />
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-3xl bg-white border border-nuit/10 p-4">
+                    <p className="text-sm text-nuit/75">Aucune photo disponible pour l’instant.</p>
+                  </div>
+                )}
+              </div>
+
               <div className="mt-5 space-y-3">
-                <div className="rounded-3xl bg-surface-1 p-4 ring-1 ring-nuit/10 shadow-sm">
-                  <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Infos rapides</p>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-nuit">
-                    <div className="rounded-3xl bg-white p-3 border border-nuit/10">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gris">Note</p>
-                      <p className="mt-2 font-semibold">{rating != null ? rating.toFixed(1) : '—'}</p>
+                <div className="rounded-3xl bg-white p-4 ring-1 ring-nuit/10 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Adresse</p>
+                      <p className="mt-2 text-sm font-semibold text-nuit leading-tight">{place.address}</p>
                     </div>
-                    <div className="rounded-3xl bg-white p-3 border border-nuit/10">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gris">Prix</p>
-                      <p className="mt-2 font-semibold">{priceLevel != null && priceLevel > 0 ? '€'.repeat(priceLevel) : '—'}</p>
-                    </div>
-                    <div className="rounded-3xl bg-white p-3 border border-nuit/10">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gris">Quartier</p>
-                      <p className="mt-2 font-semibold">{place.arrondissement != null ? `${place.arrondissement}${place.arrondissement === 1 ? 'er' : 'e'}` : '—'}</p>
-                    </div>
-                    <div className="rounded-3xl bg-white p-3 border border-nuit/10">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gris">Type</p>
-                      <p className="mt-2 font-semibold">{TYPE_LABEL[place.type] ?? place.type}</p>
-                    </div>
+                    <button onClick={handleOpenMaps}
+                      className="rounded-full bg-nuit px-3 py-2 text-[12px] font-semibold text-creme transition hover:bg-nuit/95">
+                      Itinéraire
+                    </button>
                   </div>
                 </div>
 
                 <div className="rounded-3xl bg-white p-4 ring-1 ring-nuit/10 shadow-sm">
-                  <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Adresse</p>
-                  <p className="mt-2 text-sm font-semibold text-nuit leading-tight">{place.address}</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-gris font-semibold">Avis récents</p>
+                      <p className="mt-2 text-sm font-semibold text-nuit">{reviews.length} avis</p>
+                    </div>
+                    {reviews.length > 0 ? (
+                      <a href={`/place/${place.id}`} className="text-[12px] font-semibold uppercase tracking-[0.22em] text-nuit/60">
+                        Voir tout
+                      </a>
+                    ) : null}
+                  </div>
+
+                  {reviews.length > 0 ? (
+                    <div className="mt-4 space-y-3">
+                      {reviews.slice(0, 2).map((review) => (
+                        <div key={review.id} className="rounded-3xl bg-surface-1 p-3 border border-nuit/10">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[11px] font-semibold text-nuit">{review.display_name}</span>
+                            <span className="text-[10px] text-gris">{new Date(review.created_at).toLocaleDateString('fr-FR')}</span>
+                          </div>
+                          {review.comment ? (
+                            <p className="mt-2 text-sm leading-6 text-nuit/85">{review.comment}</p>
+                          ) : (
+                            <p className="mt-2 text-sm leading-6 text-nuit/70">Photo uniquement</p>
+                          )}
+                          {review.photos.length > 0 && (
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              {review.photos.slice(0, 2).map((photo, index) => (
+                                <a key={index} href={photo} target="_blank" rel="noreferrer"
+                                  className="overflow-hidden rounded-2xl bg-[#f8f1e6]" style={{ minHeight: 86 }}>
+                                  <img src={photo} alt={`Avis photo ${index + 1}`} className="h-full w-full object-cover" />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm text-nuit/70">Aucun avis publié pour le moment.</p>
+                  )}
                 </div>
               </div>
 
-              {/* Vue 3D — uniquement en mode plein écran */}
               {snap === 3 && (
-                <div
-                  className="mt-6 rounded-2xl overflow-hidden"
-                  style={{ height: '220px', background: 'var(--color-creme)' }}
-                >
+                <div className="mt-6 rounded-2xl overflow-hidden" style={{ height: '220px', background: 'var(--color-creme)' }}>
                   <Terrace3DView lat={place.lat} lng={place.lng} score={score} date={displayedDate} />
                 </div>
               )}
