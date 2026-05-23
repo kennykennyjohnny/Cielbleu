@@ -272,14 +272,15 @@ export default function PlacePreview({ place, onClose }: PlacePreviewProps) {
                   aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                   aria-pressed={isFavorite}
                   className={[
-                    'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border transition-colors touch-manipulation min-h-[42px]',
+                    'flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border transition-colors touch-manipulation min-h-[42px]',
                     'text-sm font-outfit font-semibold',
                     isFavorite
-                      ? 'bg-[rgba(255,107,107,0.14)] border-corail/20 text-corail'
+                      ? 'bg-[rgba(237,99,99,0.16)] border-[rgba(237,99,99,0.26)] text-corail'
                       : 'bg-white border-nuit/10 text-nuit/80',
                   ].join(' ')}
+                  style={{ boxShadow: isFavorite ? '0 8px 20px rgba(237,99,99,0.12)' : 'none' }}
                 >
-                  <Heart size={15} fill={isFavorite ? 'currentColor' : 'none'} strokeWidth={2} />
+                  <Heart size={16} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2} />
                   <span>Favoris</span>
                 </button>
 

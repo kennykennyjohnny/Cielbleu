@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Clock, Share2 } from 'lucide-react'
+import { ArrowLeft, Clock, Share2, Heart } from 'lucide-react'
 import type { Place } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
@@ -391,7 +391,7 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
     <div style={{ background:'transparent', fontFamily:'var(--font-outfit)', color:'#142033',
         display:'flex', flexDirection:'column', height:'100%', overflow:'hidden' }}>
 
-      {/* ═══════════ HEADER COMPACT : score badge + heure + back ═══════════ */}
+      {/* ═══════════ HEADER COMPACT : back + favoris ═══════════ */}
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px 12px' }}>
         {onClose ? (
           <button onClick={onClose} aria-label="Fermer" style={{ textDecoration:'none', flexShrink:0, background:'none', border:'none', padding:0, cursor:'pointer' }}>
@@ -414,40 +414,35 @@ export default function PlacePageClient({ place, scores, hour, onHourChange, onC
 
         <div style={{ flex:1 }} />
 
-        {/* ❤️ Bouton favori + compteur */}
+        {/* Favoris */}
         <button
           onClick={handleToggleFavorite}
           disabled={favLoading}
           aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
           style={{
             flexShrink: 0,
-            minWidth: 34, height: 34,
-            borderRadius: likeCount > 0 ? 999 : '50%',
-            padding: likeCount > 0 ? '0 10px' : '0',
-            border: 'none', cursor: 'pointer',
-            background: isFavorite ? 'rgba(255,99,99,0.14)' : 'rgba(20,32,51,0.06)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-            fontSize: 17, transition: 'all 150ms',
+            minWidth: 42, height: 42,
+            borderRadius: 18,
+            border: '1px solid',
+            borderColor: isFavorite ? 'rgba(237,99,99,0.25)' : 'rgba(20,32,51,0.12)',
+            background: isFavorite ? 'rgba(255,99,99,0.16)' : 'rgba(255,255,255,0.96)',
+            color: isFavorite ? '#D22D3D' : '#1F3A5F',
+            cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '0 12px',
+            fontSize: 14, fontWeight: 700, transition: 'all 150ms',
           }}
         >
-          {isFavorite ? '❤️' : '🤍'}
+          <Heart size={18} fill={isFavorite ? '#D22D3D' : 'none'} stroke={isFavorite ? '#D22D3D' : '#1F3A5F'} strokeWidth={2.2} />
           {likeCount > 0 && (
             <span style={{
               fontSize: 12, fontWeight: 800, lineHeight: 1,
-              color: isFavorite ? '#d93636' : 'rgba(20,32,51,0.50)',
+              color: isFavorite ? '#D22D3D' : '#1F3A5F',
             }}>
               {likeCount}
             </span>
           )}
         </button>
-
-        <div style={{ flexShrink:0, minWidth:60, textAlign:'center',
-          background:isNow ? 'rgba(255,183,3,0.92)' : 'rgba(20,32,51,0.06)',
-          color:'#0b1f3a', borderRadius:10, padding:'5px 10px' }}>
-          <p style={{ margin:0, fontSize:11, fontWeight:800, lineHeight:1 }}>
-            {isNow ? 'Maintenant' : hourLabel}
-          </p>
-        </div>
       </div>
 
       {/* ═══════════ SLIDER HEURE — uniquement si scores calculés ═══════════ */}
