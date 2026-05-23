@@ -191,20 +191,50 @@ export default function HomePage() {
 
   useEffect(() => {
     async function loadPlaces() {
-      // ── Route API /api/places : colonnes slim + scores jointés côté serveur ──
-      // Cache CDN Vercel 30 s → chargement quasi-instantané pour la plupart des users.
-      // Avant migration_v5_performance.sql : fallback 2 requêtes parallèles côté serveur.
       const now   = new Date()
       const month = now.getMonth() + 1
       const h     = now.getHours()
       const m     = now.getMinutes() < 30 ? '00' : '30'
       const slot  = `${String(h).padStart(2, '0')}:${m}`
 
+      // ── Essai 1 : route API /api/places (cache CDN Vercel 30 s, co-localisée Paris) ──
       try {
         const res = await fetch(`/api/places?month=${month}&slot=${encodeURIComponent(slot)}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json() as Place[]
-        setPlaces(data)
+        if (res.ok) {
+          const json = await res.json()
+          if (Array.isArray(json) && json.length > 0) {
+            setPlaces(json as Place[])
+            setLoading(false)
+            return
+          }
+        }
+      } catch { /* fall through vers Supabase direct */ }
+
+      // ── Fallback : Supabase direct depuis le navigateur ──────────────────────
+      // Se déclenche si l'API route est indisponible ou renvoie un tableau vide.
+      // Colonnes slim : pas de photos/opening_hours → réponse ~200 KB vs ~7 MB avant.
+      const SLIM = 'id,name,address,lat,lng,type,arrondissement,has_terrace,google_rating,price_level,google_place_id'
+      const PAGE = 1000
+
+      try {
+        const [p0, p1, scoresRes] = await Promise.all([
+          supabase.from('places').select(SLIM)
+            .not('lat', 'is', null).not('lng', 'is', null).range(0, PAGE - 1),
+          supabase.from('places').select(SLIM)
+            .not('lat', 'is', null).not('lng', 'is', null).range(PAGE, PAGE * 2 - 1),
+          supabase.from('sun_scores').select('place_id,score')
+            .eq('month', month).eq('time_slot', slot),
+        ])
+
+        const allPlaces = [
+          ...((p0.data ?? []) as Place[]),
+          ...((p1.data ?? []) as Place[]),
+        ]
+        const scoreMap = new Map<string, number>(
+          ((scoresRes.data ?? []) as { place_id: string; score: number }[]).map(r => [r.place_id, r.score])
+        )
+        const enriched = allPlaces.map(p => ({ ...p, currentScore: scoreMap.get(p.id) ?? 3 }))
+        setPlaces(enriched)
       } catch (err) {
         console.error('Erreur chargement lieux:', err)
       } finally {
@@ -1034,7 +1064,7 @@ export default function HomePage() {
       )}
 
       {selectedPlace && !isDesktop && (
-        <PlacePreview place={selectedPlace} onClose={handleClose} />
+        <PlacePreview place={selectedPlace} hour={hour} onClose={handleClose} />
       )}
 
 
