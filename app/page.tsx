@@ -478,6 +478,15 @@ export default function HomePage() {
     if (data) await handlePlaceSelect(data as Place)
   }, [handlePlaceSelect])
 
+  // Lien partagé : /place/[id] redirige vers /?place=[id] → on ouvre la terrasse
+  // directement dans la vraie interface, puis on nettoie l'URL.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('place')
+    if (!id) return
+    history.replaceState(null, '', '/')
+    handleSelectPlaceFromProfile(id)
+  }, [handleSelectPlaceFromProfile])
+
   return (
     <main className="relative h-dvh w-full overflow-hidden">
       {/* Carte plein écran */}
