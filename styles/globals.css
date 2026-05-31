@@ -172,51 +172,59 @@ body {
 }
 
 /* ─── Slider horaire (header + PlacePageClient) ─── */
+/* Thumb 32px (desktop) / 38px (mobile) pour un drag confortable au doigt.
+   Track plus visible (10px) + barre dorée légère pour repérer la position. */
 .cb-hour-slider {
-  height: 28px;
+  height: 38px;
   outline: none;
   background: transparent;
+  touch-action: pan-x;
 }
 .cb-hour-slider::-webkit-slider-runnable-track {
-  height: 8px;
-  background: transparent;
+  height: 6px;
+  background: linear-gradient(to right, rgba(237,193,69,0.45), rgba(31,58,95,0.18));
   border-radius: 9999px;
 }
 .cb-hour-slider::-moz-range-track {
-  height: 8px;
-  background: transparent;
+  height: 6px;
+  background: linear-gradient(to right, rgba(237,193,69,0.45), rgba(31,58,95,0.18));
   border-radius: 9999px;
   border: none;
 }
 .cb-hour-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: #EDC145;
   border: 3px solid #fff8ea;
-  box-shadow: 0 0 0 1px rgba(31,58,95,0.18), 0 4px 12px rgba(237,193,69,0.45);
+  box-shadow: 0 0 0 1px rgba(31,58,95,0.18), 0 6px 16px rgba(237,193,69,0.50);
   cursor: grab;
-  margin-top: -10px;
+  margin-top: -13px;
   transition: transform 0.14s ease;
 }
 .cb-hour-slider::-webkit-slider-thumb:active {
   cursor: grabbing;
-  transform: scale(1.15);
+  transform: scale(1.18);
 }
 .cb-hour-slider::-moz-range-thumb {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: #EDC145;
   border: 3px solid #fff8ea;
-  box-shadow: 0 0 0 1px rgba(31,58,95,0.18), 0 4px 12px rgba(237,193,69,0.45);
+  box-shadow: 0 0 0 1px rgba(31,58,95,0.18), 0 6px 16px rgba(237,193,69,0.50);
   cursor: grab;
 }
 .cb-hour-slider::-moz-range-thumb:active {
   cursor: grabbing;
-  transform: scale(1.15);
+  transform: scale(1.18);
+}
+@media (max-width: 899px) {
+  .cb-hour-slider { height: 42px; }
+  .cb-hour-slider::-webkit-slider-thumb { width: 38px; height: 38px; margin-top: -16px; }
+  .cb-hour-slider::-moz-range-thumb { width: 38px; height: 38px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

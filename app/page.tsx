@@ -11,11 +11,14 @@ import FicheAmenitePanel from '@/components/Map/FicheAmenitePanel'
 import ProfilePanel from '@/components/Map/ProfilePanel'
 import { owmIconToEmoji } from '@/lib/weather'
 import { isOpenAt } from '@/lib/openingHours'
+import { hourToSlot, formatHourLabelPad } from '@/lib/hourSlot'
 import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
 
-function nowHalfHour(): number {
+function nowQuarter(): number {
   const now = new Date()
-  return Math.max(6, Math.min(23.5, now.getHours() + (now.getMinutes() >= 30 ? 0.5 : 0)))
+  // Snap au quart d'heure le plus proche (15 min)
+  const q = Math.round((now.getHours() + now.getMinutes() / 60) * 4) / 4
+  return Math.max(6, Math.min(23.75, q))
 }
 
 const MapView      = dynamic(() => import('@/components/Map/MapView'), {
@@ -60,7 +63,7 @@ export default function HomePage() {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
   const [selectedScores, setSelectedScores] = useState<{ time_slot: string; score: number }[]>([])
   const [selectedAmenite, setSelectedAmenite] = useState<AmeniteInfo | null>(null)
-  const [hour, setHour] = useState<number>(nowHalfHour)
+  const [hour, setHour] = useState<number>(nowQuarter)
   const [isDesktop, setIsDesktop] = useState(false)
   const [homeViewCount, setHomeViewCount] = useState(0)
   const [showProfile, setShowProfile] = useState(false)
@@ -154,7 +157,7 @@ export default function HomePage() {
     const { current, forecast } = weather
     if (!forecast?.length) return current
     // Utilise le champ `hour` (heure locale Paris 0-23) directement
-    const targetH = Math.floor(hour)
+    const targetH = Math.round(hour)
     let best = forecast[0]
     let bestDiff = Math.abs((best.hour ?? 0) - targetH)
     for (const entry of forecast) {
@@ -405,9 +408,7 @@ export default function HomePage() {
   // Si la DB n'a pas encore de données → fallback suncalc (altitude solaire Paris).
   useEffect(() => {
     if (!places.length) return
-    const hFloor = Math.floor(hour)
-    const mStr   = hour % 1 ? '30' : '00'
-    const slot   = `${String(hFloor).padStart(2, '0')}:${mStr}`
+    const slot   = hourToSlot(hour)
     const month  = new Date().getMonth() + 1
 
     const t = window.setTimeout(async () => {
@@ -417,13 +418,13 @@ export default function HomePage() {
 
       // Toujours mettre à jour tous les lieux : DB score si dispo, sinon altitude solaire
       const d = new Date()
-      d.setHours(hFloor, hour % 1 ? 30 : 0, 0, 0)
+      d.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
       const pos = getSunPosition(d, 48.8566, 2.3522)
       const alt = (pos.altitude * 180) / Math.PI
       const altScore = pos.altitude <= 0 ? 0 : alt < 5 ? 2 : alt < 15 ? 3 : alt < 35 ? 4 : 5
       const byId = new Map((data ?? []).map(r => [r.place_id, r.score]))
       setPlaces(prev => prev.map(p => ({ ...p, currentScore: byId.get(p.id) ?? altScore })))
-    }, 400)
+    }, 250)
     return () => window.clearTimeout(t)
   }, [hour]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -696,25 +697,25 @@ export default function HomePage() {
                 }}
               >
                 <input
-                  type="range" min={6} max={23.5} step={0.5}
+                  type="range" min={6} max={23.75} step={0.25}
                   value={hour}
                   onChange={(e) => setHour(parseFloat(e.target.value))}
                   className="cb-hour-slider"
                   style={{ flex: 1, minWidth: 0 }}
                   aria-label="Heure du soleil"
                 />
-                <span className="font-outfit shrink-0" style={{ fontSize: 12.5, fontWeight: 900, color: '#1F3A5F', lineHeight: 1, minWidth: 32 }}>
-                  {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : '00'}
+                <span className="font-outfit shrink-0" style={{ fontSize: 12.5, fontWeight: 900, color: '#1F3A5F', lineHeight: 1, minWidth: 44 }}>
+                  {formatHourLabelPad(hour)}
                 </span>
                 <button
-                  onClick={() => setHour(nowHalfHour())}
+                  onClick={() => setHour(nowQuarter())}
                   aria-label="Heure actuelle"
                   className="shrink-0 inline-flex items-center justify-center rounded-full transition-all active:scale-[0.90]"
                   style={{
                     width: 24, height: 24,
-                    background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.09)',
-                    border: `1px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
-                    boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 2px 8px rgba(237,193,69,0.40)' : 'none',
+                    background: Math.abs(hour - nowQuarter()) < 0.2 ? '#EDC145' : 'rgba(31,58,95,0.09)',
+                    border: `1px solid ${Math.abs(hour - nowQuarter()) < 0.2 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
+                    boxShadow: Math.abs(hour - nowQuarter()) < 0.2 ? '0 2px 8px rgba(237,193,69,0.40)' : 'none',
                     color: '#1F3A5F',
                   }}
                 >
@@ -779,7 +780,7 @@ export default function HomePage() {
               ☀ 6h
             </span>
             <input
-              type="range" min={6} max={23.5} step={0.5}
+              type="range" min={6} max={23.75} step={0.25}
               value={hour}
               onChange={(e) => setHour(parseFloat(e.target.value))}
               className="cb-hour-slider"
@@ -792,18 +793,18 @@ export default function HomePage() {
             </span>
             <span style={{ width: 1, height: 14, background: 'rgba(31,58,95,0.12)', flexShrink: 0 }} />
             <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 900,
-              color: '#1F3A5F', lineHeight: 1, minWidth: 32, textAlign: 'right', flexShrink: 0 }}>
-              {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : '00'}
+              color: '#1F3A5F', lineHeight: 1, minWidth: 44, textAlign: 'right', flexShrink: 0 }}>
+              {formatHourLabelPad(hour)}
             </span>
             <button
-              onClick={() => setHour(nowHalfHour())}
+              onClick={() => setHour(nowQuarter())}
               aria-label="Heure actuelle"
               className="inline-flex items-center justify-center rounded-full transition-all active:scale-[0.88]"
               style={{
                 width: 26, height: 26, flexShrink: 0,
-                background: Math.abs(hour - nowHalfHour()) < 0.3 ? '#EDC145' : 'rgba(31,58,95,0.08)',
-                border: `1.5px solid ${Math.abs(hour - nowHalfHour()) < 0.3 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
-                boxShadow: Math.abs(hour - nowHalfHour()) < 0.3 ? '0 3px 10px rgba(237,193,69,0.45)' : 'none',
+                background: Math.abs(hour - nowQuarter()) < 0.2 ? '#EDC145' : 'rgba(31,58,95,0.08)',
+                border: `1.5px solid ${Math.abs(hour - nowQuarter()) < 0.2 ? 'rgba(237,193,69,0.55)' : 'transparent'}`,
+                boxShadow: Math.abs(hour - nowQuarter()) < 0.2 ? '0 3px 10px rgba(237,193,69,0.45)' : 'none',
                 color: '#1F3A5F',
               }}
             >

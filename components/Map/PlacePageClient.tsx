@@ -6,6 +6,8 @@ import { ArrowLeft, Clock, Share2, Heart } from 'lucide-react'
 import type { Place } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
+import { compressImage } from '@/lib/imageCompress'
+import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -39,13 +41,11 @@ const EYEBROW: React.CSSProperties = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function halfHourToSlot(h: number): { slot: string; label: string; date: Date } {
-  const hour = Math.floor(h)
-  const min  = h % 1 ? 30 : 0
-  const slot = `${String(hour).padStart(2,'0')}:${min === 0 ? '00' : '30'}`
-  const label = `${hour}h${min ? '30' : ''}`
+function slotFromHour(h: number): { slot: string; label: string; date: Date } {
+  const slot = hourToSlot(h)
+  const label = formatHourLabel(h)
   const d = new Date()
-  d.setHours(hour, min, 0, 0)
+  d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0)
   return { slot, label, date: d }
 }
 
@@ -162,7 +162,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
     return m
   }, [scores])
 
-  const { slot } = halfHourToSlot(hour)
+  const { slot } = slotFromHour(hour)
   const currentScore = scoreMap[slot] ?? place.currentScore ?? 3
   const isSunny = currentScore >= 4
 
@@ -206,15 +206,17 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
   const streetViewUrl = `https://maps.google.com/?cbll=${place.lat},${place.lng}&cbp=12,0,0,0,0&layer=c`
 
   const handleShare = useCallback(async () => {
-    const url = `https://hopsoleil.fr/place/${place.id}`
-    if (navigator?.share) { try { await navigator.share({ title: 'HopSoleil — ' + place.name, url }); return } catch { /* cancelled */ } }
+    // Toujours utiliser le domaine actuel (cielbleu.fr, hopleon.fr, preview Vercel…)
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://cielbleu.fr'
+    const url = `${origin}/place/${place.id}`
+    if (navigator?.share) { try { await navigator.share({ title: place.name + ' — CielBleu', url }); return } catch { /* cancelled */ } }
     if (navigator?.clipboard) { try { await navigator.clipboard.writeText(url); setShareToast(true); setTimeout(() => setShareToast(false), 2200) } catch { /* noop */ } }
   }, [place.id, place.name])
 
   const handleSunVote = useCallback(async (isSunny: boolean) => {
     const newVote: 'sunny' | 'shady' = isSunny ? 'sunny' : 'shady'
     setSunVote(newVote)
-    const slot = `${String(Math.floor(hour)).padStart(2,'0')}:${hour % 1 ? '30' : '00'}`
+    const slot = hourToSlot(hour)
     await supabase.from('sun_votes').insert({
       place_id: place.id,
       user_id:  userId ?? null,
@@ -295,11 +297,17 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
       const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_')
       const path = `${userId}/${Date.now()}-${safeName}`
       const { error: upErr } = await supabase.storage
-        .from('review-photos').upload(path, file, { contentType: file.type })
-      if (!upErr) {
-        const { data: { publicUrl } } = supabase.storage.from('review-photos').getPublicUrl(path)
-        uploadedUrls.push(publicUrl)
+        .from('review-photos').upload(path, file, { contentType: file.type || 'image/jpeg', upsert: false })
+      if (upErr) {
+        setCommentSending(false)
+        const isSize = /size|large|exceed|payload/i.test(upErr.message)
+        setCommentError(isSize
+          ? 'Photo trop lourde. Essaie une image plus petite.'
+          : `Upload échoué : ${upErr.message}`)
+        return
       }
+      const { data: { publicUrl } } = supabase.storage.from('review-photos').getPublicUrl(path)
+      uploadedUrls.push(publicUrl)
     }
 
     let { error } = await supabase.from('reviews').insert({
@@ -474,8 +482,8 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
         {/* ── QUICK STATS (3 cols) ── */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:0 }}>
           {/* Note — cliquable → fiche Google */}
-          <button type="button" onClick={() => { window.location.href = gmapsUrl }}
-            style={{ ...STAT_CARD, textDecoration:'none', display:'block', cursor:'pointer', width:'100%', textAlign:'left' }}>
+          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+            style={{ ...STAT_CARD, textDecoration:'none', display:'block', width:'100%', textAlign:'left' }}>
             <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
               {place.google_rating != null ? place.google_rating.toFixed(1) : '—'}
             </strong>
@@ -483,10 +491,10 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
               fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
               Note <span style={{ fontSize:9, fontWeight:600, opacity:0.55, textTransform:'none', letterSpacing:0 }}>(google)</span>
             </span>
-          </button>
+          </a>
           {/* Prix — cliquable → fiche Google */}
-          <button type="button" onClick={() => { window.location.href = gmapsUrl }}
-            style={{ ...STAT_CARD, textDecoration:'none', display:'block', cursor:'pointer', width:'100%', textAlign:'left' }}>
+          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+            style={{ ...STAT_CARD, textDecoration:'none', display:'block', width:'100%', textAlign:'left' }}>
             <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
               {place.price_level ? '€'.repeat(place.price_level) : '—'}
             </strong>
@@ -494,15 +502,15 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
               fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
               Prix
             </span>
-          </button>
-          {/* Soleil */}
+          </a>
+          {/* Soleil — fenêtre signifiante au lieu d'une note vide */}
           <div style={{ ...STAT_CARD }}>
             <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
-              {currentScore}/5
+              {sunWindow ? `→${fmtSlotEnd(sunWindow.toSlot)}` : isSunny ? '☀️' : '🌑'}
             </strong>
             <span style={{ display:'block', marginTop:7, color:'#6f7a8a', fontSize:11,
               fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>
-              Soleil
+              {sunWindow ? 'Soleil jusqu’à' : isSunny ? 'Au soleil' : 'À l’ombre'}
             </span>
           </div>
         </div>
@@ -592,13 +600,14 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
                   <span style={{ fontSize:13, fontWeight:700,
                     color: isClosed ? '#FF6B6B' : '#1B2838' }}>{hoursLabel}</span>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => { window.location.href = place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}` }}
-                    style={{ fontSize:13, fontWeight:700, color:'#1F3A5F', textDecoration:'none', background:'none', border:'none', padding:0, cursor:'pointer' }}
+                  <a
+                    href={place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize:13, fontWeight:700, color:'#1F3A5F', textDecoration:'none' }}
                   >
                     Voir sur Google Maps →
-                  </button>
+                  </a>
                 )}
               </div>
             </div>
@@ -655,7 +664,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
             <div style={{ display:'grid', gap:8 }}>
 
               {/* Google Maps — maps.google.com = Universal Link → ouvre l'appli sur iOS/Android */}
-              <button type="button" onClick={() => { window.location.href = gmapsUrl }}
+              <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
                 style={{ textDecoration:'none', display:'block',
                   borderRadius:18, overflow:'hidden',
                   background:'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)',
@@ -671,12 +680,13 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
                   </div>
                   <span style={{ fontSize:18, flexShrink:0 }}>→</span>
                 </div>
-              </button>
+              </a>
 
               {/* Street View — miniature cliquable */}
-              <button
-                type="button"
-                onClick={() => { window.location.href = streetViewUrl }}
+              <a
+                href={streetViewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 style={{ textDecoration:'none', display:'block', borderRadius:18, overflow:'hidden',
                   boxShadow:'0 4px 16px rgba(5,150,105,0.14)',
                   border:'1px solid rgba(5,150,105,0.22)', position:'relative' }}>
@@ -701,7 +711,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
                   </div>
                   <span style={{ fontSize:18, color:'#fff' }}>→</span>
                 </div>
-              </button>
+              </a>
 
               {place.instagram_url && (
                 <a href={place.instagram_url} target="_blank" rel="noopener noreferrer"
@@ -841,13 +851,14 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
                       type="file"
                       accept="image/*"
                       style={{ display:'none' }}
-                      onChange={e => {
+                      onChange={async e => {
                         const file = e.target.files?.[0]
-                        if (!file || reviewPhotos.length >= 3) return
-                        const url = URL.createObjectURL(file)
-                        setReviewPhotos(p => [...p, file])
-                        setReviewPhotoUrls(p => [...p, url])
                         e.target.value = ''
+                        if (!file || reviewPhotos.length >= 3) return
+                        const compressed = await compressImage(file).catch(() => file)
+                        const url = URL.createObjectURL(compressed)
+                        setReviewPhotos(p => [...p, compressed])
+                        setReviewPhotoUrls(p => [...p, url])
                       }}
                     />
                   </div>
@@ -949,14 +960,16 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
           borderTop:'1px solid rgba(20,32,51,0.10)',
           boxShadow:'0 -4px 24px rgba(11,31,58,0.12)' }}>
 
-          {/* Primary: Ouvrir dans Google Maps — window.location.href requis pour Universal Links iOS */}
-          <button
-            onClick={() => { window.location.href = gmapsUrl }}
+          {/* Primary: Ouvrir dans Google Maps — <a target="_blank"> = Universal Link iOS, nouvel onglet desktop */}
+          <a
+            href={gmapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
             aria-label="Ouvrir dans Google Maps"
             style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:7,
               borderRadius:14, background:'#1F3A5F', color:'#fff',
               fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, border:'none',
-              cursor:'pointer', touchAction:'manipulation',
+              cursor:'pointer', touchAction:'manipulation', textDecoration:'none',
               boxShadow:'0 8px 20px rgba(31,58,95,0.28)' }}
           >
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink:0 }}>
@@ -964,20 +977,22 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
               <circle cx="12" cy="9" r="2.5" fill="white"/>
             </svg>
             Google Maps
-          </button>
+          </a>
 
-          {/* Secondary: Itinéraire → window.location.href pour App Links Android + Universal Links iOS */}
-          <button
-            onClick={() => { window.location.href = gmapsDirUrl }}
+          {/* Secondary: Itinéraire */}
+          <a
+            href={gmapsDirUrl}
+            target="_blank"
+            rel="noopener noreferrer"
             aria-label="Y aller"
             style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
               borderRadius:14, background:'#EDC145', color:'#1F3A5F',
               fontFamily:'var(--font-outfit)', fontWeight:900, fontSize:14, border:'none',
-              cursor:'pointer', touchAction:'manipulation',
+              cursor:'pointer', touchAction:'manipulation', textDecoration:'none',
               boxShadow:'0 8px 20px rgba(237,193,69,0.35)' }}
           >
             📍&nbsp;Y aller
-          </button>
+          </a>
 
           {/* Share */}
           <button onClick={handleShare} aria-label="Partager ce lieu"

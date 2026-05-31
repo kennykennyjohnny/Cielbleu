@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useCallback, useState } from 'react'
 import { X, Share2, Heart, Clock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
+import { compressImage } from '@/lib/imageCompress'
+import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 import type { Place } from '@/types'
 
 // ── Snap levels (10 niveaux) ──────────────────────────────────────────────────
@@ -54,12 +56,11 @@ const TYPE_LABEL: Record<string, string> = {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function slotFromHalfHour(h: number): { slot: string; label: string; date: Date } {
-  const hour = Math.floor(h)
-  const minute = h % 1 === 0 ? 0 : 30
-  const slot = `${String(hour).padStart(2, '0')}:${minute === 0 ? '00' : '30'}`
-  const label = `${hour}h${minute === 0 ? '' : '30'}`
-  const d = new Date(); d.setHours(hour, minute, 0, 0)
+function slotFromHour(h: number): { slot: string; label: string; date: Date } {
+  const slot = hourToSlot(h)
+  const label = formatHourLabel(h)
+  const d = new Date()
+  d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0)
   return { slot, label, date: d }
 }
 function fmtSlotStart(slot: string) {
@@ -215,7 +216,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   }, [place.id, userId, deviceId])
 
   // ── Computed ──────────────────────────────────────────────────────────────
-  const { slot, label: hourLabel } = slotFromHalfHour(hour)
+  const { slot, label: hourLabel } = slotFromHour(hour)
   const score = scoresThisMonth?.[slot] ?? place.currentScore ?? 3
   const isSunny = score >= 4
   const sunWindow = useMemo(() => scoresThisMonth ? computeSunWindow(scoresThisMonth) : null, [scoresThisMonth])
@@ -224,7 +225,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   const isClosed = todayHours ? /fermé/i.test(todayHours) : false
   const isNow = useMemo(() => {
     const now = new Date()
-    return Math.abs(hour - (now.getHours() + (now.getMinutes() < 30 ? 0 : 0.5))) < 0.25
+    return Math.abs(hour - (now.getHours() + now.getMinutes() / 60)) < 0.20
   }, [hour])
 
   const photoRefs = useMemo(() =>
@@ -258,8 +259,10 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   }, [userId, isFavorite, favoriteId, place.id, onOpenProfile])
 
   const handleShare = useCallback(async () => {
-    const url = `https://cielbleu.fr/place/${place.id}`
-    if (navigator?.share) { try { await navigator.share({ title: 'CielBleu — ' + place.name, url }); return } catch { /* cancelled */ } }
+    // Toujours utiliser le domaine actuel (cielbleu.fr, hopleon.fr, preview Vercel…)
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://cielbleu.fr'
+    const url = `${origin}/place/${place.id}`
+    if (navigator?.share) { try { await navigator.share({ title: place.name + ' — CielBleu', url }); return } catch { /* cancelled */ } }
     if (navigator?.clipboard) { try { await navigator.clipboard.writeText(url); setShareToast(true); setTimeout(() => setShareToast(false), 2200) } catch { /* noop */ } }
   }, [place.id, place.name])
 
@@ -279,10 +282,13 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
     for (const file of reviewPhotos) {
       const path = `${userId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
       const { error: upErr } = await supabase.storage
-        .from('review-photos').upload(path, file, { contentType: file.type })
+        .from('review-photos').upload(path, file, { contentType: file.type || 'image/jpeg', upsert: false })
       if (upErr) {
         setCommentSending(false)
-        setCommentError(`Erreur upload photo : ${upErr.message}`)
+        const isSize = /size|large|exceed|payload/i.test(upErr.message)
+        setCommentError(isSize
+          ? 'Photo trop lourde. Essaie une image plus petite.'
+          : `Upload échoué : ${upErr.message}`)
         return
       }
       uploadedUrls.push(supabase.storage.from('review-photos').getPublicUrl(path).data.publicUrl)
@@ -436,24 +442,26 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
               {/* ── BARRE D'ACTIONS ── */}
               <div style={{ padding: '7px 12px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 38px 38px', gap: 7 }}>
-                  <button
-                    onClick={() => window.open(gmapsUrl, '_blank')}
-
+                  <a
+                    href={gmapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     aria-label="Ouvrir dans Google Maps"
-                    style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(31,58,95,0.22)' }}>
+                    style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(31,58,95,0.22)', textDecoration: 'none' }}>
                     <svg width={12} height={12} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
                       <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
                       <circle cx="12" cy="9" r="2.5" fill="white"/>
                     </svg>
                     Google Maps
-                  </button>
-                  <button
-                    onClick={() => window.open(gmapsDirUrl, '_blank')}
-
+                  </a>
+                  <a
+                    href={gmapsDirUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     aria-label="Y aller"
-                    style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(237,193,69,0.26)' }}>
+                    style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(237,193,69,0.26)', textDecoration: 'none' }}>
                     📍&nbsp;Y aller
-                  </button>
+                  </a>
                   <button
                     onClick={handleToggleFavorite}
 
@@ -480,51 +488,58 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', minHeight: 0 }}>
               <div style={{ padding: '14px 16px 120px' }}>
 
-                {/* ── SCORE BLOCK ── */}
+                {/* ── SUN BLOCK : pictogramme + fenêtre soleil ── */}
                 <div style={{
                   borderRadius: 20, padding: '14px 16px', marginBottom: 14,
                   background: score >= 4 ? '#FFF1B8' : score >= 3 ? 'rgba(255,190,11,0.10)' : 'rgba(141,153,174,0.10)',
                   border: `1px solid ${score >= 4 ? 'rgba(237,193,69,0.40)' : 'rgba(141,153,174,0.18)'}`,
                   display: 'flex', alignItems: 'center', gap: 14,
                 }}>
-                  <div style={{ fontSize: 38, fontFamily: 'var(--font-playfair)', fontWeight: 700, lineHeight: 1, color: score >= 4 ? '#5c3d00' : score >= 3 ? '#B57500' : '#6f7a8a' }}>
-                    {scoresThisMonth !== null ? score : '…'}
-                    {scoresThisMonth !== null && <span style={{ fontSize: 15, fontWeight: 600, opacity: 0.55 }}>/5</span>}
+                  <div style={{ fontSize: 38, lineHeight: 1, flexShrink: 0 }} aria-hidden="true">
+                    {score >= 4 ? '☀️' : score === 3 ? '🌤️' : score === 2 ? '⛅' : score === 1 ? '☁️' : '🌙'}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 10, fontWeight: 900, letterSpacing: '0.20em', textTransform: 'uppercase', color: score >= 4 ? '#5c3d00' : '#6f7a8a' }}>
                       {isNow ? 'Maintenant' : `À ${hourLabel}`}
                     </p>
-                    <p style={{ margin: '3px 0 0', fontSize: 14, fontWeight: 700, color: score >= 4 ? '#3d2800' : score >= 3 ? '#8a5a00' : '#4a5568', lineHeight: 1.3 }}>
+                    <p style={{ margin: '3px 0 0', fontSize: 15, fontWeight: 800, color: score >= 4 ? '#3d2800' : score >= 3 ? '#8a5a00' : '#4a5568', lineHeight: 1.25 }}>
                       {SCORE_LABEL[score] ?? '—'}
                     </p>
-                    <p style={{ margin: '4px 0 0', fontSize: 11, color: '#6f7a8a', fontWeight: 500 }}>
-                      {place.has_terrace !== false ? 'Terrasse disponible' : 'Terrasse non confirmée'}
-                    </p>
+                    {sunWindow ? (
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: score >= 4 ? '#5c3d00' : '#6f7a8a', fontWeight: 600 }}>
+                        Soleil de {fmtSlotStart(sunWindow.fromSlot)} à {fmtSlotEnd(sunWindow.toSlot)}
+                      </p>
+                    ) : (
+                      <p style={{ margin: '4px 0 0', fontSize: 11, color: '#6f7a8a', fontWeight: 500 }}>
+                        {place.has_terrace !== false ? 'Terrasse disponible' : 'Terrasse non confirmée'}
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 {/* ── 3-COL STATS ── */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
-                  <button type="button" onClick={() => { window.location.href = gmapsUrl }}
-                    style={{ ...STAT_CARD, textAlign: 'left', width: '100%', border: '1px solid rgba(20,32,51,0.09)' }}>
+                  <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ ...STAT_CARD, textAlign: 'left', width: '100%', border: '1px solid rgba(20,32,51,0.09)', textDecoration: 'none', display: 'block' }}>
                     <strong style={{ display: 'block', color: '#0b1f3a', fontSize: 18, lineHeight: 1, fontWeight: 900 }}>
                       {place.google_rating != null ? place.google_rating.toFixed(1) : '—'}
                     </strong>
                     <span style={{ display: 'block', marginTop: 6, color: '#6f7a8a', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Note</span>
-                  </button>
-                  <button type="button" onClick={() => { window.location.href = gmapsUrl }}
-                    style={{ ...STAT_CARD, textAlign: 'left', width: '100%', border: '1px solid rgba(20,32,51,0.09)' }}>
+                  </a>
+                  <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ ...STAT_CARD, textAlign: 'left', width: '100%', border: '1px solid rgba(20,32,51,0.09)', textDecoration: 'none', display: 'block' }}>
                     <strong style={{ display: 'block', color: '#0b1f3a', fontSize: 18, lineHeight: 1, fontWeight: 900 }}>
                       {place.price_level ? '€'.repeat(place.price_level) : '—'}
                     </strong>
                     <span style={{ display: 'block', marginTop: 6, color: '#6f7a8a', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Prix</span>
-                  </button>
+                  </a>
                   <div style={{ ...STAT_CARD, cursor: 'default' }}>
                     <strong style={{ display: 'block', color: '#0b1f3a', fontSize: 18, lineHeight: 1, fontWeight: 900 }}>
-                      {score}/5
+                      {sunWindow ? `→${fmtSlotEnd(sunWindow.toSlot).replace('h', 'h')}` : score >= 4 ? '☀️' : score >= 3 ? '🌤️' : '🌑'}
                     </strong>
-                    <span style={{ display: 'block', marginTop: 6, color: '#6f7a8a', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Soleil</span>
+                    <span style={{ display: 'block', marginTop: 6, color: '#6f7a8a', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      {sunWindow ? 'Soleil jusqu’à' : isSunny ? 'Au soleil' : 'À l’ombre'}
+                    </span>
                   </div>
                 </div>
 
@@ -536,10 +551,10 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                     {todayHours ? (
                       <span style={{ fontSize: 13, fontWeight: 700, color: isClosed ? '#FF6B6B' : '#1B2838' }}>{todayHours}</span>
                     ) : (
-                      <button type="button" onClick={() => { window.location.href = gmapsUrl }}
-                        style={{ fontSize: 13, fontWeight: 700, color: '#1F3A5F', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                      <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 13, fontWeight: 700, color: '#1F3A5F', textDecoration: 'none' }}>
                         Voir sur Google Maps →
-                      </button>
+                      </a>
                     )}
                   </div>
                 </div>
@@ -613,8 +628,8 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                   <div style={{ borderTop: '1px solid rgba(20,32,51,0.09)', paddingTop: 14, marginBottom: 14 }}>
                     <p style={{ ...EYEBROW, marginBottom: 10 }}>Voir le lieu</p>
                     <div style={{ display: 'grid', gap: 8 }}>
-                      <button type="button" onClick={() => { window.location.href = gmapsUrl }}
-                        style={{ borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)', border: '1px solid rgba(66,133,244,0.25)', boxShadow: '0 4px 14px rgba(66,133,244,0.14)', padding: 0, cursor: 'pointer' }}>
+                      <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)', border: '1px solid rgba(66,133,244,0.25)', boxShadow: '0 4px 14px rgba(66,133,244,0.14)', textDecoration: 'none', display: 'block' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px' }}>
                           <span style={{ fontSize: 22, flexShrink: 0 }}>🗺️</span>
                           <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
@@ -623,9 +638,9 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                           </div>
                           <span style={{ fontSize: 16, color: '#1a3fa7', flexShrink: 0 }}>→</span>
                         </div>
-                      </button>
-                      <button type="button" onClick={() => { window.location.href = streetViewUrl }}
-                        style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 14px rgba(5,150,105,0.12)', border: '1px solid rgba(5,150,105,0.20)', position: 'relative', background: 'none', padding: 0, cursor: 'pointer' }}>
+                      </a>
+                      <a href={streetViewUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 14px rgba(5,150,105,0.12)', border: '1px solid rgba(5,150,105,0.20)', position: 'relative', display: 'block', textDecoration: 'none' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={`/api/streetview?lat=${place.lat}&lng=${place.lng}&w=560&h=160&fov=90`}
                           alt={`Street View — ${place.name}`}
@@ -637,7 +652,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                           </div>
                           <span style={{ fontSize: 16, color: '#fff' }}>→</span>
                         </div>
-                      </button>
+                      </a>
                     </div>
                   </div>
                 )}
@@ -688,12 +703,13 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                             </button>
                           )}
                           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
-                            onChange={e => {
+                            onChange={async e => {
                               const file = e.target.files?.[0]
-                              if (!file || reviewPhotos.length >= 3) return
-                              const url = URL.createObjectURL(file)
-                              setReviewPhotos(p => [...p, file]); setReviewPhotoUrls(p => [...p, url])
                               e.target.value = ''
+                              if (!file || reviewPhotos.length >= 3) return
+                              const compressed = await compressImage(file).catch(() => file)
+                              const url = URL.createObjectURL(compressed)
+                              setReviewPhotos(p => [...p, compressed]); setReviewPhotoUrls(p => [...p, url])
                             }} />
                         </div>
                         <button type="submit" disabled={commentSending || (!commentText.trim() && reviewPhotos.length === 0)}
