@@ -156,7 +156,6 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
   const [editName, setEditName]         = useState('')  // prénom = pseudo
 
   // ── Avatar upload ──────────────────────────────────────────────────
-  const avatarInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef  = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -681,6 +680,14 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
             {loading ? '…' : authTab === 'login' ? 'Se connecter' : "Créer mon compte"}
           </button>
         </form>
+
+        <p style={{ margin: '20px 0 0', fontSize: 11, color: 'rgba(31,58,95,0.40)', textAlign: 'center', lineHeight: 1.5 }}>
+          En utilisant HopSoleil, vous acceptez notre{' '}
+          <a href="/politique-de-confidentialite" target="_blank" rel="noreferrer"
+            style={{ color: 'rgba(31,58,95,0.60)', fontWeight: 700, textDecoration: 'underline' }}>
+            politique de confidentialité
+          </a>
+        </p>
 
       </div>
     )

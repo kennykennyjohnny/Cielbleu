@@ -236,7 +236,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
     ...photoRefs.map((ref, i) => ({ id: `g-${i}`, url: `/api/photo?ref=${encodeURIComponent(ref)}&w=900`, type: 'google' as const, caption: 'Photo Google Maps' })),
     ...reviews.flatMap(r => r.photos.map((u, pi) => ({
       id: `r-${r.id}-${pi}`, url: u, type: 'review' as const,
-      caption: r.comment ? `${r.display_name}: ${r.comment}` : `${r.display_name} — Photo CielBleu`,
+      caption: r.comment ? `${r.display_name}: ${r.comment}` : `${r.display_name} — Photo HopSoleil`,
     }))),
   ], [photoRefs, reviews])
 
@@ -266,9 +266,9 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
   const handleShare = useCallback(async () => {
     // Toujours utiliser le domaine actuel (cielbleu.fr, hopleon.fr, preview Vercel…)
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://cielbleu.fr'
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://hopsoleil.fr'
     const url = `${origin}/place/${place.id}`
-    if (navigator?.share) { try { await navigator.share({ title: place.name + ' — CielBleu', url }); return } catch { /* cancelled */ } }
+    if (navigator?.share) { try { await navigator.share({ title: place.name + ' — HopSoleil', url }); return } catch { /* cancelled */ } }
     if (navigator?.clipboard) { try { await navigator.clipboard.writeText(url); setShareToast(true); setTimeout(() => setShareToast(false), 2200) } catch { /* noop */ } }
   }, [place.id, place.name])
 
@@ -588,13 +588,13 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                               )}
                             </div>
                             <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1F3A5F', lineHeight: 1.55, borderLeft: '3px solid rgba(237,193,69,0.55)', paddingLeft: 10 }}>
-                              {r.comment ?? 'Photo partagée depuis CielBleu'}
+                              {r.comment ?? 'Photo partagée depuis HopSoleil'}
                             </p>
                             {r.photos.length > 0 && (
                               <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
                                 {r.photos.slice(0, 3).map((u, pi) => (
                                   <button key={pi} type="button"
-                                    onClick={() => setLightboxPhoto({ url: u, caption: r.comment ? `${r.display_name}: ${r.comment}` : `${r.display_name} — CielBleu` })}
+                                    onClick={() => setLightboxPhoto({ url: u, caption: r.comment ? `${r.display_name}: ${r.comment}` : `${r.display_name} — HopSoleil` })}
                                     style={{ width: 76, height: 60, borderRadius: 8, overflow: 'hidden', border: 'none', padding: 0, background: 'none', cursor: 'pointer' }}>
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img src={u} alt="Avis photo" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
@@ -621,7 +621,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={item.url} alt={item.caption ?? place.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading={i === 0 ? 'eager' : 'lazy'} />
                           <div style={{ position: 'absolute', left: 8, bottom: 8, padding: '3px 7px', borderRadius: 999, background: 'rgba(0,0,0,0.52)', color: '#fff', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                            {item.type === 'review' ? 'CielBleu' : 'Google'}
+                            {item.type === 'review' ? 'HopSoleil' : 'Google'}
                           </div>
                         </button>
                       ))}

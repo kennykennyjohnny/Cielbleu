@@ -29,12 +29,12 @@ export const metadata: Metadata = {
     apple: [
       { url: '/favicon-vdef.png', sizes: '192x192', type: 'image/png' },
     ],
-  },  openGraph: {
+  },
+  openGraph: {
     title: 'HopSoleil ☀',
     description: 'Le radar des terrasses ensoleillées à Paris.',
     url: 'https://hopsoleil.fr',
     siteName: 'HopSoleil',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'HopSoleil' }],
     locale: 'fr_FR',
     type: 'website',
   },
@@ -42,7 +42,6 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'HopSoleil ☀',
     description: 'Le radar des terrasses ensoleillées à Paris.',
-    images: ['/og-image.png'],
   },
 }
 

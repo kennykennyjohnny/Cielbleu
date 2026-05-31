@@ -210,9 +210,9 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
 
   const handleShare = useCallback(async () => {
     // Toujours utiliser le domaine actuel (cielbleu.fr, hopleon.fr, preview Vercel…)
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://cielbleu.fr'
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://hopsoleil.fr'
     const url = `${origin}/place/${place.id}`
-    if (navigator?.share) { try { await navigator.share({ title: place.name + ' — CielBleu', url }); return } catch { /* cancelled */ } }
+    if (navigator?.share) { try { await navigator.share({ title: place.name + ' — HopSoleil', url }); return } catch { /* cancelled */ } }
     if (navigator?.clipboard) { try { await navigator.clipboard.writeText(url); setShareToast(true); setTimeout(() => setShareToast(false), 2200) } catch { /* noop */ } }
   }, [place.id, place.name])
 
