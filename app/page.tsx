@@ -400,7 +400,7 @@ export default function HomePage() {
     if (selectedPlace && !isDesktop) return '52dvh'
     if (selectedAmenite) return 'calc(62vh + 14px)'
     if (showProfile)     return 'calc(90dvh + 14px)' // off-screen, OK
-    return 'calc(max(env(safe-area-inset-bottom, 0px), 10px) + 190px)'
+    return 'calc(max(env(safe-area-inset-bottom, 0px), 10px) + 225px)'
   }, [isDesktop, selectedPlace, selectedAmenite, showProfile])
 
   // ── Sync scores du slider (debounce 400 ms) ──────────────────────────────
