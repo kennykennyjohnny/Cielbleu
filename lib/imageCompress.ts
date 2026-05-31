@@ -1,13 +1,11 @@
 /**
  * Compresse une image côté navigateur avant upload Supabase.
  *
- * iPhone & Android prennent des JPEG de 4–12 MB. Supabase Storage accepte
- * jusqu'à 50 MB par défaut mais le réseau mobile + le rendu canvas iOS
- * échouent souvent sur ces tailles → l'utilisateur voit "Erreur upload photo".
- *
- * On redimensionne à 1600 px max sur le grand côté, ré-encode en JPEG 0.82,
- * et conserve l'orientation EXIF (le navigateur l'applique automatiquement
- * via createImageBitmap avec `imageOrientation: 'from-image'`).
+ * Problèmes mobile connus :
+ * - iOS Safari < 17.2 : createImageBitmap() peut ne jamais résoudre ni rejeter
+ *   (hang silencieux). On le race contre un timeout de 3 s.
+ * - canvas.toBlob() peut aussi hanger sur petits appareils. Timeout de 8 s.
+ * - Si tout échoue, on renvoie le fichier original (Supabase l'uploadera tel quel).
  */
 export async function compressImage(
   file: File,
@@ -15,63 +13,84 @@ export async function compressImage(
 ): Promise<File> {
   const { maxDim = 1600, quality = 0.82 } = opts
 
-  // Si déjà petit ET pas HEIC : on garde tel quel
+  // Petit fichier standard → pas besoin de compresser
   if (file.size < 600 * 1024 && /image\/(jpeg|png|webp)/i.test(file.type)) {
     return file
   }
 
-  // 1) createImageBitmap gère HEIC (Safari), JPEG, PNG, WEBP et applique l'EXIF.
-  // 2) Fallback <img> si createImageBitmap est indisponible (vieux Safari iOS).
+  // ── Décodage ─────────────────────────────────────────────────────────────
+  // Priorité 1 : createImageBitmap avec imageOrientation (corrige l'EXIF).
+  //   Race contre 3 s pour ne pas bloquer si le browser hang (iOS Safari bug).
+  // Priorité 2 : <img> element — universel, mais sans correction EXIF canvas.
   let source: ImageBitmap | HTMLImageElement
-  let width: number
-  let height: number
+  let srcW: number
+  let srcH: number
+
   try {
-    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
-    source = bitmap; width = bitmap.width; height = bitmap.height
+    const bitmap = await Promise.race([
+      createImageBitmap(file, { imageOrientation: 'from-image' }),
+      rejectAfter(3000),
+    ])
+    source = bitmap; srcW = bitmap.width; srcH = bitmap.height
   } catch {
-    const fallback = await loadViaImageElement(file).catch(() => null)
-    if (!fallback) return file   // format réellement non décodable (HEIC sur Chrome) → upload tel quel
-    source = fallback.img; width = fallback.width; height = fallback.height
+    const fallback = await decodeViaImg(file).catch(() => null)
+    if (!fallback) return file
+    source = fallback.img; srcW = fallback.w; srcH = fallback.h
   }
 
-  const scale = Math.min(1, maxDim / Math.max(width, height))
-  const w = Math.round(width * scale)
-  const h = Math.round(height * scale)
+  // ── Redimensionnement ────────────────────────────────────────────────────
+  const scale = Math.min(1, maxDim / Math.max(srcW, srcH))
+  const w = Math.round(srcW * scale)
+  const h = Math.round(srcH * scale)
 
   const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
+  canvas.width = w; canvas.height = h
   const ctx = canvas.getContext('2d')
-  if (!ctx) { if ('close' in source) source.close?.(); return file }
+  if (!ctx) { closeBitmap(source); return file }
   ctx.drawImage(source, 0, 0, w, h)
-  if ('close' in source) source.close?.()
+  closeBitmap(source)
 
-  const blob = await new Promise<Blob | null>(resolve =>
-    canvas.toBlob(resolve, 'image/jpeg', quality)
-  )
+  // ── Encodage JPEG ────────────────────────────────────────────────────────
+  // Race contre 8 s pour éviter un hang de toBlob sur petits appareils.
+  const blob = await Promise.race([
+    new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', quality)),
+    resolveAfter<Blob | null>(8000, null),
+  ])
   if (!blob) return file
 
-  // Si la compression n'a rien gagné (rare, image déjà optimisée), garder l'original
   if (blob.size >= file.size) return file
 
   const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo'
   return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() })
 }
 
-/** Décode un fichier image via un <img> (fallback createImageBitmap). */
-function loadViaImageElement(
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function rejectAfter(ms: number): Promise<never> {
+  return new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
+}
+
+function resolveAfter<T>(ms: number, val: T): Promise<T> {
+  return new Promise(res => setTimeout(() => res(val), ms))
+}
+
+function closeBitmap(src: ImageBitmap | HTMLImageElement) {
+  if ('close' in src) src.close()
+}
+
+/** Décode un fichier image via un élément <img> — fallback universel. */
+function decodeViaImg(
   file: File
-): Promise<{ img: HTMLImageElement; width: number; height: number }> {
+): Promise<{ img: HTMLImageElement; w: number; h: number }> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
     const img = new Image()
     img.onload = () => {
-      const width = img.naturalWidth
-      const height = img.naturalHeight
-      if (!width || !height) { URL.revokeObjectURL(url); reject(new Error('decode failed')); return }
-      resolve({ img, width, height })
-      // L'URL reste valide tant que l'img est dessinée dans le canvas (synchrone juste après).
-      requestAnimationFrame(() => URL.revokeObjectURL(url))
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      URL.revokeObjectURL(url)
+      if (!w || !h) { reject(new Error('empty image')); return }
+      resolve({ img, w, h })
     }
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode failed')) }
     img.src = url

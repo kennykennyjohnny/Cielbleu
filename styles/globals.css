@@ -151,6 +151,15 @@ body {
 
 .mapboxgl-ctrl-bottom-right .mapboxgl-ctrl { margin-bottom: 8px !important; }
 
+/* Sur mobile, remonter les contrôles Mapbox (dont le bouton de géolocalisation)
+   au-dessus de la bottom bar flottante (~165 px de hauteur). */
+@media (max-width: 899px) {
+  .mapboxgl-ctrl-bottom-right {
+    bottom: calc(max(env(safe-area-inset-bottom, 0px), 8px) + 165px) !important;
+    right: 14px !important;
+  }
+}
+
 .mapboxgl-ctrl-group {
   border-radius: 14px !important;
   box-shadow: 0 4px 14px rgba(11,31,58,0.12) !important;
