@@ -20,17 +20,20 @@ export async function compressImage(
     return file
   }
 
-  // createImageBitmap gère HEIC (Safari), JPEG, PNG, WEBP et applique l'EXIF.
-  let bitmap: ImageBitmap
+  // 1) createImageBitmap gère HEIC (Safari), JPEG, PNG, WEBP et applique l'EXIF.
+  // 2) Fallback <img> si createImageBitmap est indisponible (vieux Safari iOS).
+  let source: ImageBitmap | HTMLImageElement
+  let width: number
+  let height: number
   try {
-    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    source = bitmap; width = bitmap.width; height = bitmap.height
   } catch {
-    // Fallback : si createImageBitmap échoue (ex: HEIC sur Chrome), renvoyer
-    // l'original — Supabase tentera l'upload, et l'utilisateur saura.
-    return file
+    const fallback = await loadViaImageElement(file).catch(() => null)
+    if (!fallback) return file   // format réellement non décodable (HEIC sur Chrome) → upload tel quel
+    source = fallback.img; width = fallback.width; height = fallback.height
   }
 
-  const { width, height } = bitmap
   const scale = Math.min(1, maxDim / Math.max(width, height))
   const w = Math.round(width * scale)
   const h = Math.round(height * scale)
@@ -39,9 +42,9 @@ export async function compressImage(
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d')
-  if (!ctx) { bitmap.close?.(); return file }
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  bitmap.close?.()
+  if (!ctx) { if ('close' in source) source.close?.(); return file }
+  ctx.drawImage(source, 0, 0, w, h)
+  if ('close' in source) source.close?.()
 
   const blob = await new Promise<Blob | null>(resolve =>
     canvas.toBlob(resolve, 'image/jpeg', quality)
@@ -53,4 +56,24 @@ export async function compressImage(
 
   const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo'
   return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() })
+}
+
+/** Décode un fichier image via un <img> (fallback createImageBitmap). */
+function loadViaImageElement(
+  file: File
+): Promise<{ img: HTMLImageElement; width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const width = img.naturalWidth
+      const height = img.naturalHeight
+      if (!width || !height) { URL.revokeObjectURL(url); reject(new Error('decode failed')); return }
+      resolve({ img, width, height })
+      // L'URL reste valide tant que l'img est dessinée dans le canvas (synchrone juste après).
+      requestAnimationFrame(() => URL.revokeObjectURL(url))
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode failed')) }
+    img.src = url
+  })
 }

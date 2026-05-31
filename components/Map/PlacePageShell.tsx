@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useState, useRef, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { Search, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { formatHourLabelPad } from '@/lib/hourSlot'
 import PlacePageClient from './PlacePageClient'
 import type { Place } from '@/types'
 
@@ -20,29 +21,36 @@ const MapView = dynamic(() => import('./MapView'), {
   ),
 })
 
+// Même fiche que sur le home (DA moderne, drag fluide) — affichée sur mobile.
+const PlacePreview = dynamic(() => import('./PlacePreview'), { ssr: false })
+
 interface Props {
   place: Place
   scores: { time_slot: string; score: number }[]
 }
 
-type SheetMode = 'peek' | 'half' | 'full'
-const SHEET_HEIGHTS: Record<SheetMode, string> = {
-  peek: '18vh', half: '38vh', full: '92dvh',
-}
-
-function nowHalfHour(): number {
+function nowQuarter(): number {
   const now = new Date()
-  return Math.max(6, Math.min(23.5, now.getHours() + (now.getMinutes() >= 30 ? 0.5 : 0)))
+  const q = Math.round((now.getHours() + now.getMinutes() / 60) * 4) / 4
+  return Math.max(6, Math.min(23.75, q))
 }
 
 export default function PlacePageShell({ place, scores }: Props) {
   const router            = useRouter()
-  const [mode, setMode]   = useState<SheetMode>('half')
-  const [hour, setHour]   = useState<number>(nowHalfHour)
+  const [hour, setHour]   = useState<number>(nowQuarter)
   const [isDesktop, setIsDesktop] = useState(false)
   const [allPlaces, setAllPlaces] = useState<Place[]>([place])
   const [searchQuery, setSearchQuery] = useState('')
-  const dragRef = useRef<{ y: number; mode: SheetMode } | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+
+  // Auth — pour que favoris / avis / photos fonctionnent aussi sur la page partagée
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_e, session) => setUserId(session?.user?.id ?? null)
+    )
+    return () => subscription.unsubscribe()
+  }, [])
 
   // Layout : side panel (desktop ≥ 900px) vs bottom sheet (mobile)
   useEffect(() => {
@@ -91,21 +99,6 @@ export default function PlacePageShell({ place, scores }: Props) {
     if (p && p.id !== place.id) router.push(`/place/${p.id}`)
   }, [router, place.id])
 
-  // Drag handle (mobile uniquement)
-  const onPointerDown = (e: React.PointerEvent) => {
-    dragRef.current = { y: e.clientY, mode }
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-  }
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragRef.current) return
-    const dy = e.clientY - dragRef.current.y
-    if (dy > 40)       setMode(dragRef.current.mode === 'full' ? 'half' : 'peek')
-    else if (dy < -40) setMode(dragRef.current.mode === 'peek' ? 'half' : 'full')
-  }
-  const onPointerUp = () => { dragRef.current = null }
-
-  useEffect(() => { setMode('half') }, [place.id])
-
   return (
     <main className="relative h-dvh w-full overflow-hidden">
       {/* ─── Carte = MÊME carte qu'en home, tous les lieux visibles ─── */}
@@ -153,7 +146,7 @@ export default function PlacePageShell({ place, scores }: Props) {
             <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 10, fontWeight: 800,
               color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>☀ 6h</span>
             <input
-              type="range" min={6} max={23.5} step={0.5}
+              type="range" min={6} max={23.75} step={0.25}
               value={hour}
               onChange={(e) => setHour(parseFloat(e.target.value))}
               className="cb-hour-slider"
@@ -164,8 +157,8 @@ export default function PlacePageShell({ place, scores }: Props) {
               color: 'rgba(31,58,95,0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}>🌙 23h</span>
             <span style={{ width: 1, height: 14, background: 'rgba(31,58,95,0.12)', flexShrink: 0 }} />
             <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 900,
-              color: '#1F3A5F', lineHeight: 1, minWidth: 32, textAlign: 'right', flexShrink: 0 }}>
-              {String(Math.floor(hour)).padStart(2,'0')}h{hour % 1 ? '30' : '00'}
+              color: '#1F3A5F', lineHeight: 1, minWidth: 42, textAlign: 'right', flexShrink: 0 }}>
+              {formatHourLabelPad(hour)}
             </span>
           </div>
         </div>
@@ -222,71 +215,22 @@ export default function PlacePageShell({ place, scores }: Props) {
           role="complementary" aria-label={`Détails de ${place.name}`}
         >
           <PlacePageClient place={place} scores={scores}
-            hour={hour} onHourChange={setHour} />
+            hour={hour} onHourChange={setHour}
+            userId={userId}
+            onClose={() => router.push('/')}
+            onOpenProfile={() => router.push('/')} />
         </aside>
       )}
 
-      {/* ─── MOBILE : bottom sheet draggable ─── */}
+      {/* ─── MOBILE : même fiche que le home (PlacePreview, drag fluide) ─── */}
       {!isDesktop && (
-        <section
-          className="absolute bottom-0 inset-x-0 z-30"
-          style={{
-            height: SHEET_HEIGHTS[mode],
-            transition: 'height 280ms cubic-bezier(0.2,0.8,0.2,1)',
-            background: 'rgba(255,252,243,0.97)',
-            backdropFilter: 'blur(22px)',
-            borderTopLeftRadius: 22, borderTopRightRadius: 22,
-            borderTop: '1px solid rgba(20,32,51,0.10)',
-            boxShadow: '0 -16px 42px rgba(11,31,58,0.20)',
-            overflow: 'hidden',
-            display: 'flex', flexDirection: 'column',
-          }}
-          role="dialog" aria-label={`Détails de ${place.name}`}
-        >
-          {/* ── Drag handle bar ── */}
-          <div style={{ height: 36, flexShrink: 0, display: 'flex', alignItems: 'center',
-            padding: '0 12px', borderBottom: '1px solid rgba(20,32,51,0.06)' }}>
-            {/* × Fermer */}
-            <button
-              onClick={() => router.push('/')}
-              aria-label="Fermer"
-              style={{ width: 28, height: 28, borderRadius: '50%', border: 'none',
-                background: 'rgba(20,32,51,0.07)', cursor: 'pointer', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <X size={13} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
-            </button>
-            {/* Poignée centrale — drag */}
-            <div
-              onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-              role="separator" aria-label="Redimensionner la fiche (glisser haut/bas)"
-              style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', touchAction: 'none', cursor: 'grab' }}
-            >
-              <span aria-hidden="true"
-                style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(20,32,51,0.15)' }} />
-            </div>
-            {/* ↓/↑ Agrandir / réduire */}
-            <button
-              onClick={() => setMode(m => m === 'peek' ? 'full' : 'peek')}
-              aria-label={mode === 'peek' ? 'Agrandir' : 'Réduire'}
-              style={{ width: 28, height: 28, borderRadius: '50%', border: 'none',
-                background: 'rgba(20,32,51,0.07)', cursor: 'pointer', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              {mode === 'peek'
-                ? <ChevronUp   size={14} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
-                : <ChevronDown size={14} strokeWidth={2.5} style={{ color: '#1F3A5F' }} />
-              }
-            </button>
-          </div>
-          {/* ── Content (PlacePageClient gère son propre scroll) ── */}
-          <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-            <PlacePageClient place={place} scores={scores}
-              hour={hour} onHourChange={setHour} />
-          </div>
-        </section>
+        <PlacePreview
+          place={place}
+          hour={hour}
+          onClose={() => router.push('/')}
+          userId={userId}
+          onOpenProfile={() => router.push('/')}
+        />
       )}
     </main>
   )

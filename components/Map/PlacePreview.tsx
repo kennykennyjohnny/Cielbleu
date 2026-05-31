@@ -240,11 +240,17 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
     }))),
   ], [photoRefs, reviews])
 
+  // Format officiel Google Maps URLs API (?api=1) → ouvre la fiche dans l'appli
+  // native iOS/Android. L'ancien `?q=place_id:` collait juste le texte dans la
+  // barre de recherche sans ouvrir le lieu.
+  const gmapsQuery = encodeURIComponent(`${place.name} ${place.address ?? ''}`.trim())
   const gmapsUrl = place.google_place_id
-    ? `https://www.google.com/maps/place/?q=place_id:${place.google_place_id}`
-    : `https://maps.google.com/?q=${place.lat},${place.lng}(${encodeURIComponent(place.name)})`
-  const gmapsDirUrl = `https://maps.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}&travelmode=walking`
-  const streetViewUrl = `https://maps.google.com/?cbll=${place.lat},${place.lng}&cbp=12,0,0,0,0&layer=c`
+    ? `https://www.google.com/maps/search/?api=1&query=${gmapsQuery}&query_place_id=${place.google_place_id}`
+    : `https://www.google.com/maps/search/?api=1&query=${place.lat}%2C${place.lng}`
+  const gmapsDirUrl = place.google_place_id
+    ? `https://www.google.com/maps/dir/?api=1&destination=${place.lat}%2C${place.lng}&destination_place_id=${place.google_place_id}&travelmode=walking`
+    : `https://www.google.com/maps/dir/?api=1&destination=${place.lat}%2C${place.lng}&travelmode=walking`
+  const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${place.lat}%2C${place.lng}`
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleToggleFavorite = useCallback(async () => {
