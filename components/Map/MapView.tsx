@@ -352,6 +352,9 @@ interface Props {
   sunHour?: number
   // Incrémenter ce compteur depuis l'extérieur provoque un flyTo vers le centre Paris (retour à la vue de base)
   homeView?: number
+  // Recentre la carte sur une adresse/rue géocodée (recherche). Le `nonce`
+  // garantit qu'un nouveau choix re-déclenche le flyTo même au même endroit.
+  flyToTarget?: { lng: number; lat: number; zoom: number; nonce: number } | null
   // true = affiche fontaines/sanisettes même dézoomé + highlight
   showFontaines?: boolean
   showSanisettes?: boolean
@@ -359,7 +362,7 @@ interface Props {
   onAmeniteSelect?: (amenite: AmeniteInfo | null) => void
 }
 
-export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, showFontaines, showSanisettes, onAmeniteSelect, highlightPlaceId }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, flyToTarget, showFontaines, showSanisettes, onAmeniteSelect, highlightPlaceId }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
@@ -754,6 +757,23 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       padding:  { top: 0, bottom: 0, left: 0, right: 0 },
     })
   }, [homeView]) // eslint-disable-line
+
+  // ── Recentrage sur une rue / adresse géocodée (recherche) ──────────────
+  useEffect(() => {
+    if (!flyToTarget) return
+    const map = mapRef.current
+    if (!map) return
+    returnCameraRef.current = null
+    map.flyTo({
+      center:   [flyToTarget.lng, flyToTarget.lat],
+      zoom:     flyToTarget.zoom,
+      pitch:    35,
+      bearing:  0,
+      duration: 1400,
+      essential: true,
+      padding:  { top: 0, bottom: 0, left: 0, right: 0 },
+    })
+  }, [flyToTarget]) // eslint-disable-line
 
   // ── Anneau animé autour du pin sélectionné ─────────────────────────
   useEffect(() => {

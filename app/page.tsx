@@ -13,6 +13,8 @@ import ProfilePanel from '@/components/Map/ProfilePanel'
 import { owmIconToEmoji } from '@/lib/weather'
 import { isOpenAt } from '@/lib/openingHours'
 import { hourToSlot, formatHourLabelPad } from '@/lib/hourSlot'
+import { textMatchScore } from '@/lib/searchUtils'
+import { geocodeParis, type GeoResult } from '@/lib/geocode'
 import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
 
 function nowQuarter(): number {
@@ -59,6 +61,9 @@ export default function HomePage() {
   const [activeFilters, setActiveFilters] = useState<FilterType[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
+  // ── Recherche d'adresses / rues (géocodage Mapbox) ─────────────────────
+  const [geoResults, setGeoResults] = useState<GeoResult[]>([])
+  const [flyToTarget, setFlyToTarget] = useState<{ lng: number; lat: number; zoom: number; nonce: number } | null>(null)
 
   // ── Lieu sélectionné (inline, sans navigation) ─────────────────────────
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
@@ -405,8 +410,8 @@ export default function HomePage() {
         const quartierArrs = Object.entries(QUARTIERS)
           .filter(([q]) => textQ.includes(q)).flatMap(([, a]) => a)
         result = result.filter((p) => {
-          if (p.name.toLowerCase().includes(textQ)) return true
-          if (p.address.toLowerCase().includes(textQ)) return true
+          // Match nom/adresse tolérant aux accents et fautes de frappe
+          if (textMatchScore(textQ, p.name, p.address) > 0) return true
           if (arrNum !== null) {
             if (p.arrondissement === arrNum) return true
             const cp = p.address.match(/\b75(\d{3})\b/)
@@ -423,18 +428,39 @@ export default function HomePage() {
   // Suggestions : top 6 lieux pour le dropdown sous la search
   const suggestions = useMemo(() => {
     if (!searchQuery.trim()) return []
-    const q = searchQuery.trim().toLowerCase()
-    // Trie : matches sur le nom > matches sur l'adresse, puis par note Google
+    const q = searchQuery.trim()
+    // Trie : pertinence texte floue (nom > adresse) puis note Google en départage
     return [...displayedPlaces]
       .map((p) => {
-        const nameMatch = p.name.toLowerCase().includes(q) ? 100 : 0
-        const rating    = (p.google_rating ?? 0) * 5
-        return { p, score: nameMatch + rating }
+        const textScore = textMatchScore(q, p.name, p.address)
+        const rating    = (p.google_rating ?? 0) * 2
+        return { p, score: textScore + rating }
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 6)
       .map((x) => x.p)
   }, [displayedPlaces, searchQuery])
+
+  // ── Géocodage Mapbox : rues / adresses / quartiers (débounce 250 ms) ────
+  useEffect(() => {
+    const q = searchQuery.trim()
+    if (q.length < 3) { setGeoResults([]); return }
+    const ctrl = new AbortController()
+    const t = setTimeout(async () => {
+      const results = await geocodeParis(q, ctrl.signal)
+      setGeoResults(results)
+    }, 250)
+    return () => { clearTimeout(t); ctrl.abort() }
+  }, [searchQuery])
+
+  // Sélection d'une adresse géocodée → recentre la carte dessus
+  const handleGeoSelect = useCallback((g: GeoResult) => {
+    setSearchQuery('')
+    setGeoResults([])
+    setSelectedPlace(null)
+    setSelectedAmenite(null)
+    setFlyToTarget({ lng: g.lng, lat: g.lat, zoom: g.zoom, nonce: Date.now() })
+  }, [])
 
   const sunnyCount = useMemo(
     () => displayedPlaces.filter((p) => (p.currentScore ?? 0) >= 4).length,
@@ -547,6 +573,7 @@ export default function HomePage() {
           focusPlace={mapFocusPlace}
           sunHour={hour}
           homeView={homeViewCount}
+          flyToTarget={flyToTarget}
           showFontaines={activeFilters.includes('fontaine')}
           showSanisettes={activeFilters.includes('sanisette')}
           onAmeniteSelect={handleAmeniteSelect}
@@ -955,36 +982,74 @@ export default function HomePage() {
               overflow: 'hidden',
             }}
           >
-            {/* Suggestions */}
-            {searchQuery.trim() && suggestions.length > 0 && (
-              <ul
-                role="listbox" aria-label="Lieux suggérés"
+            {/* Suggestions : lieux + rues/adresses */}
+            {searchQuery.trim() && (suggestions.length > 0 || geoResults.length > 0) && (
+              <div
                 className="overflow-y-auto"
-                style={{ maxHeight: 200, borderBottom: '1px solid rgba(31,58,95,0.07)' }}
+                style={{ maxHeight: 264, borderBottom: '1px solid rgba(31,58,95,0.07)' }}
               >
-                {suggestions.map((p) => {
-                  const cp = p.address.match(/\b75(\d{3})\b/)
-                  const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
-                  const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
-                  return (
-                    <li key={p.id} role="option">
-                      <button
-                        onClick={() => handlePlaceSelect(p)}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[rgba(31,58,95,0.05)] transition"
-                      >
-                        <span aria-hidden="true" className="text-[15px] shrink-0">{icon}</span>
-                        <span className="flex-1 min-w-0">
-                          <span className="block font-bold text-[13px] text-text-primary truncate">{p.name}</span>
-                          <span className="block font-outfit text-[11px] text-text-soft truncate">
-                            {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
-                          </span>
-                        </span>
-                        {(p.currentScore ?? 0) >= 4 && <span aria-label="Au soleil" className="text-[12px] shrink-0">☀️</span>}
-                      </button>
+                {/* ─ Lieux ─ */}
+                {suggestions.length > 0 && (
+                  <ul role="listbox" aria-label="Lieux suggérés">
+                    {geoResults.length > 0 && (
+                      <li aria-hidden="true" className="px-4 pt-2.5 pb-1 font-outfit font-bold uppercase"
+                          style={{ fontSize: 10, letterSpacing: '0.1em', color: 'rgba(31,58,95,0.40)' }}>
+                        Lieux
+                      </li>
+                    )}
+                    {suggestions.map((p) => {
+                      const cp = p.address.match(/\b75(\d{3})\b/)
+                      const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
+                      const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
+                      return (
+                        <li key={p.id} role="option">
+                          <button
+                            onClick={() => handlePlaceSelect(p)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[rgba(31,58,95,0.05)] transition"
+                          >
+                            <span aria-hidden="true" className="text-[15px] shrink-0">{icon}</span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block font-bold text-[13px] text-text-primary truncate">{p.name}</span>
+                              <span className="block font-outfit text-[11px] text-text-soft truncate">
+                                {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
+                              </span>
+                            </span>
+                            {(p.currentScore ?? 0) >= 4 && <span aria-label="Au soleil" className="text-[12px] shrink-0">☀️</span>}
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+
+                {/* ─ Rues & adresses (géocodage Mapbox) ─ */}
+                {geoResults.length > 0 && (
+                  <ul role="listbox" aria-label="Rues et adresses"
+                      style={suggestions.length > 0 ? { borderTop: '1px solid rgba(31,58,95,0.07)' } : undefined}>
+                    <li aria-hidden="true" className="px-4 pt-2.5 pb-1 font-outfit font-bold uppercase"
+                        style={{ fontSize: 10, letterSpacing: '0.1em', color: 'rgba(31,58,95,0.40)' }}>
+                      Rues &amp; adresses
                     </li>
-                  )
-                })}
-              </ul>
+                    {geoResults.map((g) => (
+                      <li key={g.id} role="option">
+                        <button
+                          onClick={() => handleGeoSelect(g)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[rgba(31,58,95,0.05)] transition"
+                        >
+                          <span aria-hidden="true" className="text-[15px] shrink-0">📍</span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block font-bold text-[13px] text-text-primary truncate">{g.title}</span>
+                            {g.subtitle && (
+                              <span className="block font-outfit text-[11px] text-text-soft truncate">{g.subtitle}</span>
+                            )}
+                          </span>
+                          <span aria-hidden="true" className="text-[12px] shrink-0" style={{ color: 'rgba(31,58,95,0.30)' }}>↗</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
 
             {/* ── Bulles d'aperçu solaire ── (cachées pendant une recherche) */}

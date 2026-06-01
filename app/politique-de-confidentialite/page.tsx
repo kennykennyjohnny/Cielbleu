@@ -55,11 +55,11 @@ export default function PrivacyPage() {
         <h2 style={h2}>2. Données collectées</h2>
         <p>Nous collectons uniquement les données strictement nécessaires au fonctionnement du service :</p>
         <ul style={ulStyle}>
-          <li><strong>Compte utilisateur (optionnel) :</strong> adresse e-mail et pseudo, lors de la création d'un compte.</li>
+          <li><strong>Compte utilisateur (optionnel) :</strong> adresse e-mail et pseudo, lors de la création d’un compte.</li>
           <li><strong>Avis et photos :</strong> les commentaires et photos que vous publiez volontairement sur une terrasse.</li>
           <li><strong>Favoris :</strong> la liste des terrasses que vous avez enregistrées, associée à votre compte.</li>
           <li><strong>Données de géolocalisation :</strong> position GPS utilisée uniquement en temps réel pour centrer la carte, jamais stockée sur nos serveurs.</li>
-          <li><strong>Logs techniques :</strong> adresses IP et logs d'accès conservés par notre hébergeur (Vercel) pour la sécurité et le débogage.</li>
+          <li><strong>Logs techniques :</strong> adresses IP et logs d’accès conservés par notre hébergeur (Vercel) pour la sécurité et le débogage.</li>
         </ul>
         <p>Nous ne collectons pas de données de navigation, ne déposons pas de cookies publicitaires, et ne vendons aucune donnée à des tiers.</p>
       </section>
@@ -68,8 +68,8 @@ export default function PrivacyPage() {
         <h2 style={h2}>3. Finalités du traitement</h2>
         <ul style={ulStyle}>
           <li>Fournir le service : affichage de la carte, calcul des scores soleil, affichage des terrasses.</li>
-          <li>Gestion des comptes utilisateurs et de l'authentification.</li>
-          <li>Permettre la publication et l'affichage d'avis et de photos.</li>
+          <li>Gestion des comptes utilisateurs et de l’authentification.</li>
+          <li>Permettre la publication et l’affichage d’avis et de photos.</li>
           <li>Amélioration du service (analyses agrégées et anonymisées).</li>
         </ul>
       </section>
@@ -77,7 +77,7 @@ export default function PrivacyPage() {
       <section style={{ marginBottom: 36 }}>
         <h2 style={h2}>4. Base légale (RGPD)</h2>
         <p>
-          Le traitement de vos données repose sur votre <strong>consentement</strong> (création de compte, publication d'avis)
+          Le traitement de vos données repose sur votre <strong>consentement</strong> (création de compte, publication d’avis)
           et sur notre <strong>intérêt légitime</strong> à assurer la sécurité et le bon fonctionnement du service.
         </p>
       </section>
@@ -96,7 +96,7 @@ export default function PrivacyPage() {
         <h2 style={h2}>6. Durée de conservation</h2>
         <ul style={ulStyle}>
           <li>Données de compte : conservées tant que votre compte est actif, puis supprimées dans les 30 jours suivant la demande de suppression.</li>
-          <li>Avis et photos : conservés jusqu'à suppression par l'utilisateur ou par l'administrateur.</li>
+          <li>Avis et photos : conservés jusqu’à suppression par l’utilisateur ou par l’administrateur.</li>
           <li>Logs techniques : 30 jours maximum.</li>
         </ul>
       </section>
@@ -121,7 +121,7 @@ export default function PrivacyPage() {
         <h2 style={h2}>8. Sécurité</h2>
         <p>
           Les communications sont chiffrées via HTTPS. Les mots de passe sont hachés et ne sont jamais stockés en clair.
-          L'accès aux données est restreint par des politiques de sécurité au niveau base de données (Row Level Security Supabase).
+          L’accès aux données est restreint par des politiques de sécurité au niveau base de données (Row Level Security Supabase).
         </p>
       </section>
 
@@ -129,7 +129,7 @@ export default function PrivacyPage() {
         <h2 style={h2}>9. Modifications</h2>
         <p>
           Cette politique peut être mise à jour. En cas de modification substantielle, nous informerons les utilisateurs
-          connectés par e-mail ou notification dans l'application.
+          connectés par e-mail ou notification dans l’application.
         </p>
       </section>
 
