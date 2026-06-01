@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { Search, X, Clock, UserCircle, Compass } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getSunPosition } from '@/lib/suncalc'
+import { getSunPosition, getSunTimes } from '@/lib/suncalc'
 import Filters from '@/components/Map/Filters'
+import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import PlacePageClient from '@/components/Map/PlacePageClient'
 import FicheAmenitePanel from '@/components/Map/FicheAmenitePanel'
 import ProfilePanel from '@/components/Map/ProfilePanel'
@@ -64,6 +65,9 @@ export default function HomePage() {
   const [selectedScores, setSelectedScores] = useState<{ time_slot: string; score: number }[]>([])
   const [selectedAmenite, setSelectedAmenite] = useState<AmeniteInfo | null>(null)
   const [hour, setHour] = useState<number>(nowQuarter)
+  // ── Aperçu solaire animé (bulles de créneaux) ──────────────────────────
+  const [activeSlot, setActiveSlot] = useState<number | null>(null)
+  const slotAnimRef = useRef<number | null>(null)
   const [isDesktop, setIsDesktop] = useState(false)
   const [homeViewCount, setHomeViewCount] = useState(0)
   const [showProfile, setShowProfile] = useState(false)
@@ -174,6 +178,51 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedPlace?.id],
   )
+
+  // ── Heure du coucher de soleil aujourd'hui (Paris) ────────────────────────
+  const sunsetHour = useMemo(() => {
+    const s = getSunTimes(new Date(), 48.8566, 2.3522).sunset
+    if (!s || isNaN(s.getTime())) return 21.5
+    return Math.min(23.5, s.getHours() + s.getMinutes() / 60)
+  }, [])
+
+  // Stoppe net une animation en cours (appelé dès que l'utilisateur reprend
+  // la main sur le slider ou le bouton "maintenant").
+  const stopSlotAnim = useCallback(() => {
+    if (slotAnimRef.current != null) {
+      cancelAnimationFrame(slotAnimRef.current)
+      slotAnimRef.current = null
+    }
+    setActiveSlot(null)
+  }, [])
+
+  // Lance un balayage solaire de ~3 s : l'heure glisse de startH → endH avec
+  // un easing doux. La carte (ombres setLights) et la card ouverte suivent en
+  // direct puisqu'elles partagent `hour`.
+  const previewSlot = useCallback((startH: number, endH: number, idx: number) => {
+    if (slotAnimRef.current != null) cancelAnimationFrame(slotAnimRef.current)
+    setActiveSlot(idx)
+    const DURATION = 3000
+    const t0 = performance.now()
+    const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
+    setHour(startH)
+    const step = (now: number) => {
+      const p = Math.min((now - t0) / DURATION, 1)
+      const h = startH + (endH - startH) * easeInOut(p)
+      setHour(Math.round(h * 20) / 20)   // résolution 3 min → ombres fluides, peu de renders
+      if (p < 1) {
+        slotAnimRef.current = requestAnimationFrame(step)
+      } else {
+        slotAnimRef.current = null
+        setHour(endH)
+        setActiveSlot(null)
+      }
+    }
+    slotAnimRef.current = requestAnimationFrame(step)
+  }, [])
+
+  // Nettoyage au démontage
+  useEffect(() => () => { if (slotAnimRef.current != null) cancelAnimationFrame(slotAnimRef.current) }, [])
 
   useEffect(() => {
     const el = headerRef.current
@@ -708,7 +757,7 @@ export default function HomePage() {
                 <input
                   type="range" min={6} max={23.75} step={0.25}
                   value={hour}
-                  onChange={(e) => setHour(parseFloat(e.target.value))}
+                  onChange={(e) => { stopSlotAnim(); setHour(parseFloat(e.target.value)) }}
                   className="cb-hour-slider"
                   style={{ flex: 1, minWidth: 0 }}
                   aria-label="Heure du soleil"
@@ -717,7 +766,7 @@ export default function HomePage() {
                   {formatHourLabelPad(hour)}
                 </span>
                 <button
-                  onClick={() => setHour(nowQuarter())}
+                  onClick={() => { stopSlotAnim(); setHour(nowQuarter()) }}
                   aria-label="Heure actuelle"
                   className="shrink-0 inline-flex items-center justify-center rounded-full transition-all active:scale-[0.90]"
                   style={{
@@ -938,6 +987,17 @@ export default function HomePage() {
               </ul>
             )}
 
+            {/* ── Bulles d'aperçu solaire ── (cachées pendant une recherche) */}
+            {!searchQuery.trim() && (
+              <div className="px-3 pt-3">
+                <SunSlotBubbles
+                  sunsetHour={sunsetHour}
+                  activeSlot={activeSlot}
+                  onPreview={previewSlot}
+                />
+              </div>
+            )}
+
             {/* ── Recherche ── */}
             <div className="px-3 pt-3 pb-2">
               <div
@@ -1137,6 +1197,9 @@ export default function HomePage() {
             onClose={handleClose}
             userId={userId}
             onOpenProfile={() => { setShowProfile(true); setSelectedPlace(null) }}
+            sunsetHour={sunsetHour}
+            activeSlot={activeSlot}
+            onSlotPreview={previewSlot}
           />
         </aside>
       )}
@@ -1148,6 +1211,9 @@ export default function HomePage() {
           onClose={handleClose}
           userId={userId}
           onOpenProfile={() => { setShowProfile(true); setSelectedPlace(null) }}
+          sunsetHour={sunsetHour}
+          activeSlot={activeSlot}
+          onSlotPreview={previewSlot}
         />
       )}
 

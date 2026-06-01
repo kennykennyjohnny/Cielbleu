@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
+import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import type { Place } from '@/types'
 
 // ── Snap levels (10 niveaux) ──────────────────────────────────────────────────
@@ -99,10 +100,13 @@ interface PlacePreviewProps {
   onClose: () => void
   userId?: string | null
   onOpenProfile?: () => void
+  sunsetHour?: number
+  activeSlot?: number | null
+  onSlotPreview?: (startH: number, endH: number, idx: number) => void
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function PlacePreview({ place, hour, onClose, userId = null, onOpenProfile }: PlacePreviewProps) {
+export default function PlacePreview({ place, hour, onClose, userId = null, onOpenProfile, sunsetHour = 21.5, activeSlot = null, onSlotPreview }: PlacePreviewProps) {
 
   // ── Snap ─────────────────────────────────────────────────────────────────
   type SnapLevel = 1|2|3|4|5|6|7|8|9|10
@@ -493,6 +497,19 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             {/* ── SCROLLABLE CONTENT ────────────────────────────────────────── */}
             <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', minHeight: 0 }}>
               <div style={{ padding: '14px 16px 120px' }}>
+
+                {/* ── BULLES D'APERÇU SOLAIRE : balaye la journée sur la carte ── */}
+                {onSlotPreview && (
+                  <div style={{ marginBottom: 14 }}>
+                    <p style={{ ...EYEBROW, margin: '0 0 7px' }}>Voir le soleil bouger</p>
+                    <SunSlotBubbles
+                      sunsetHour={sunsetHour}
+                      activeSlot={activeSlot}
+                      onPreview={onSlotPreview}
+                      variant="card"
+                    />
+                  </div>
+                )}
 
                 {/* ── SUN BLOCK : pictogramme + fenêtre soleil ── */}
                 <div style={{

@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
+import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -98,9 +99,15 @@ interface Props {
   userId?: string | null
   /** Ouvre le panel Profil pour que l'utilisateur se connecte */
   onOpenProfile?: () => void
+  /** Heure du coucher de soleil (créneau "Soir" des bulles) */
+  sunsetHour?: number
+  /** Index du créneau solaire en cours d'animation (null = aucun) */
+  activeSlot?: number | null
+  /** Lance l'animation du soleil sur la carte pour un créneau */
+  onSlotPreview?: (startH: number, endH: number, idx: number) => void
 }
 
-export default function PlacePageClient({ place, scores, hour, onClose, userId, onOpenProfile }: Props) {
+export default function PlacePageClient({ place, scores, hour, onClose, userId, onOpenProfile, sunsetHour = 21.5, activeSlot = null, onSlotPreview }: Props) {
   const [shareToast, setShareToast] = useState(false)
 
   // ── Community section state ─────────────────────────────────────────────────
@@ -481,6 +488,14 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
             </p>
           )}
         </div>
+
+        {/* ── BULLES SOLEIL : voir les ombres bouger ── */}
+        {onSlotPreview && (
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ ...EYEBROW, marginBottom: 7 }}>Voir le soleil bouger</p>
+            <SunSlotBubbles sunsetHour={sunsetHour} activeSlot={activeSlot} onPreview={onSlotPreview} variant="card" />
+          </div>
+        )}
 
         {/* ── QUICK STATS (3 cols) ── */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:0 }}>
