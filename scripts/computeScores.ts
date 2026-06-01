@@ -163,12 +163,20 @@ async function main() {
 
   const supabase = createClient(url, key)
 
+  // Filtre optionnel : --id=<uuid> ou --place="<sous-chaîne du nom>"
+  // pour ne (re)calculer qu'un seul lieu sans repasser sur toute la base.
+  const argId   = process.argv.find(a => a.startsWith('--id='))?.slice('--id='.length)
+  const argName = process.argv.find(a => a.startsWith('--place='))?.slice('--place='.length)
+
   console.log('📍 Récupération des places depuis Supabase…')
-  const { data: places, error: errPlaces } = await supabase
+  let placesQuery = supabase
     .from('places')
     .select('id, name, lat, lng')
     .not('lat', 'is', null)
     .not('lng', 'is', null)
+  if (argId)   placesQuery = placesQuery.eq('id', argId)
+  if (argName) placesQuery = placesQuery.ilike('name', `%${argName}%`)
+  const { data: places, error: errPlaces } = await placesQuery
 
   if (errPlaces) {
     console.error('❌ Erreur Supabase:', errPlaces.message)
