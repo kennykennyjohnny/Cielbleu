@@ -196,13 +196,14 @@ body {
   touch-action: pan-x;
 }
 .cb-hour-slider::-webkit-slider-runnable-track {
-  height: 6px;
-  background: linear-gradient(to right, rgba(237,193,69,0.45), rgba(31,58,95,0.18));
+  height: 8px;
+  background: linear-gradient(90deg, rgba(237,193,69,0.28) 0%, rgba(237,193,69,0.12) 100%);
   border-radius: 9999px;
+  border: 1px solid rgba(31,58,95,0.08);
 }
 .cb-hour-slider::-moz-range-track {
-  height: 6px;
-  background: linear-gradient(to right, rgba(237,193,69,0.45), rgba(31,58,95,0.18));
+  height: 8px;
+  background: linear-gradient(90deg, rgba(237,193,69,0.28) 0%, rgba(237,193,69,0.12) 100%);
   border-radius: 9999px;
   border: none;
 }
@@ -216,12 +217,13 @@ body {
   border: 3px solid #fff8ea;
   box-shadow: 0 0 0 1px rgba(31,58,95,0.18), 0 6px 16px rgba(237,193,69,0.50);
   cursor: grab;
-  margin-top: -13px;
-  transition: transform 0.14s ease;
+  margin-top: -10px;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
 }
 .cb-hour-slider::-webkit-slider-thumb:active {
   cursor: grabbing;
-  transform: scale(1.18);
+  transform: scale(1.15);
+  box-shadow: 0 0 0 1px rgba(31,58,95,0.18), 0 6px 18px rgba(237,193,69,0.55);
 }
 .cb-hour-slider::-moz-range-thumb {
   width: 32px;
@@ -234,12 +236,34 @@ body {
 }
 .cb-hour-slider::-moz-range-thumb:active {
   cursor: grabbing;
-  transform: scale(1.18);
+  transform: scale(1.15);
+  box-shadow: 0 0 0 1px rgba(31,58,95,0.18), 0 6px 18px rgba(237,193,69,0.55);
 }
 @media (max-width: 899px) {
   .cb-hour-slider { height: 42px; }
   .cb-hour-slider::-webkit-slider-thumb { width: 38px; height: 38px; margin-top: -16px; }
   .cb-hour-slider::-moz-range-thumb { width: 38px; height: 38px; }
+}
+
+.cb-sun-spinner-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 4px solid rgba(237,193,69,0.20);
+  border-top-color: rgba(237,193,69,0.80);
+  animation: cb-sun-spin 1.3s linear infinite;
+}
+.cb-sun-spinner-core {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,238,110,1) 0%, rgba(237,193,69,0.95) 45%, rgba(255,204,63,0.95) 100%);
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  line-height: 1;
+  box-shadow: 0 0 22px rgba(237,193,69,0.30);
+  animation: cb-sun-glow 1.6s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

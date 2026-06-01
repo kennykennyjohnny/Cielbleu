@@ -785,6 +785,7 @@ export default function HomePage() {
                 <input
                   type="range" min={6} max={23.75} step={0.25}
                   value={hour}
+                  onInput={(e) => { stopSlotAnim(); setHour(parseFloat((e.target as HTMLInputElement).value)) }}
                   onChange={(e) => { stopSlotAnim(); setHour(parseFloat(e.target.value)) }}
                   className="cb-hour-slider"
                   style={{ flex: 1, minWidth: 0 }}
@@ -868,6 +869,7 @@ export default function HomePage() {
             <input
               type="range" min={6} max={23.75} step={0.25}
               value={hour}
+              onInput={(e) => setHour(parseFloat((e.target as HTMLInputElement).value))}
               onChange={(e) => setHour(parseFloat(e.target.value))}
               className="cb-hour-slider"
               style={{ flex: 1, minWidth: 0 }}
@@ -908,29 +910,29 @@ export default function HomePage() {
 
       {/* ── Spinner soleil — overlay sur la carte seulement (header + recherche restent visibles) ── */}
       {loading && (
-        <>
-          <style>{`@keyframes cb-spin-sun { to { transform: rotate(360deg) } }`}</style>
-          <div
-            aria-live="polite" aria-label="Chargement des terrasses en cours"
-            style={{
-              position: 'absolute',
-              top: isDesktop ? headerH : headerH,
-              left: 0, right: 0,
-              bottom: 0,
-              zIndex: 15,           // sous le header (z-20) et le slider (z-18)
-              background: 'rgba(255,252,243,0.88)',
-              backdropFilter: 'blur(4px)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', gap: 14,
-              pointerEvents: 'none',
-            }}
-          >
-            <div style={{ animation: 'cb-spin-sun 1.8s linear infinite', fontSize: 44, lineHeight: 1 }} aria-hidden="true">☀️</div>
-            <p style={{ margin: 0, fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 800, color: '#1F3A5F', opacity: 0.72 }}>
-              Chargement des terrasses…
-            </p>
+        <div
+          aria-live="polite" aria-label="Chargement des terrasses en cours"
+          style={{
+            position: 'absolute',
+            top: isDesktop ? headerH : headerH,
+            left: 0, right: 0,
+            bottom: 0,
+            zIndex: 15,
+            background: 'rgba(255,252,243,0.88)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 18,
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ position: 'relative', width: 96, height: 96, display: 'grid', placeItems: 'center' }} aria-hidden="true">
+            <div className="cb-sun-spinner-ring" />
+            <div className="cb-sun-spinner-core">☀</div>
           </div>
-        </>
+          <p style={{ margin: 0, fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 800, color: '#1F3A5F', opacity: 0.72 }}>
+            Chargement des terrasses…
+          </p>
+        </div>
       )}
 
       {/* État vide */}
@@ -999,6 +1001,10 @@ export default function HomePage() {
                       </li>
                     )}
                     {suggestions.map((p) => {
+                      const addressParts = p.address.split(',').map((s) => s.trim()).filter(Boolean)
+                      const street = addressParts[0] ?? p.address
+                      const city = addressParts.length > 1 ? addressParts[addressParts.length - 1] : ''
+                      const cityLabel = city && city !== street ? ` · ${city}` : ''
                       const cp = p.address.match(/\b75(\d{3})\b/)
                       const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
                       return (
@@ -1016,7 +1022,7 @@ export default function HomePage() {
                             <span className="flex-1 min-w-0">
                               <span className="block font-bold text-[13px] text-text-primary truncate">{p.name}</span>
                               <span className="block font-outfit text-[11px] text-text-soft truncate">
-                                {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
+                                {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{street}{cityLabel}
                               </span>
                             </span>
                             {(p.currentScore ?? 0) >= 4 && (
