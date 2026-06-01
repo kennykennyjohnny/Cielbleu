@@ -126,6 +126,12 @@ body {
   to   { transform: rotate(360deg); }
 }
 
+/* Balayage doré des bulles de créneaux solaires (durée = anim soleil ~3 s) */
+@keyframes cb-slot-sweep {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
 @keyframes cb-sun-glow {
   0%, 100% { opacity: 0.88; transform: translate(-50%, -50%) scale(1); }
   50%      { opacity: 1;    transform: translate(-50%, -50%) scale(1.10); }

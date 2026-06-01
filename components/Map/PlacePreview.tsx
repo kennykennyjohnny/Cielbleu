@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useCallback, useState } from 'react'
-import { X, Share2, Heart, Clock } from 'lucide-react'
+import { X, Share2, Heart, Clock, Navigation } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
@@ -449,6 +449,20 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
               {/* Divider */}
               <div style={{ height: 1, background: 'rgba(20,32,51,0.08)', margin: '0 16px' }} />
 
+              {/* ── BULLES D'APERÇU SOLAIRE (en-tête fixe, toujours visibles) ──
+                  Remontées tout en haut de la card sur mobile : balaye la
+                  journée → les ombres glissent sur la carte sans scroller. */}
+              {onSlotPreview && (
+                <div style={{ padding: '8px 12px 2px' }}>
+                  <SunSlotBubbles
+                    sunsetHour={sunsetHour}
+                    activeSlot={activeSlot}
+                    onPreview={onSlotPreview}
+                    variant="card"
+                  />
+                </div>
+              )}
+
               {/* ── BARRE D'ACTIONS ── */}
               <div style={{ padding: '7px 12px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 38px 38px', gap: 7 }}>
@@ -470,7 +484,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                     rel="noopener noreferrer"
                     aria-label="Y aller"
                     style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(237,193,69,0.26)', textDecoration: 'none' }}>
-                    📍&nbsp;Y aller
+                    <Navigation size={12} strokeWidth={2.4} aria-hidden="true" /> Y aller
                   </a>
                   <button
                     onClick={handleToggleFavorite}
@@ -497,19 +511,6 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             {/* ── SCROLLABLE CONTENT ────────────────────────────────────────── */}
             <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', minHeight: 0 }}>
               <div style={{ padding: '14px 16px 120px' }}>
-
-                {/* ── BULLES D'APERÇU SOLAIRE : balaye la journée sur la carte ── */}
-                {onSlotPreview && (
-                  <div style={{ marginBottom: 14 }}>
-                    <p style={{ ...EYEBROW, margin: '0 0 7px' }}>Voir le soleil bouger</p>
-                    <SunSlotBubbles
-                      sunsetHour={sunsetHour}
-                      activeSlot={activeSlot}
-                      onPreview={onSlotPreview}
-                      variant="card"
-                    />
-                  </div>
-                )}
 
                 {/* ── SUN BLOCK : pictogramme + fenêtre soleil ── */}
                 <div style={{

@@ -1,15 +1,16 @@
 'use client'
 
 import type { FilterType } from '@/types'
+import { Sun, Beer, UtensilsCrossed, Trees, Droplet, Toilet, type LucideIcon } from 'lucide-react'
 
 // Café et Ouvert retirés (trop instables)
-const FILTERS: { id: FilterType; label: string; icon: string }[] = [
-  { id: 'sun',        label: 'Au soleil', icon: '☀️' },
-  { id: 'bar',        label: 'Bars',      icon: '🍺' },
-  { id: 'restaurant', label: 'Restos',    icon: '🍽️' },
-  { id: 'park',       label: 'Parcs',     icon: '🌳' },
-  { id: 'fontaine',   label: 'Eau',       icon: '💧' },
-  { id: 'sanisette',  label: 'WC',        icon: '🚻' },
+const FILTERS: { id: FilterType; label: string; icon: LucideIcon }[] = [
+  { id: 'sun',        label: 'Au soleil', icon: Sun },
+  { id: 'bar',        label: 'Bars',      icon: Beer },
+  { id: 'restaurant', label: 'Restos',    icon: UtensilsCrossed },
+  { id: 'park',       label: 'Parcs',     icon: Trees },
+  { id: 'fontaine',   label: 'Eau',       icon: Droplet },
+  { id: 'sanisette',  label: 'WC',        icon: Toilet },
 ]
 
 function activeStyle(id: FilterType): React.CSSProperties {
@@ -55,7 +56,7 @@ export default function Filters({ activeFilters, onToggle }: FiltersProps) {
       style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 2 }}
     >
       <div className="flex items-center min-w-max" style={{ gap: 6 }}>
-        {FILTERS.map(({ id, label, icon }) => {
+        {FILTERS.map(({ id, label, icon: Icon }) => {
           const isActive = activeFilters.includes(id)
           const s = isActive ? activeStyle(id) : null
 
@@ -83,7 +84,15 @@ export default function Filters({ activeFilters, onToggle }: FiltersProps) {
                 boxShadow:  isActive ? s!.boxShadow  : 'none',
               }}
             >
-              <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>{icon}</span>
+              <Icon
+                size={14}
+                strokeWidth={2.3}
+                aria-hidden="true"
+                style={{
+                  flexShrink: 0,
+                  fill: id === 'sun' && isActive ? '#EDC145' : 'none',
+                }}
+              />
               <span>{label}</span>
             </button>
           )

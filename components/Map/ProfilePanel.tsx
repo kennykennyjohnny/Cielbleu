@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { ArrowLeft, LogOut, Heart, MessageSquare, Users, MapPin, Share2, Camera, Settings } from 'lucide-react'
+import PlaceTypeIcon from '@/components/Map/PlaceTypeIcon'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -555,8 +556,8 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
     setFriendFavorites((favoritesRes.data as unknown as FriendFavorite[]) ?? [])
     setFriendProfileLoading(false)
   }
-  const placeEmoji = (type: string) =>
-    type === 'bar' ? '🍺' : type === 'restaurant' ? '🍽️' : type === 'park' ? '🌳' : '☕'
+  const placeEmoji = (type: string, size = 16) =>
+    <PlaceTypeIcon type={type} size={size} color="#1F3A5F" style={{ verticalAlign: '-3px' }} />
 
   // ── AUTH PANEL ─────────────────────────────────────────────────────────────
   if (!user) {
@@ -990,8 +991,8 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
               : favorites.map(fav => (
                 <div key={fav.id} style={{ ...CARD, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
                   onClick={() => handleGoToPlace(fav.place_id)}>
-                  <span style={{ fontSize: 22, flexShrink: 0 }}>
-                    {fav.place ? placeEmoji(fav.place.type) : <MapPin size={18} />}
+                  <span style={{ flexShrink: 0, display: 'inline-flex' }}>
+                    {fav.place ? placeEmoji(fav.place.type, 20) : <MapPin size={18} />}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontWeight: 800, fontSize: 14, color: '#1F3A5F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1029,13 +1030,12 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
                 </p>
               </div>
             ) : userReviews.map(r => {
-              const typeEmoji = r.place?.type === 'bar' ? '🍺' : r.place?.type === 'restaurant' ? '🍽️' : r.place?.type === 'park' ? '🌳' : '☕'
               return (
                 <div key={r.id} style={{ ...CARD, cursor: r.place_id ? 'pointer' : 'default' }}
                   onClick={() => { if (r.place_id) handleGoToPlace(r.place_id) }}>
                   {/* Lieu */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 18, flexShrink: 0 }}>{typeEmoji}</span>
+                    <span style={{ flexShrink: 0, display: 'inline-flex' }}>{placeEmoji(r.place?.type ?? '', 18)}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: '#1F3A5F',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1247,7 +1247,7 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
                                 cursor: 'pointer' }}
                                 onClick={() => handleGoToPlace(fav.place_id)}>
                                 <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#1F3A5F' }}>
-                                  {placeEmoji(fav.place?.type ?? '')} {fav.place?.name ?? '—'} <span style={{ fontSize: 10, color: 'rgba(31,58,95,0.35)' }}>→</span>
+                                  {placeEmoji(fav.place?.type ?? '', 14)} {fav.place?.name ?? '—'} <span style={{ fontSize: 10, color: 'rgba(31,58,95,0.35)' }}>→</span>
                                 </p>
                               </div>
                             ))
@@ -1262,7 +1262,7 @@ export default function ProfilePanel({ onClose, onAuthChange, onSelectPlace }: P
                                 cursor: r.place_id ? 'pointer' : 'default' }}
                                 onClick={() => { if (r.place_id) handleGoToPlace(r.place_id) }}>
                                 <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: '#1F3A5F' }}>
-                                  {placeEmoji(r.place?.type ?? '')} {r.place?.name ?? '—'} {r.place_id && <span style={{ fontSize: 10, color: 'rgba(31,58,95,0.35)' }}>→</span>}
+                                  {placeEmoji(r.place?.type ?? '', 14)} {r.place?.name ?? '—'} {r.place_id && <span style={{ fontSize: 10, color: 'rgba(31,58,95,0.35)' }}>→</span>}
                                 </p>
                                 {r.comment && (
                                   <p style={{ margin: '3px 0 0', fontSize: 12, color: 'rgba(31,58,95,0.70)',

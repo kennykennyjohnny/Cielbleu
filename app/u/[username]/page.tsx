@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, UserPlus, Check } from 'lucide-react'
+import PlaceTypeIcon from '@/components/Map/PlaceTypeIcon'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -50,8 +51,8 @@ const BTN_PRIMARY: React.CSSProperties = {
   boxShadow: '0 8px 20px rgba(237,193,69,0.35)',
 }
 
-function placeEmoji(type: string) {
-  return type === 'bar' ? '🍺' : type === 'restaurant' ? '🍽️' : type === 'park' ? '🌳' : '☕'
+function placeEmoji(type: string, size = 14) {
+  return <PlaceTypeIcon type={type} size={size} color="#1F3A5F" style={{ verticalAlign: '-2px' }} />
 }
 
 export default function UserProfilePage() {

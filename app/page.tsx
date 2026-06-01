@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, X, Clock, UserCircle, Compass } from 'lucide-react'
+import { Search, X, Clock, UserCircle, Compass, MapPin, ArrowUpRight, Sun } from 'lucide-react'
+import PlaceTypeIcon from '@/components/Map/PlaceTypeIcon'
 import { supabase } from '@/lib/supabase'
 import { getSunPosition, getSunTimes } from '@/lib/suncalc'
 import Filters from '@/components/Map/Filters'
@@ -1000,21 +1001,27 @@ export default function HomePage() {
                     {suggestions.map((p) => {
                       const cp = p.address.match(/\b75(\d{3})\b/)
                       const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
-                      const icon = p.type === 'bar' ? '🍺' : p.type === 'restaurant' ? '🍽' : p.type === 'cafe' ? '☕' : '🌳'
                       return (
                         <li key={p.id} role="option">
                           <button
                             onClick={() => handlePlaceSelect(p)}
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[rgba(31,58,95,0.05)] transition"
                           >
-                            <span aria-hidden="true" className="text-[15px] shrink-0">{icon}</span>
+                            <span
+                              className="shrink-0 flex items-center justify-center"
+                              style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(31,58,95,0.06)' }}
+                            >
+                              <PlaceTypeIcon type={p.type} size={16} color="#1F3A5F" />
+                            </span>
                             <span className="flex-1 min-w-0">
                               <span className="block font-bold text-[13px] text-text-primary truncate">{p.name}</span>
                               <span className="block font-outfit text-[11px] text-text-soft truncate">
                                 {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{p.address.split(',')[0]}
                               </span>
                             </span>
-                            {(p.currentScore ?? 0) >= 4 && <span aria-label="Au soleil" className="text-[12px] shrink-0">☀️</span>}
+                            {(p.currentScore ?? 0) >= 4 && (
+                              <Sun size={15} strokeWidth={2.4} className="shrink-0" style={{ color: '#FFBE0B', fill: '#FFBE0B' }} aria-label="Au soleil" />
+                            )}
                           </button>
                         </li>
                       )
@@ -1036,14 +1043,19 @@ export default function HomePage() {
                           onClick={() => handleGeoSelect(g)}
                           className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[rgba(31,58,95,0.05)] transition"
                         >
-                          <span aria-hidden="true" className="text-[15px] shrink-0">📍</span>
+                          <span
+                            className="shrink-0 flex items-center justify-center"
+                            style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(58,134,255,0.10)' }}
+                          >
+                            <MapPin size={16} strokeWidth={2.2} style={{ color: '#3A86FF' }} aria-hidden="true" />
+                          </span>
                           <span className="flex-1 min-w-0">
                             <span className="block font-bold text-[13px] text-text-primary truncate">{g.title}</span>
                             {g.subtitle && (
                               <span className="block font-outfit text-[11px] text-text-soft truncate">{g.subtitle}</span>
                             )}
                           </span>
-                          <span aria-hidden="true" className="text-[12px] shrink-0" style={{ color: 'rgba(31,58,95,0.30)' }}>↗</span>
+                          <ArrowUpRight size={15} strokeWidth={2.2} className="shrink-0" style={{ color: 'rgba(31,58,95,0.30)' }} aria-hidden="true" />
                         </button>
                       </li>
                     ))}

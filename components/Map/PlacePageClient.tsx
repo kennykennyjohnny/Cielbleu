@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Clock, Share2, Heart } from 'lucide-react'
+import { ArrowLeft, Clock, Share2, Heart, Navigation, Trees } from 'lucide-react'
 import type { Place } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
@@ -463,8 +463,10 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
                 ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
               </span>
             )}
-            <span style={{ ...MINI_BADGE, background:'rgba(79,143,101,0.10)', color:'#3d8554' }}>
-              {place.type === 'park' ? '🌳 Parc' : '● Terrasse'}
+            <span style={{ ...MINI_BADGE, background:'rgba(79,143,101,0.10)', color:'#3d8554', display:'inline-flex', alignItems:'center', gap:5 }}>
+              {place.type === 'park'
+                ? <><Trees size={12} strokeWidth={2.2} aria-hidden="true" /> Parc</>
+                : '● Terrasse'}
             </span>
             {(place.type !== 'park' || place.arrondissement != null) && (
               <span style={{ ...MINI_BADGE }}>
@@ -1009,7 +1011,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
               cursor:'pointer', touchAction:'manipulation', textDecoration:'none',
               boxShadow:'0 8px 20px rgba(237,193,69,0.35)' }}
           >
-            📍&nbsp;Y aller
+            <Navigation size={15} strokeWidth={2.4} aria-hidden="true" /> Y aller
           </a>
 
           {/* Share */}
