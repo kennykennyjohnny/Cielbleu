@@ -411,10 +411,10 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       // Pins des commodités (eau / WC) — même langage visuel que les lieux, mais
       // cercle coloré + icône blanche + un peu plus petits (rôle secondaire).
       if (!map.hasImage('pin-fontaine')) {
-        map.addImage('pin-fontaine', drawPin({ paths: LUCIDE_PATHS.fontaine, circle: CIEL, icon: '#ffffff', radius: 14 }) as unknown as HTMLImageElement)
+        map.addImage('pin-fontaine', drawPin({ paths: LUCIDE_PATHS.fontaine, circle: CIEL, icon: '#ffffff', radius: 16 }) as unknown as HTMLImageElement)
       }
       if (!map.hasImage('pin-sanisette')) {
-        map.addImage('pin-sanisette', drawPin({ paths: LUCIDE_PATHS.sanisette, circle: VERT, icon: '#ffffff', radius: 14 }) as unknown as HTMLImageElement)
+        map.addImage('pin-sanisette', drawPin({ paths: LUCIDE_PATHS.sanisette, circle: VERT, icon: '#ffffff', radius: 16 }) as unknown as HTMLImageElement)
       }
 
       // Ombres solaires dès le chargement — utilise l'heure courante via ref
@@ -499,7 +499,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'icon-anchor': 'center',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 14, 0.55, 16, 0.78, 18, 0.95],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 14, 0.62, 16, 0.88, 18, 1.05],
         },
       })
 
@@ -515,7 +515,28 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'icon-anchor': 'center',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 14, 0.55, 16, 0.78, 18, 0.95],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 14, 0.62, 16, 0.88, 18, 1.05],
+        },
+      })
+
+      // ── Pin du lieu sélectionné — source dédiée NON clusterisée ─────────────
+      // Ajoutée en dernier → dessinée AU-DESSUS de tout (y compris les clusters).
+      // Garantit que le lieu choisi reste visible même dézoomé, sans se perdre
+      // dans un regroupement de chiffres. Légèrement plus gros pour ressortir.
+      map.addSource('selected-place', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: 'selected-pin', type: 'symbol', source: 'selected-place',
+        layout: {
+          'icon-image': ['match', ['get', 'type'],
+            'bar', 'pin-bar',
+            'restaurant', 'pin-restaurant',
+            'cafe', 'pin-cafe',
+            'park', 'pin-park',
+            'pin-default'],
+          'icon-anchor': 'center',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.72, 14, 0.98, 16, 1.12, 18, 1.32],
         },
       })
 
@@ -697,10 +718,11 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       const isMobile = window.matchMedia('(max-width: 899px)').matches
       map.flyTo({
         center:  [focusPlace.lng, focusPlace.lat],
-        zoom:    16.5,
-        pitch:   40,
+        zoom:    17.7,           // assez proche pour lire les ombres + le 3D des bâtiments
+        pitch:   50,             // vue plongeante : on voit les façades et l'ombre portée
         bearing: 0,
-        duration: 1200,
+        duration: 1400,
+        curve:   1.4,
         essential: true,
         padding: {
           top: 20,
@@ -755,19 +777,23 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     selectedRingRef.current = null
     if (!map) return
 
-    // Estompe les pins/clusters NON sélectionnés (toujours visibles mais en
-    // retrait) pour donner toute l'importance au lieu choisi. Les propriétés
-    // paint Mapbox s'animent par défaut (~300 ms) → transition douce.
-    const applyDim = () => {
+    const place = highlightPlaceId ? placesRef.current.find(p => p.id === highlightPlaceId) ?? null : null
+
+    // Met en avant le lieu choisi :
+    //  • estompe (sans masquer) les autres pins/clusters
+    //  • alimente la source dédiée `selected-place` → pin toujours visible
+    //    au-dessus de tout, même dézoomé dans un cluster.
+    // Les propriétés paint Mapbox s'animent par défaut (~300 ms) → transition douce.
+    const applyFocus = () => {
       if (!map.getLayer('places-pins')) return
       if (highlightPlaceId) {
         map.setPaintProperty('places-pins', 'icon-opacity',
-          ['case', ['==', ['get', 'id'], highlightPlaceId], 1, 0.28])
-        if (map.getLayer('clusters'))        map.setPaintProperty('clusters', 'circle-opacity', 0.4)
-        if (map.getLayer('clusters-shadow')) map.setPaintProperty('clusters-shadow', 'circle-opacity', 0.18)
-        if (map.getLayer('cluster-count'))   map.setPaintProperty('cluster-count', 'text-opacity', 0.45)
-        if (map.getLayer('fontaines-layer')) map.setPaintProperty('fontaines-layer', 'icon-opacity', 0.4)
-        if (map.getLayer('sanisettes-layer')) map.setPaintProperty('sanisettes-layer', 'icon-opacity', 0.4)
+          ['case', ['==', ['get', 'id'], highlightPlaceId], 1, 0.45])
+        if (map.getLayer('clusters'))        map.setPaintProperty('clusters', 'circle-opacity', 0.5)
+        if (map.getLayer('clusters-shadow')) map.setPaintProperty('clusters-shadow', 'circle-opacity', 0.28)
+        if (map.getLayer('cluster-count'))   map.setPaintProperty('cluster-count', 'text-opacity', 0.55)
+        if (map.getLayer('fontaines-layer')) map.setPaintProperty('fontaines-layer', 'icon-opacity', 0.55)
+        if (map.getLayer('sanisettes-layer')) map.setPaintProperty('sanisettes-layer', 'icon-opacity', 0.55)
       } else {
         map.setPaintProperty('places-pins', 'icon-opacity', 1)
         if (map.getLayer('clusters'))        map.setPaintProperty('clusters', 'circle-opacity', 1)
@@ -776,12 +802,21 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (map.getLayer('fontaines-layer')) map.setPaintProperty('fontaines-layer', 'icon-opacity', 1)
         if (map.getLayer('sanisettes-layer')) map.setPaintProperty('sanisettes-layer', 'icon-opacity', 1)
       }
+      const selSrc = map.getSource('selected-place') as mapboxgl.GeoJSONSource | undefined
+      if (selSrc) {
+        const fc: GeoJSON.FeatureCollection = place
+          ? { type: 'FeatureCollection', features: [{
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [place.lng, place.lat] },
+              properties: { id: place.id, type: place.type },
+            }] }
+          : { type: 'FeatureCollection', features: [] }
+        selSrc.setData(fc)
+      }
     }
-    if (map.getLayer('places-pins')) applyDim()
-    else map.once('style.load', applyDim)
+    if (map.getLayer('places-pins')) applyFocus()
+    else map.once('style.load', applyFocus)
 
-    if (!highlightPlaceId) return
-    const place = placesRef.current.find(p => p.id === highlightPlaceId)
     if (!place) return
 
     // Anneau pulsant — IMPORTANT: Mapbox écrase `element.style.transform` pour positionner
