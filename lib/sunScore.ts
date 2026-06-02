@@ -108,6 +108,34 @@ export function calculateSunScore(
   return { score, isNight: false, shadowFactor: maxShadowFactor, sunAltitudeDeg }
 }
 
+/**
+ * Pondère un score d'ensoleillement (0-5, calculé sans météo) par la couverture
+ * nuageuse réelle de l'instant.
+ *
+ * Les `sun_scores` stockés en base sont un *potentiel ciel clair* : géométrie
+ * soleil + ombres des bâtiments, figés par mois. Le ciel ne change pas cette
+ * géométrie, mais il change ce qu'on ressent : sous une couche épaisse, "plein
+ * soleil" n'existe pas. On applique donc la météo comme une couche temps réel
+ * par-dessus le potentiel, côté client — c'est ce qui rend le score vraiment
+ * "temps réel" sans recalculer toute la base.
+ *
+ *   • nuit (score 0)            : inchangé (la météo n'invente pas de soleil)
+ *   • cloudCover ≤ 45 % (dégagé/épars) : inchangé — le soleil perce largement
+ *   • 45-65 % (nuageux)         : −1
+ *   • 65-85 % (très nuageux)    : −2
+ *   • > 85 %  (couvert)         : plafonné à 1
+ *
+ * cloudCover absent (null/undefined) → on ne touche pas au score.
+ */
+export function cloudAdjustedScore(score: number, cloudCover?: number | null): number {
+  if (score <= 0) return score
+  if (cloudCover == null) return score
+  if (cloudCover > 85) return 1
+  if (cloudCover > 65) return Math.max(1, score - 2)
+  if (cloudCover > 45) return Math.max(1, score - 1)
+  return score
+}
+
 // Calcule les scores pour tous les créneaux de 30min d'un mois donné
 // Utilisé par le cron job de pré-calcul
 export function precomputeMonthlyScores(

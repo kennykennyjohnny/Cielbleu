@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
+import { cloudAdjustedScore } from '@/lib/sunScore'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 
@@ -106,9 +107,11 @@ interface Props {
   activeSlot?: number | null
   /** Lance l'animation du soleil sur la carte pour un créneau */
   onSlotPreview?: (startH: number, endH: number, idx: number) => void
+  /** Couverture nuageuse (%) à l'heure affichée — pondère le score en direct */
+  cloudCover?: number | null
 }
 
-export default function PlacePageClient({ place, scores, hour, onClose, userId, onOpenProfile, sunsetHour = 21.5, activeSlot = null, onSlotPreview }: Props) {
+export default function PlacePageClient({ place, scores, hour, onClose, userId, onOpenProfile, sunsetHour = 21.5, activeSlot = null, onSlotPreview, cloudCover = null }: Props) {
   const [shareToast, setShareToast] = useState(false)
 
   // ── Community section state ─────────────────────────────────────────────────
@@ -172,7 +175,10 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
   }, [scores])
 
   const { slot } = slotFromHour(hour)
-  const currentScore = scoreMap[slot] ?? place.currentScore ?? 3
+  // rawScore = potentiel ciel clair (base + ombres). currentScore = pondéré météo.
+  const rawScore = scoreMap[slot] ?? place.currentScore ?? 3
+  const currentScore = cloudAdjustedScore(rawScore, cloudCover)
+  const dimmedByClouds = currentScore < rawScore
   const isSunny = currentScore >= 4
 
   const sunWindow = useMemo(() => computeSunWindow(scores), [scores])
@@ -469,6 +475,11 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
             {isSunny && sunWindow && (
               <span style={{ ...MINI_BADGE, background:'#fff1b8', color:'#5c3d00' }}>
                 ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
+              </span>
+            )}
+            {dimmedByClouds && (
+              <span style={{ ...MINI_BADGE, background:'rgba(141,153,174,0.14)', color:'#5b6776', display:'inline-flex', alignItems:'center', gap:5 }}>
+                {cloudCover != null && cloudCover > 85 ? '☁️' : '🌥️'} Soleil voilé{cloudCover != null ? ` · ${Math.round(cloudCover)}% nuages` : ''}
               </span>
             )}
             <span style={{ ...MINI_BADGE, background:'rgba(79,143,101,0.10)', color:'#3d8554', display:'inline-flex', alignItems:'center', gap:5 }}>

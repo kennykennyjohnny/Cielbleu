@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
+import { cloudAdjustedScore } from '@/lib/sunScore'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 import type { Place } from '@/types'
@@ -104,10 +105,12 @@ interface PlacePreviewProps {
   sunsetHour?: number
   activeSlot?: number | null
   onSlotPreview?: (startH: number, endH: number, idx: number) => void
+  /** Couverture nuageuse (%) à l'heure affichée — pondère le score en direct */
+  cloudCover?: number | null
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function PlacePreview({ place, hour, onClose, userId = null, onOpenProfile, sunsetHour = 21.5, activeSlot = null, onSlotPreview }: PlacePreviewProps) {
+export default function PlacePreview({ place, hour, onClose, userId = null, onOpenProfile, sunsetHour = 21.5, activeSlot = null, onSlotPreview, cloudCover = null }: PlacePreviewProps) {
 
   // ── Snap ─────────────────────────────────────────────────────────────────
   type SnapLevel = 1|2|3|4|5|6|7|8|9|10
@@ -223,7 +226,10 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
   // ── Computed ──────────────────────────────────────────────────────────────
   const { slot, label: hourLabel } = slotFromHour(hour)
-  const score = scoresThisMonth?.[slot] ?? place.currentScore ?? 3
+  // rawScore = potentiel ciel clair (base + ombres). score = pondéré météo réelle.
+  const rawScore = scoresThisMonth?.[slot] ?? place.currentScore ?? 3
+  const score = cloudAdjustedScore(rawScore, cloudCover)
+  const dimmedByClouds = score < rawScore
   const isSunny = score >= 4
   const sunWindow = useMemo(() => scoresThisMonth ? computeSunWindow(scoresThisMonth) : null, [scoresThisMonth])
   const ordinal = place.arrondissement === 1 ? 'er' : 'e'
@@ -548,6 +554,12 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                     ) : (
                       <p style={{ margin: '4px 0 0', fontSize: 11, color: '#6f7a8a', fontWeight: 500 }}>
                         {place.has_terrace !== false ? 'Terrasse disponible' : 'Terrasse non confirmée'}
+                      </p>
+                    )}
+                    {dimmedByClouds && (
+                      <p style={{ margin: '6px 0 0', fontSize: 11, color: '#6f7a8a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span aria-hidden="true">{cloudCover != null && cloudCover > 85 ? '☁️' : '🌥️'}</span>
+                        Soleil voilé{cloudCover != null ? ` · ${Math.round(cloudCover)}% de nuages` : ''}
                       </p>
                     )}
                   </div>

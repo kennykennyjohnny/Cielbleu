@@ -6,6 +6,7 @@ import { Search, X, Clock, UserCircle, Compass, MapPin, ArrowUpRight, Sun } from
 import PlaceTypeIcon from '@/components/Map/PlaceTypeIcon'
 import { supabase } from '@/lib/supabase'
 import { getSunPosition, getSunTimes } from '@/lib/suncalc'
+import { cloudAdjustedScore } from '@/lib/sunScore'
 import Filters from '@/components/Map/Filters'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import PlacePageClient from '@/components/Map/PlacePageClient'
@@ -176,6 +177,12 @@ export default function HomePage() {
     }
     return best
   }, [weather, hour])
+
+  // Couverture nuageuse (%) à l'heure du slider — module les scores en direct.
+  const cloudForHour = useMemo<number | null>(() => {
+    const c = weatherForHour as { cloudCover?: number } | null
+    return typeof c?.cloudCover === 'number' ? c.cloudCover : null
+  }, [weatherForHour])
 
   // focusPlace mémoisé pour éviter de re-déclencher le flyTo de la carte
   // à chaque rendu (ex. quand l'heure change dans le slider)
@@ -350,6 +357,17 @@ export default function HomePage() {
     // Exclure les commerces non-terrasse
     const EXCLUDE_RE = /franprix|monoprix|carrefour|naturalia|biocoop|lidl|aldi|picard|tabac-presse|pharmacie|pressing|coiffure|coiffeur|kebab|mcdonald|burger.?king|\bkfc\b|\bsubway\b|domino|sushi|\bquick\b/i
     let result = places.filter(p => !EXCLUDE_RE.test(p.name))
+
+    // Pondération météo temps réel : sous un ciel chargé, on dégrade les scores
+    // affichés (pins, compteur ☀, filtre soleil) pour coller au ressenti réel.
+    // En ciel dégagé (ou météo indispo) on ne touche à rien → zéro surcoût.
+    if (cloudForHour != null && cloudForHour > 45) {
+      result = result.map((p) => {
+        const raw = p.currentScore ?? 3
+        const adj = cloudAdjustedScore(raw, cloudForHour)
+        return adj === raw ? p : { ...p, currentScore: adj }
+      })
+    }
     const typeFilters = activeFilters.filter((f): f is 'bar' | 'restaurant' | 'cafe' | 'park' =>
       ['bar', 'restaurant', 'cafe', 'park'].includes(f)
     )
@@ -427,7 +445,7 @@ export default function HomePage() {
       }
     }
     return result
-  }, [places, activeFilters, searchQuery])
+  }, [places, activeFilters, searchQuery, cloudForHour])
 
   // Suggestions : top 6 lieux pour le dropdown sous la search
   const suggestions = useMemo(() => {
@@ -1317,6 +1335,7 @@ export default function HomePage() {
             sunsetHour={sunsetHour}
             activeSlot={activeSlot}
             onSlotPreview={previewSlot}
+            cloudCover={cloudForHour}
           />
         </aside>
       )}
@@ -1331,6 +1350,7 @@ export default function HomePage() {
           sunsetHour={sunsetHour}
           activeSlot={activeSlot}
           onSlotPreview={previewSlot}
+          cloudCover={cloudForHour}
         />
       )}
 
