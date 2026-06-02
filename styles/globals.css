@@ -245,27 +245,6 @@ body {
   .cb-hour-slider::-moz-range-thumb { width: 38px; height: 38px; }
 }
 
-.cb-sun-spinner-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 4px solid rgba(237,193,69,0.20);
-  border-top-color: rgba(237,193,69,0.80);
-  animation: cb-sun-spin 1.3s linear infinite;
-}
-.cb-sun-spinner-core {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,238,110,1) 0%, rgba(237,193,69,0.95) 45%, rgba(255,204,63,0.95) 100%);
-  display: grid;
-  place-items: center;
-  font-size: 24px;
-  line-height: 1;
-  box-shadow: 0 0 22px rgba(237,193,69,0.30);
-  animation: cb-sun-glow 1.6s ease-in-out infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
