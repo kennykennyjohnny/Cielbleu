@@ -3,7 +3,7 @@
 /**
  * MapView v3 - GeoJSON source + Mapbox GL native layers (cluster).
  * Gère des milliers de lieux sans jank DOM.
- * Pins colorés par score (0-5), regroupés en clusters au dézoom.
+ * Pins par catégorie (cercle navy + icône jaune), regroupés en clusters au dézoom.
  */
 
 import { useEffect, useRef, useMemo } from 'react'
@@ -16,75 +16,63 @@ const PARIS_CENTER: [number, number] = [2.3522, 48.8566]
 
 // Couleurs DA v2
 const NAVY = '#1F3A5F'
-const GOLD = '#EDC145'
 const WHITE = 'rgba(255,255,255,0.95)'
+const SOLEIL = '#FFBE0B'   // jaune marque — icône de catégorie tracée sur les pins
 
-// ── DA v2 Circular pins ───────────────────────────────────────────────────────
-// Score 5: gold circle + 8 rays (4 cardinal 0.6, 4 diag 0.4)
-// Score 4: gold circle + 4 cardinal rays 0.4
-// Score 3: gold circle, no rays
-// Score 2: navy 60% opacity, navy text
-// Score 1: navy 75% opacity, white text
-// Score 0: navy full opacity + moon icon
-function drawPinImage(score: number): { width: number; height: number; data: Uint8Array } {
+// ── Pins par catégorie ────────────────────────────────────────────────────────
+// On N'AFFICHE PLUS de note/score sur les pins : les scores étaient biaisés et
+// trompeurs. Chaque pin = cercle navy + bordure blanche + l'icône de la catégorie
+// (la même que dans les résultats de recherche) tracée en jaune marque.
+// Tracés issus de Lucide (viewBox 24×24, stroke 2, caps/joins arrondis) :
+// bar=Beer, restaurant=UtensilsCrossed, cafe=Coffee, park=Trees.
+const LUCIDE_PATHS: Record<string, string[]> = {
+  bar: [
+    'M17 11h1a3 3 0 0 1 0 6h-1',
+    'M9 12v6',
+    'M13 12v6',
+    'M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.72.5-2.5.5a2.5 2.5 0 0 1 0-5c.78 0 1.57.5 2.5.5S9.44 2 11 2s2 1.5 3 1.5 1.72-.5 2.5-.5a2.5 2.5 0 0 1 0 5c-.78 0-1.5-.5-2.5-.5Z',
+    'M5 8v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8',
+  ],
+  restaurant: [
+    'm16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8',
+    'M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7',
+    'm2.1 21.8 6.4-6.3',
+    'm19 5-7 7',
+  ],
+  cafe: [
+    'M10 2v2',
+    'M14 2v2',
+    'M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1',
+    'M6 2v2',
+  ],
+  park: [
+    'M10 10v.2A3 3 0 0 1 8.9 16H5a3 3 0 0 1-1-5.8V10a3 3 0 0 1 6 0Z',
+    'M7 16v6',
+    'M13 19v3',
+    'M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .8-1.7L13 3l-1.4 1.5',
+  ],
+}
+
+function drawCategoryPin(type: string): { width: number; height: number; data: Uint8Array } {
   const W = 60, H = 60
   const canvas = document.createElement('canvas')
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')!
   const CX = W / 2, CY = H / 2
+  const R = 17
 
-  const drawRays = (numRays: number, rayLen: number, rayGap: number, sw: number, alpha: number, diagonal = false) => {
-    ctx.save()
-    ctx.strokeStyle = GOLD
-    ctx.lineWidth = sw
-    ctx.lineCap = 'round'
-    ctx.globalAlpha = alpha
-    for (let i = 0; i < numRays; i++) {
-      const angleDeg = diagonal
-        ? (45 + i * 90)                // 45°, 135°, 225°, 315°
-        : (i * (360 / numRays))        // 0°, 90°, 180°, 270° or 8 directions
-      const angle = (angleDeg - 90) * Math.PI / 180
-      ctx.beginPath()
-      ctx.moveTo(CX + Math.cos(angle) * rayGap, CY + Math.sin(angle) * rayGap)
-      ctx.lineTo(CX + Math.cos(angle) * (rayGap + rayLen), CY + Math.sin(angle) * (rayGap + rayLen))
-      ctx.stroke()
-    }
-    ctx.restore()
-  }
-
-  // ── Rays behind circle ─────────────────────────────────────────────────────
-  if (score === 5) {
-    drawRays(4, 6, 20, 2.5, 0.65)           // cardinal: N, E, S, W
-    drawRays(4, 5, 20, 2.0, 0.40, true)     // diagonal: NE, SE, SW, NW
-  } else if (score === 4) {
-    drawRays(4, 5, 19, 2.0, 0.45)           // 4 cardinal, shorter
-  }
-
-  // Radius per score (score 5/4 = slightly larger for rays)
-  const R = score >= 4 ? 17 : 16
-
-  // ── Drop shadow ─────────────────────────────────────────────────────────────
+  // ── Cercle navy + ombre douce ───────────────────────────────────────────────
   ctx.save()
   ctx.shadowColor = 'rgba(31,58,95,0.28)'
   ctx.shadowBlur = 10
   ctx.shadowOffsetY = 3
-
-  // ── Circle fill ─────────────────────────────────────────────────────────────
   ctx.beginPath()
   ctx.arc(CX, CY, R, 0, Math.PI * 2)
-  if (score >= 3) {
-    ctx.fillStyle = GOLD
-  } else if (score === 2) {
-    ctx.fillStyle = 'rgba(31,58,95,0.60)'
-  } else if (score === 1) {
-    ctx.fillStyle = 'rgba(31,58,95,0.75)'
-  } else {
-    ctx.fillStyle = NAVY
-  }
+  ctx.fillStyle = NAVY
   ctx.fill()
   ctx.restore()
 
-  // ── White border ────────────────────────────────────────────────────────────
+  // ── Bordure blanche ─────────────────────────────────────────────────────────
   ctx.save()
   ctx.beginPath()
   ctx.arc(CX, CY, R, 0, Math.PI * 2)
@@ -93,24 +81,19 @@ function drawPinImage(score: number): { width: number; height: number; data: Uin
   ctx.stroke()
   ctx.restore()
 
-  // ── Text / icon ─────────────────────────────────────────────────────────────
-  let textColor: string
-  if (score >= 4)      textColor = NAVY
-  else if (score === 3) textColor = '#3a2700'
-  else if (score === 1) textColor = '#ffffff'
-  else if (score === 0) textColor = 'rgba(255,255,255,0.85)'
-  else                  textColor = NAVY
-
-  ctx.fillStyle = textColor
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  if (score === 0) {
-    ctx.font = '15px system-ui'
-    ctx.fillText('🌙', CX, CY + 1)
-  } else {
-    ctx.font = `bold 15px system-ui, sans-serif`
-    ctx.fillText(String(score), CX, CY + 1)
-  }
+  // ── Icône de catégorie (Lucide) tracée en jaune, centrée ────────────────────
+  const paths = LUCIDE_PATHS[type] ?? LUCIDE_PATHS.restaurant
+  ctx.save()
+  const s = 0.82                       // 24 × 0.82 ≈ 19.7 px → tient dans le cercle
+  ctx.translate(CX, CY)
+  ctx.scale(s, s)
+  ctx.translate(-12, -12)              // recadre le viewBox 24×24 sur le centre
+  ctx.strokeStyle = SOLEIL
+  ctx.lineWidth = 2.4                  // ≈ 2 px une fois mis à l'échelle
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  for (const d of paths) ctx.stroke(new Path2D(d))
+  ctx.restore()
 
   return { width: W, height: H, data: new Uint8Array(ctx.getImageData(0, 0, W, H).data.buffer) }
 }
@@ -259,43 +242,6 @@ function bearingFromBuildingPoly(
   return bestBearing
 }
 
-function drawParkPin(): { width: number; height: number; data: Uint8Array } {
-  const W = 46, H = 46
-  const canvas = document.createElement('canvas')
-  canvas.width = W; canvas.height = H
-  const ctx = canvas.getContext('2d')!
-  const CX = W / 2, CY = H / 2
-
-  // Circle with subtle drop shadow (no halo)
-  ctx.save()
-  ctx.shadowColor = 'rgba(31,58,95,0.22)'
-  ctx.shadowBlur = 8
-  ctx.shadowOffsetY = 3
-  ctx.beginPath()
-  ctx.arc(CX, CY - 1, 17, 0, Math.PI * 2)
-  ctx.fillStyle = '#2ea84d'
-  ctx.fill()
-  ctx.restore()
-
-  // White border
-  ctx.save()
-  ctx.beginPath()
-  ctx.arc(CX, CY - 1, 17, 0, Math.PI * 2)
-  ctx.strokeStyle = 'rgba(255,255,255,0.95)'
-  ctx.lineWidth = 2.5
-  ctx.stroke()
-  ctx.restore()
-
-  // Tree icon
-  ctx.fillStyle = '#fff'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.font = '15px system-ui'
-  ctx.fillText('🌳', CX, CY)
-
-  return { width: W, height: H, data: new Uint8Array(ctx.getImageData(0, 0, W, H).data.buffer) }
-}
-
 function applyStyle(map: mapboxgl.Map) {
   // Le style custom Mapbox a ses propres POIs avec un schéma qu'on ne connaît pas
   // d'avance. Stratégie en 3 étapes :
@@ -387,7 +333,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     features: places.map((p) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-      properties: { id: p.id, score: Math.round(p.currentScore ?? 3), name: p.name, type: p.type },
+      properties: { id: p.id, name: p.name, type: p.type },
     })),
   }), [places])
 
@@ -434,14 +380,11 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     map.on('style.load', () => {
       applyStyle(map)
 
-      // Enregistre les images de pin pour chaque score
-      for (let s = 0; s <= 5; s++) {
-        if (!map.hasImage(`pin-${s}`)) {
-          map.addImage(`pin-${s}`, drawPinImage(s) as unknown as HTMLImageElement)
+      // Enregistre une image de pin par catégorie (cercle navy + icône jaune)
+      for (const cat of ['bar', 'restaurant', 'cafe', 'park', 'default']) {
+        if (!map.hasImage(`pin-${cat}`)) {
+          map.addImage(`pin-${cat}`, drawCategoryPin(cat) as unknown as HTMLImageElement)
         }
-      }
-      if (!map.hasImage('pin-park')) {
-        map.addImage('pin-park', drawParkPin() as unknown as HTMLImageElement)
       }
 
       // Ombres solaires dès le chargement — utilise l'heure courante via ref
@@ -501,8 +444,12 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         id: 'places-pins', type: 'symbol', source: 'places',
         filter: ['!', ['has', 'point_count']],
         layout: {
-          'icon-image': ['case', ['==', ['get', 'type'], 'park'], 'pin-park',
-            ['match', ['get', 'score'], 0, 'pin-0', 1, 'pin-1', 2, 'pin-2', 3, 'pin-3', 4, 'pin-4', 5, 'pin-5', 'pin-3']],
+          'icon-image': ['match', ['get', 'type'],
+            'bar', 'pin-bar',
+            'restaurant', 'pin-restaurant',
+            'cafe', 'pin-cafe',
+            'park', 'pin-park',
+            'pin-default'],
           'icon-anchor': 'center',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,

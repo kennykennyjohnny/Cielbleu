@@ -7,6 +7,7 @@ import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
+import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 import type { Place } from '@/types'
 
 // ── Snap levels (10 niveaux) ──────────────────────────────────────────────────
@@ -135,6 +136,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   const [reviewPhotos, setReviewPhotos] = useState<File[]>([])
   const [reviewPhotoUrls, setReviewPhotoUrls] = useState<string[]>([])
   const [lightboxPhoto, setLightboxPhoto] = useState<{ url: string; caption?: string } | null>(null)
+  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set())
   const [shareToast, setShareToast] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -244,17 +246,25 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
     }))),
   ], [photoRefs, reviews])
 
-  // Format officiel Google Maps URLs API (?api=1) → ouvre la fiche dans l'appli
-  // native iOS/Android. L'ancien `?q=place_id:` collait juste le texte dans la
-  // barre de recherche sans ouvrir le lieu.
-  const gmapsQuery = encodeURIComponent(`${place.name} ${place.address ?? ''}`.trim())
-  const gmapsUrl = place.google_place_id
-    ? `https://www.google.com/maps/search/?api=1&query=${gmapsQuery}&query_place_id=${place.google_place_id}`
-    : `https://www.google.com/maps/search/?api=1&query=${place.lat}%2C${place.lng}`
-  const gmapsDirUrl = place.google_place_id
-    ? `https://www.google.com/maps/dir/?api=1&destination=${place.lat}%2C${place.lng}&destination_place_id=${place.google_place_id}&travelmode=walking`
-    : `https://www.google.com/maps/dir/?api=1&destination=${place.lat}%2C${place.lng}&travelmode=walking`
-  const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${place.lat}%2C${place.lng}`
+  // Masque les tuiles dont la photo n'a pas pu se charger (ref Google expirée, 404…)
+  // → pas d'image cassée, et la section disparaît si plus rien n'est affichable.
+  const visibleGallery = useMemo(
+    () => galleryItems.filter((it) => !failedPhotos.has(it.id)),
+    [galleryItems, failedPhotos],
+  )
+
+  // Liens cartes : ouverture dans l'APPLI native (voir lib/maps.ts). Le href reste
+  // le lien web universel (accessibilité, clic droit, desktop) ; le onClick force
+  // l'appli sur mobile.
+  const mapTarget: MapTarget = { lat: place.lat, lng: place.lng, name: place.name, placeId: place.google_place_id }
+  const gmapsUrl = webMapsUrl(mapTarget, 'view')
+  const gmapsDirUrl = webMapsUrl(mapTarget, 'directions')
+  const streetViewUrl = webMapsUrl(mapTarget, 'streetview')
+  const onMapClick = (mode: MapMode) => (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return // laisse l'ouverture en onglet
+    e.preventDefault()
+    openMaps(mapTarget, mode)
+  }
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleToggleFavorite = useCallback(async () => {
@@ -470,6 +480,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                     href={gmapsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={onMapClick('view')}
                     aria-label="Ouvrir dans Google Maps"
                     style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, background: '#1F3A5F', color: '#fff', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(31,58,95,0.22)', textDecoration: 'none' }}>
                     <svg width={12} height={12} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
@@ -482,6 +493,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                     href={gmapsDirUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={onMapClick('directions')}
                     aria-label="Y aller"
                     style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, background: '#EDC145', color: '#1F3A5F', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 12, border: 'none', cursor: 'pointer', touchAction: 'manipulation', boxShadow: '0 4px 12px rgba(237,193,69,0.26)', textDecoration: 'none' }}>
                     <Navigation size={12} strokeWidth={2.4} aria-hidden="true" /> Y aller
@@ -543,14 +555,14 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
                 {/* ── 3-COL STATS ── */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
-                  <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+                  <a href={gmapsUrl} target="_blank" rel="noopener noreferrer" onClick={onMapClick('view')}
                     style={{ ...STAT_CARD, textAlign: 'left', width: '100%', border: '1px solid rgba(20,32,51,0.09)', textDecoration: 'none', display: 'block' }}>
                     <strong style={{ display: 'block', color: '#0b1f3a', fontSize: 18, lineHeight: 1, fontWeight: 900 }}>
                       {place.google_rating != null ? place.google_rating.toFixed(1) : '—'}
                     </strong>
                     <span style={{ display: 'block', marginTop: 6, color: '#6f7a8a', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Note</span>
                   </a>
-                  <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+                  <a href={gmapsUrl} target="_blank" rel="noopener noreferrer" onClick={onMapClick('view')}
                     style={{ ...STAT_CARD, textAlign: 'left', width: '100%', border: '1px solid rgba(20,32,51,0.09)', textDecoration: 'none', display: 'block' }}>
                     <strong style={{ display: 'block', color: '#0b1f3a', fontSize: 18, lineHeight: 1, fontWeight: 900 }}>
                       {place.price_level ? '€'.repeat(place.price_level) : '—'}
@@ -575,7 +587,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                     {todayHours ? (
                       <span style={{ fontSize: 13, fontWeight: 700, color: isClosed ? '#FF6B6B' : '#1B2838' }}>{todayHours}</span>
                     ) : (
-                      <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+                      <a href={gmapsUrl} target="_blank" rel="noopener noreferrer" onClick={onMapClick('view')}
                         style={{ fontSize: 13, fontWeight: 700, color: '#1F3A5F', textDecoration: 'none' }}>
                         Voir sur Google Maps →
                       </a>
@@ -628,16 +640,17 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                 )}
 
                 {/* ── PHOTOS ── */}
-                {galleryItems.length > 0 && (
+                {visibleGallery.length > 0 && (
                   <div style={{ borderTop: '1px solid rgba(20,32,51,0.09)', paddingTop: 14, marginBottom: 14 }}>
                     <p style={{ ...EYEBROW, marginBottom: 10 }}>Photos</p>
                     <div className="scrollbar-none" style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: 4 }}>
-                      {galleryItems.map((item, i) => (
+                      {visibleGallery.map((item, i) => (
                         <button key={item.id} type="button"
                           onClick={() => setLightboxPhoto({ url: item.url, caption: item.caption })}
                           style={{ flexShrink: 0, borderRadius: 14, overflow: 'hidden', width: i === 0 ? 200 : 140, height: i === 0 ? 130 : 96, scrollSnapAlign: 'start', boxShadow: '0 4px 14px rgba(11,31,58,0.12)', border: 'none', padding: 0, background: 'none', cursor: 'pointer', position: 'relative' }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={item.url} alt={item.caption ?? place.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading={i === 0 ? 'eager' : 'lazy'} />
+                          <img src={item.url} alt={item.caption ?? place.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading={i === 0 ? 'eager' : 'lazy'}
+                            onError={() => setFailedPhotos((s) => new Set(s).add(item.id))} />
                           <div style={{ position: 'absolute', left: 8, bottom: 8, padding: '3px 7px', borderRadius: 999, background: 'rgba(0,0,0,0.52)', color: '#fff', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                             {item.type === 'review' ? 'HopSoleil' : 'Google'}
                           </div>
@@ -652,7 +665,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                   <div style={{ borderTop: '1px solid rgba(20,32,51,0.09)', paddingTop: 14, marginBottom: 14 }}>
                     <p style={{ ...EYEBROW, marginBottom: 10 }}>Voir le lieu</p>
                     <div style={{ display: 'grid', gap: 8 }}>
-                      <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+                      <a href={gmapsUrl} target="_blank" rel="noopener noreferrer" onClick={onMapClick('view')}
                         style={{ borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)', border: '1px solid rgba(66,133,244,0.25)', boxShadow: '0 4px 14px rgba(66,133,244,0.14)', textDecoration: 'none', display: 'block' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px' }}>
                           <span style={{ fontSize: 22, flexShrink: 0 }}>🗺️</span>
@@ -663,7 +676,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                           <span style={{ fontSize: 16, color: '#1a3fa7', flexShrink: 0 }}>→</span>
                         </div>
                       </a>
-                      <a href={streetViewUrl} target="_blank" rel="noopener noreferrer"
+                      <a href={streetViewUrl} target="_blank" rel="noopener noreferrer" onClick={onMapClick('streetview')}
                         style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 14px rgba(5,150,105,0.12)', border: '1px solid rgba(5,150,105,0.20)', position: 'relative', display: 'block', textDecoration: 'none' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={`/api/streetview?lat=${place.lat}&lng=${place.lng}&w=560&h=160&fov=90`}

@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ArrowLeft, Navigation } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 import type { AmeniteInfo } from '@/types'
 
 interface Props {
@@ -34,6 +35,14 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
   const [commentSent, setCommentSent] = useState(false)
 
   const ameniteKey = `${amenite.lat.toFixed(6)}_${amenite.lng.toFixed(6)}`
+
+  // Liens cartes : ouverture dans l'appli native sur mobile (voir lib/maps.ts).
+  const mapTarget: MapTarget = { lat: amenite.lat, lng: amenite.lng }
+  const onMapClick = (mode: MapMode) => (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return
+    e.preventDefault()
+    openMaps(mapTarget, mode)
+  }
 
   const loadReviews = useCallback(async () => {
     const { data, error } = await supabase
@@ -360,8 +369,9 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
         }}>
           {/* Itinéraire Google Maps — fonctionne sur iOS/Android/desktop */}
           <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${amenite.lat},${amenite.lng}&travelmode=walking`}
+            href={webMapsUrl(mapTarget, 'directions')}
             target="_blank" rel="noopener noreferrer"
+            onClick={onMapClick('directions')}
             style={{
               height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               borderRadius: 14, textDecoration: 'none',
@@ -377,8 +387,9 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
 
           {/* Voir sur Google Maps */}
           <a
-            href={`https://www.google.com/maps/search/?api=1&query=${amenite.lat},${amenite.lng}`}
+            href={webMapsUrl(mapTarget, 'view')}
             target="_blank" rel="noopener noreferrer"
+            onClick={onMapClick('view')}
             style={{
               height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center',
               borderRadius: 14, background: '#1F3A5F', border: '1.5px solid rgba(31,58,95,0.15)',

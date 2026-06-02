@@ -9,6 +9,7 @@ import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
+import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -124,6 +125,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
   const [reviewPhotos, setReviewPhotos]       = useState<File[]>([])
   const [reviewPhotoUrls, setReviewPhotoUrls] = useState<string[]>([])
   const [lightboxPhoto, setLightboxPhoto]     = useState<{ url: string; caption?: string } | null>(null)
+  const [failedPhotos, setFailedPhotos]       = useState<Set<string>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const openLightbox = useCallback((url: string, caption?: string) => {
@@ -201,19 +203,25 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
     ...reviewPhotoItems,
   ], [photoRefs, reviewPhotoItems])
 
+  // Masque les tuiles cassées (ref Google expirée / 404) → pas d'image brisée.
+  const visibleGallery = useMemo(
+    () => galleryItems.filter((it) => !failedPhotos.has(it.id)),
+    [galleryItems, failedPhotos],
+  )
+
   const ordinal = place.arrondissement === 1 ? 'er' : 'e'
 
-  // Format officiel Google Maps URLs API (?api=1) → ouvre la fiche dans l'appli
-  // native iOS/Android. L'ancien `?q=place_id:` collait juste le texte dans la
-  // barre de recherche sans ouvrir le lieu.
-  const gmapsQuery  = encodeURIComponent(`${place.name} ${place.address ?? ''}`.trim())
-  const gmapsUrl    = place.google_place_id
-    ? `https://www.google.com/maps/search/?api=1&query=${gmapsQuery}&query_place_id=${place.google_place_id}`
-    : `https://www.google.com/maps/search/?api=1&query=${place.lat}%2C${place.lng}`
-  const gmapsDirUrl = place.google_place_id
-    ? `https://www.google.com/maps/dir/?api=1&destination=${place.lat}%2C${place.lng}&destination_place_id=${place.google_place_id}&travelmode=walking`
-    : `https://www.google.com/maps/dir/?api=1&destination=${place.lat}%2C${place.lng}&travelmode=walking`
-  const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${place.lat}%2C${place.lng}`
+  // Liens cartes : ouverture dans l'APPLI native (lib/maps.ts). href = lien web
+  // universel pour l'accessibilité / desktop ; onClick force l'appli sur mobile.
+  const mapTarget: MapTarget = { lat: place.lat, lng: place.lng, name: place.name, placeId: place.google_place_id }
+  const gmapsUrl    = webMapsUrl(mapTarget, 'view')
+  const gmapsDirUrl = webMapsUrl(mapTarget, 'directions')
+  const streetViewUrl = webMapsUrl(mapTarget, 'streetview')
+  const onMapClick = (mode: MapMode) => (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return
+    e.preventDefault()
+    openMaps(mapTarget, mode)
+  }
 
   const handleShare = useCallback(async () => {
     // Toujours utiliser le domaine actuel (cielbleu.fr, hopleon.fr, preview Vercel…)
@@ -502,7 +510,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
         {/* ── QUICK STATS (3 cols) ── */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:0 }}>
           {/* Note — cliquable → fiche Google */}
-          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer" onClick={onMapClick('view')}
             style={{ ...STAT_CARD, textDecoration:'none', display:'block', width:'100%', textAlign:'left' }}>
             <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
               {place.google_rating != null ? place.google_rating.toFixed(1) : '—'}
@@ -513,7 +521,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
             </span>
           </a>
           {/* Prix — cliquable → fiche Google */}
-          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+          <a href={gmapsUrl} target="_blank" rel="noopener noreferrer" onClick={onMapClick('view')}
             style={{ ...STAT_CARD, textDecoration:'none', display:'block', width:'100%', textAlign:'left' }}>
             <strong style={{ display:'block', color:'#0b1f3a', fontSize:20, lineHeight:1, fontWeight:900 }}>
               {place.price_level ? '€'.repeat(place.price_level) : '—'}
@@ -621,9 +629,10 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
                     color: isClosed ? '#FF6B6B' : '#1B2838' }}>{hoursLabel}</span>
                 ) : (
                   <a
-                    href={place.google_maps_url ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.address)}`}
+                    href={gmapsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={onMapClick('view')}
                     style={{ fontSize:13, fontWeight:700, color:'#1F3A5F', textDecoration:'none' }}
                   >
                     Voir sur Google Maps →
@@ -635,12 +644,12 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
         })()}
 
         {/* ── PHOTOS ── */}
-        {galleryItems.length > 0 && (
+        {visibleGallery.length > 0 && (
           <div style={{ borderTop:'1px solid rgba(20,32,51,0.10)', marginTop:14, paddingTop:15 }}>
             <p style={{ ...EYEBROW, marginBottom:10 }}>Photos</p>
             <div className="scrollbar-none"
               style={{ display:'flex', gap:8, overflowX:'auto', scrollSnapType:'x mandatory', paddingBottom:4 }}>
-              {galleryItems.map((item, i) => (
+              {visibleGallery.map((item, i) => (
                 <button
                   key={item.id}
                   type="button"
@@ -666,6 +675,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
                     alt={item.caption ?? `${place.name} — photo`}
                     style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
                     loading={i === 0 ? 'eager' : 'lazy'}
+                    onError={() => setFailedPhotos((s) => new Set(s).add(item.id))}
                   />
                   <div style={{ position:'absolute', left:10, bottom:10, padding:'4px 8px', borderRadius:999,
                     background:'rgba(0,0,0,0.55)', color:'#fff', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em' }}>
@@ -684,7 +694,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
             <div style={{ display:'grid', gap:8 }}>
 
               {/* Google Maps — maps.google.com = Universal Link → ouvre l'appli sur iOS/Android */}
-              <a href={gmapsUrl} target="_blank" rel="noopener noreferrer"
+              <a href={gmapsUrl} target="_blank" rel="noopener noreferrer" onClick={onMapClick('view')}
                 style={{ textDecoration:'none', display:'block',
                   borderRadius:18, overflow:'hidden',
                   background:'linear-gradient(135deg,#e8f0fe 0%,#c2d3fa 100%)',
@@ -707,6 +717,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
                 href={streetViewUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={onMapClick('streetview')}
                 style={{ textDecoration:'none', display:'block', borderRadius:18, overflow:'hidden',
                   boxShadow:'0 4px 16px rgba(5,150,105,0.14)',
                   border:'1px solid rgba(5,150,105,0.22)', position:'relative' }}>
@@ -985,6 +996,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
             href={gmapsUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={onMapClick('view')}
             aria-label="Ouvrir dans Google Maps"
             style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:7,
               borderRadius:14, background:'#1F3A5F', color:'#fff',
@@ -1004,6 +1016,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
             href={gmapsDirUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={onMapClick('directions')}
             aria-label="Y aller"
             style={{ height:46, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
               borderRadius:14, background:'#EDC145', color:'#1F3A5F',
