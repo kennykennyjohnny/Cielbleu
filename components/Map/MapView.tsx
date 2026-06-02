@@ -160,11 +160,16 @@ function applySunLightingByHour(map: mapboxgl.Map, lat: number, lng: number, h: 
   else if (altDeg < 8 && h >= 12)  preset = 'dusk'
   else                             preset = 'day'
 
+  // ⚠️ setConfigProperty re-évalue TOUT le style → très coûteux. Pendant le
+  // balayage horaire (≈60 appels/s) ça provoquait des micro-freezes et des
+  // ombres saccadées. Le preset ne change qu'aux frontières jour/aube/crépuscule :
+  // on ne l'applique donc QUE s'il a réellement changé depuis le dernier rendu.
+  const presetCache = map as unknown as { _cbPreset?: string }
   const setConfig = (map as unknown as {
     setConfigProperty?: (importId: string, name: string, value: unknown) => void
   }).setConfigProperty
-  if (typeof setConfig === 'function') {
-    try { setConfig.call(map, 'basemap', 'lightPreset', preset) } catch { /* noop */ }
+  if (typeof setConfig === 'function' && presetCache._cbPreset !== preset) {
+    try { setConfig.call(map, 'basemap', 'lightPreset', preset); presetCache._cbPreset = preset } catch { /* noop */ }
   }
 
   // Mapbox Standard a déjà `fill-extrusion-cast-shadows: true` par défaut

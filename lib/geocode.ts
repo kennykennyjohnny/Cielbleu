@@ -57,7 +57,10 @@ export async function geocodeParis(query: string, signal?: AbortSignal): Promise
     `?access_token=${token}` +
     `&country=fr&language=fr&limit=5&autocomplete=true` +
     `&bbox=${PARIS_BBOX}&proximity=${PARIS_PROXIMITY}` +
-    `&types=address,street,neighborhood,locality,place,postcode,poi`
+    // ⚠️ "street" n'est PAS un type valide de l'API Geocoding v5 → sa présence
+    // renvoyait un 422 et faisait échouer TOUTE la recherche de rues/adresses.
+    // Les rues remontent via le type "address".
+    `&types=address,neighborhood,locality,place,postcode,poi`
 
   try {
     const res = await fetch(url, { signal })
@@ -66,10 +69,12 @@ export async function geocodeParis(query: string, signal?: AbortSignal): Promise
     const features = data.features ?? []
     return features.map((f) => {
       const kind = f.place_type?.[0] ?? 'address'
-      // Sous-titre = code postal + ville si dispo, sinon le reste du place_name
+      // Sous-titre = VILLE en tête (Paris, Levallois-Perret…) puis code postal.
+      // La ville prime visuellement car on couvre désormais la petite couronne.
       const postcode = f.context?.find((c) => c.id.startsWith('postcode'))?.text
       const city     = f.context?.find((c) => c.id.startsWith('place'))?.text
-      const subtitle = [postcode, city].filter(Boolean).join(' ') ||
+        ?? f.context?.find((c) => c.id.startsWith('locality'))?.text
+      const subtitle = [city, postcode].filter(Boolean).join(' · ') ||
         f.place_name.split(',').slice(1, 3).join(',').trim()
       return {
         id: f.id,

@@ -215,7 +215,10 @@ export default function HomePage() {
     const step = (now: number) => {
       const p = Math.min((now - t0) / DURATION, 1)
       const h = startH + (endH - startH) * easeInOut(p)
-      setHour(Math.round(h * 20) / 20)   // résolution 3 min → ombres fluides, peu de renders
+      // Résolution 1 min : au pic de l'easing chaque frame est distincte (ombres
+      // continues), aux extrémités lentes les frames quasi-identiques fusionnent
+      // → fluide sans surcharge de renders. Couplé au cache de preset (MapView).
+      setHour(Math.round(h * 60) / 60)
       if (p < 1) {
         slotAnimRef.current = requestAnimationFrame(step)
       } else {
@@ -910,29 +913,49 @@ export default function HomePage() {
 
       {/* ── Spinner soleil — overlay sur la carte seulement (header + recherche restent visibles) ── */}
       {loading && (
-        <div
-          aria-live="polite" aria-label="Chargement des terrasses en cours"
-          style={{
-            position: 'absolute',
-            top: isDesktop ? headerH : headerH,
-            left: 0, right: 0,
-            bottom: 0,
-            zIndex: 15,
-            background: 'rgba(255,252,243,0.88)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 18,
-            pointerEvents: 'none',
-          }}
-        >
-          <div style={{ position: 'relative', width: 96, height: 96, display: 'grid', placeItems: 'center' }} aria-hidden="true">
-            <div className="cb-sun-spinner-ring" />
-            <div className="cb-sun-spinner-core">☀</div>
+        <>
+          <style>{`
+            @keyframes cb-spin-sun { to { transform: rotate(360deg) } }
+            @keyframes cb-sun-pulse { 0%,100% { transform: scale(1); opacity: 1 } 50% { transform: scale(1.08); opacity: 0.92 } }
+          `}</style>
+          <div
+            aria-live="polite" aria-label="Chargement des terrasses en cours"
+            style={{
+              position: 'absolute',
+              top: isDesktop ? headerH : headerH,
+              left: 0, right: 0,
+              bottom: 0,
+              zIndex: 15,           // sous le header (z-20) et le slider (z-18)
+              background: 'rgba(255,252,243,0.88)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', gap: 14,
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{ position: 'relative', width: 60, height: 60 }} aria-hidden="true">
+              {/* Rayons dorés qui tournent — pointe lumineuse en rotation (effet halo) */}
+              <svg width={60} height={60} viewBox="0 0 60 60"
+                style={{ position: 'absolute', inset: 0, animation: 'cb-spin-sun 1.1s linear infinite' }}>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <rect key={i} x={28.4} y={3} width={3.2} height={11} rx={1.6}
+                    fill="#EDC145" opacity={0.16 + (i / 7) * 0.84}
+                    transform={`rotate(${i * 45} 30 30)`} />
+                ))}
+              </svg>
+              {/* Cœur du soleil — dégradé doux + léger battement */}
+              <div style={{
+                position: 'absolute', inset: 17, borderRadius: '50%',
+                background: 'radial-gradient(circle at 38% 34%, #FFE89A 0%, #EDC145 56%, #F2A23B 100%)',
+                boxShadow: '0 2px 12px rgba(237,193,69,0.55), 0 0 0 5px rgba(237,193,69,0.12)',
+                animation: 'cb-sun-pulse 1.6s ease-in-out infinite',
+              }} />
+            </div>
+            <p style={{ margin: 0, fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 800, color: '#1F3A5F', opacity: 0.72 }}>
+              Chargement des terrasses…
+            </p>
           </div>
-          <p style={{ margin: 0, fontFamily: 'var(--font-outfit)', fontSize: 13, fontWeight: 800, color: '#1F3A5F', opacity: 0.72 }}>
-            Chargement des terrasses…
-          </p>
-        </div>
+        </>
       )}
 
       {/* État vide */}
@@ -1001,12 +1024,23 @@ export default function HomePage() {
                       </li>
                     )}
                     {suggestions.map((p) => {
-                      const addressParts = p.address.split(',').map((s) => s.trim()).filter(Boolean)
-                      const street = addressParts[0] ?? p.address
-                      const city = addressParts.length > 1 ? addressParts[addressParts.length - 1] : ''
-                      const cityLabel = city && city !== street ? ` · ${city}` : ''
                       const cp = p.address.match(/\b75(\d{3})\b/)
                       const arr = p.arrondissement ?? (cp ? parseInt(cp[1]) : null)
+                      // Ligne 2 : Paris → "11e · rue" ; hors Paris → "rue · Ville"
+                      const parts = p.address.split(',').map((s) => s.trim()).filter(Boolean)
+                      // Re-fusionne un numéro isolé avec sa rue ("163-165, Rue X" → "163-165 Rue X")
+                      if (parts.length > 1 && /^\d+([-–/]\d+)?\s*(bis|ter)?$/i.test(parts[0])) {
+                        parts.splice(0, 2, `${parts[0]} ${parts[1]}`)
+                      }
+                      const street = parts[0] ?? p.address
+                      // Ville = partie avec code postal (fiable), sinon 1re partie alpha hors "France"
+                      const pcPart = parts.slice(1).find((s) => /^\d{4,5}\s+\D/.test(s))
+                      const city = pcPart
+                        ? pcPart.replace(/^\d{4,5}\s*/, '').replace(/\s*cedex.*$/i, '').trim()
+                        : (parts.slice(1).find((s) => /^[A-Za-zÀ-ÿ' -]+$/.test(s) && !/^france$/i.test(s)) ?? '')
+                      const meta = arr
+                        ? `${arr}${arr === 1 ? 'er' : 'e'} · ${street}`
+                        : city ? `${street} · ${city}` : street
                       return (
                         <li key={p.id} role="option">
                           <button
@@ -1022,7 +1056,7 @@ export default function HomePage() {
                             <span className="flex-1 min-w-0">
                               <span className="block font-bold text-[13px] text-text-primary truncate">{p.name}</span>
                               <span className="block font-outfit text-[11px] text-text-soft truncate">
-                                {arr ? `${arr}${arr === 1 ? 'er' : 'e'} · ` : ''}{street}{cityLabel}
+                                {meta}
                               </span>
                             </span>
                             {(p.currentScore ?? 0) >= 4 && (
