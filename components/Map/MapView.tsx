@@ -18,6 +18,8 @@ const PARIS_CENTER: [number, number] = [2.3522, 48.8566]
 const NAVY = '#1F3A5F'
 const WHITE = 'rgba(255,255,255,0.95)'
 const SOLEIL = '#FFBE0B'   // jaune marque — icône de catégorie tracée sur les pins
+const CIEL = '#3A86FF'     // bleu — fontaines à boire (point d'eau)
+const VERT = '#52B788'     // vert — sanisettes (toilettes publiques)
 
 // ── Pins par catégorie ────────────────────────────────────────────────────────
 // On N'AFFICHE PLUS de note/score sur les pins : les scores étaient biaisés et
@@ -51,24 +53,41 @@ const LUCIDE_PATHS: Record<string, string[]> = {
     'M13 19v3',
     'M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .8-1.7L13 3l-1.4 1.5',
   ],
+  // Lucide "Droplet" — point d'eau / fontaine
+  fontaine: [
+    'M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z',
+  ],
+  // Lucide "Toilet" — sanisette / toilettes publiques
+  sanisette: [
+    'M7 12h13a1 1 0 0 1 1 1 5 5 0 0 1-5 5h-.598a.5.5 0 0 0-.424.765l1.544 2.47a.5.5 0 0 1-.424.765H5.402a.5.5 0 0 1-.424-.765L7 18',
+    'M8 18a5 5 0 0 1-5-5V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8',
+  ],
 }
 
-function drawCategoryPin(type: string): { width: number; height: number; data: Uint8Array } {
+// Dessine un pin rond cohérent (même langage visuel pour tous) :
+// cercle plein + ombre douce + bordure blanche + icône Lucide centrée.
+// On fait varier la couleur du cercle / de l'icône et le rayon selon le rôle :
+//   • lieux (bar/resto/café/parc) : cercle navy, icône jaune marque
+//   • fontaines : cercle bleu ciel, icône blanche
+//   • sanisettes : cercle vert, icône blanche
+function drawPin(opts: {
+  paths: string[]; circle: string; icon: string; radius?: number
+}): { width: number; height: number; data: Uint8Array } {
   const W = 60, H = 60
   const canvas = document.createElement('canvas')
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')!
   const CX = W / 2, CY = H / 2
-  const R = 17
+  const R = opts.radius ?? 17
 
-  // ── Cercle navy + ombre douce ───────────────────────────────────────────────
+  // ── Cercle + ombre douce ────────────────────────────────────────────────────
   ctx.save()
   ctx.shadowColor = 'rgba(31,58,95,0.28)'
   ctx.shadowBlur = 10
   ctx.shadowOffsetY = 3
   ctx.beginPath()
   ctx.arc(CX, CY, R, 0, Math.PI * 2)
-  ctx.fillStyle = NAVY
+  ctx.fillStyle = opts.circle
   ctx.fill()
   ctx.restore()
 
@@ -81,21 +100,24 @@ function drawCategoryPin(type: string): { width: number; height: number; data: U
   ctx.stroke()
   ctx.restore()
 
-  // ── Icône de catégorie (Lucide) tracée en jaune, centrée ────────────────────
-  const paths = LUCIDE_PATHS[type] ?? LUCIDE_PATHS.restaurant
+  // ── Icône (Lucide) tracée, centrée, mise à l'échelle selon le rayon ─────────
   ctx.save()
-  const s = 0.82                       // 24 × 0.82 ≈ 19.7 px → tient dans le cercle
+  const s = (R / 17) * 0.82            // garde le ratio icône/cercle quel que soit R
   ctx.translate(CX, CY)
   ctx.scale(s, s)
   ctx.translate(-12, -12)              // recadre le viewBox 24×24 sur le centre
-  ctx.strokeStyle = SOLEIL
-  ctx.lineWidth = 2.4                  // ≈ 2 px une fois mis à l'échelle
+  ctx.strokeStyle = opts.icon
+  ctx.lineWidth = 2.0 / s              // ≈ 2 px constant une fois mis à l'échelle
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  for (const d of paths) ctx.stroke(new Path2D(d))
+  for (const d of opts.paths) ctx.stroke(new Path2D(d))
   ctx.restore()
 
   return { width: W, height: H, data: new Uint8Array(ctx.getImageData(0, 0, W, H).data.buffer) }
+}
+
+function drawCategoryPin(type: string): { width: number; height: number; data: Uint8Array } {
+  return drawPin({ paths: LUCIDE_PATHS[type] ?? LUCIDE_PATHS.restaurant, circle: NAVY, icon: SOLEIL })
 }
 
 // ── Style CielBleu ─────────────────────────────────────────────────────────
@@ -386,6 +408,14 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           map.addImage(`pin-${cat}`, drawCategoryPin(cat) as unknown as HTMLImageElement)
         }
       }
+      // Pins des commodités (eau / WC) — même langage visuel que les lieux, mais
+      // cercle coloré + icône blanche + un peu plus petits (rôle secondaire).
+      if (!map.hasImage('pin-fontaine')) {
+        map.addImage('pin-fontaine', drawPin({ paths: LUCIDE_PATHS.fontaine, circle: CIEL, icon: '#ffffff', radius: 14 }) as unknown as HTMLImageElement)
+      }
+      if (!map.hasImage('pin-sanisette')) {
+        map.addImage('pin-sanisette', drawPin({ paths: LUCIDE_PATHS.sanisette, circle: VERT, icon: '#ffffff', radius: 14 }) as unknown as HTMLImageElement)
+      }
 
       // Ombres solaires dès le chargement — utilise l'heure courante via ref
       const initSunLat = cinematicFocus?.lat ?? PARIS_CENTER[1]
@@ -458,32 +488,34 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       })
 
       // ── Fontaines à boire — static asset public/geo/fontaines.geojson ───────
+      // Pin symbol cohérent (cercle bleu + goutte blanche) plutôt qu'un point.
       map.addSource('fontaines', { type: 'geojson', data: '/geo/fontaines.geojson' })
       map.addLayer({
-        id: 'fontaines-layer', type: 'circle', source: 'fontaines',
+        id: 'fontaines-layer', type: 'symbol', source: 'fontaines',
         filter: ['==', ['get', 'dispo'], 'OUI'],
         minzoom: 14,
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 5, 16, 8, 18, 13],
-          'circle-color': '#3A86FF',
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2,
-          'circle-opacity': 0.9,
+        layout: {
+          'icon-image': 'pin-fontaine',
+          'icon-anchor': 'center',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 14, 0.55, 16, 0.78, 18, 0.95],
         },
       })
 
       // ── Sanisettes — static asset public/geo/sanisettes.geojson ─────────────
+      // Pin symbol cohérent (cercle vert + icône WC blanche).
       map.addSource('sanisettes', { type: 'geojson', data: '/geo/sanisettes.geojson' })
       map.addLayer({
-        id: 'sanisettes-layer', type: 'circle', source: 'sanisettes',
+        id: 'sanisettes-layer', type: 'symbol', source: 'sanisettes',
         filter: ['==', ['get', 'statut'], 'En service'],
         minzoom: 14,
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 5, 16, 8, 18, 13],
-          'circle-color': '#52B788',
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2,
-          'circle-opacity': 0.9,
+        layout: {
+          'icon-image': 'pin-sanisette',
+          'icon-anchor': 'center',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 14, 0.55, 16, 0.78, 18, 0.95],
         },
       })
 
@@ -537,29 +569,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         }
       })
 
-      // Labels EAU / WC au zoom 15+
-      map.addLayer({
-        id: 'fontaines-label', type: 'symbol', source: 'fontaines',
-        filter: ['==', ['get', 'dispo'], 'OUI'],
-        minzoom: 15,
-        layout: {
-          'text-field': '💧', 'text-size': 14,
-          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
-          'text-offset': [0, -1.8], 'text-anchor': 'bottom', 'text-allow-overlap': false,
-        },
-        paint: { 'text-opacity': 0.95 },
-      })
-      map.addLayer({
-        id: 'sanisettes-label', type: 'symbol', source: 'sanisettes',
-        filter: ['==', ['get', 'statut'], 'En service'],
-        minzoom: 15,
-        layout: {
-          'text-field': '🚻', 'text-size': 14,
-          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
-          'text-offset': [0, -1.8], 'text-anchor': 'bottom', 'text-allow-overlap': false,
-        },
-        paint: { 'text-opacity': 0.95 },
-      })
+      // (Plus de labels emoji 💧/🚻 séparés : l'icône est désormais dans le pin.)
 
       // Force-sync : si Supabase a répondu avant que le style finisse de charger,
       // geojsonRef.current contient déjà les places — on les injecte maintenant.
@@ -649,14 +659,25 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    // IMPORTANT : utiliser geojsonRef.current (pas la closure `geojson`) pour éviter
-    // le bug de closure périmée — quand once('style.load') fire, la ref a
-    // toujours la valeur la plus récente même si le closure date d'un rendu antérieur.
-    const update = () => {
-      (map.getSource('places') as mapboxgl.GeoJSONSource | undefined)?.setData(geojsonRef.current)
+    // On se base sur l'EXISTENCE de la source 'places' (stable une fois ajoutée
+    // au style.load), PAS sur isStyleLoaded(). Bug observé sur desktop : pendant
+    // un setConfigProperty (changement de lightPreset au slider), isStyleLoaded()
+    // peut repasser false ET l'event style.load ne re-fire jamais → les pins
+    // restaient invisibles jusqu'à ce qu'un toggle de filtre relance un setData.
+    // 'idle' fire après le rendu initial (quand la source vient d'être créée) :
+    // garantit l'injection des données sans dépendre de style.load.
+    // (geojsonRef.current, pas la closure `geojson` → jamais de valeur périmée.)
+    const trySet = (): boolean => {
+      const src = map.getSource('places') as mapboxgl.GeoJSONSource | undefined
+      if (!src) return false
+      src.setData(geojsonRef.current)
+      return true
     }
-    if (map.isStyleLoaded()) update()
-    else map.once('style.load', update)
+    if (trySet()) return
+    const onReady = () => { if (trySet()) { map.off('style.load', onReady); map.off('idle', onReady) } }
+    map.on('style.load', onReady)
+    map.on('idle', onReady)
+    return () => { map.off('style.load', onReady); map.off('idle', onReady) }
   }, [geojson])
 
   // ── Zoom doux sur un lieu sélectionné (page d'accueil) ───────────────
@@ -727,13 +748,39 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     })
   }, [flyToTarget]) // eslint-disable-line
 
-  // ── Anneau animé autour du pin sélectionné ─────────────────────────
+  // ── Anneau animé + mise en avant du pin sélectionné ────────────────
   useEffect(() => {
     const map = mapRef.current
     selectedRingRef.current?.remove()
     selectedRingRef.current = null
-    if (!map || !highlightPlaceId) return
+    if (!map) return
 
+    // Estompe les pins/clusters NON sélectionnés (toujours visibles mais en
+    // retrait) pour donner toute l'importance au lieu choisi. Les propriétés
+    // paint Mapbox s'animent par défaut (~300 ms) → transition douce.
+    const applyDim = () => {
+      if (!map.getLayer('places-pins')) return
+      if (highlightPlaceId) {
+        map.setPaintProperty('places-pins', 'icon-opacity',
+          ['case', ['==', ['get', 'id'], highlightPlaceId], 1, 0.28])
+        if (map.getLayer('clusters'))        map.setPaintProperty('clusters', 'circle-opacity', 0.4)
+        if (map.getLayer('clusters-shadow')) map.setPaintProperty('clusters-shadow', 'circle-opacity', 0.18)
+        if (map.getLayer('cluster-count'))   map.setPaintProperty('cluster-count', 'text-opacity', 0.45)
+        if (map.getLayer('fontaines-layer')) map.setPaintProperty('fontaines-layer', 'icon-opacity', 0.4)
+        if (map.getLayer('sanisettes-layer')) map.setPaintProperty('sanisettes-layer', 'icon-opacity', 0.4)
+      } else {
+        map.setPaintProperty('places-pins', 'icon-opacity', 1)
+        if (map.getLayer('clusters'))        map.setPaintProperty('clusters', 'circle-opacity', 1)
+        if (map.getLayer('clusters-shadow')) map.setPaintProperty('clusters-shadow', 'circle-opacity', 1)
+        if (map.getLayer('cluster-count'))   map.setPaintProperty('cluster-count', 'text-opacity', 1)
+        if (map.getLayer('fontaines-layer')) map.setPaintProperty('fontaines-layer', 'icon-opacity', 1)
+        if (map.getLayer('sanisettes-layer')) map.setPaintProperty('sanisettes-layer', 'icon-opacity', 1)
+      }
+    }
+    if (map.getLayer('places-pins')) applyDim()
+    else map.once('style.load', applyDim)
+
+    if (!highlightPlaceId) return
     const place = placesRef.current.find(p => p.id === highlightPlaceId)
     if (!place) return
 
@@ -793,23 +840,11 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           if (showFontaines) map.setLayerZoomRange('fontaines-layer', 0, 24)
         } catch { /* noop */ }
       }
-      if (map.getLayer('fontaines-label')) {
-        try {
-          map.setLayoutProperty('fontaines-label', 'visibility', showFontaines ? 'visible' : 'none')
-          if (showFontaines) map.setLayerZoomRange('fontaines-label', 0, 24)
-        } catch { /* noop */ }
-      }
       // Sanisettes
       if (map.getLayer('sanisettes-layer')) {
         try {
           map.setLayoutProperty('sanisettes-layer', 'visibility', showSanisettes ? 'visible' : 'none')
           if (showSanisettes) map.setLayerZoomRange('sanisettes-layer', 0, 24)
-        } catch { /* noop */ }
-      }
-      if (map.getLayer('sanisettes-label')) {
-        try {
-          map.setLayoutProperty('sanisettes-label', 'visibility', showSanisettes ? 'visible' : 'none')
-          if (showSanisettes) map.setLayerZoomRange('sanisettes-label', 0, 24)
         } catch { /* noop */ }
       }
     }
