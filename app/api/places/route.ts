@@ -1,14 +1,16 @@
 /**
  * GET /api/places?month=5&slot=14:00
  *
- * Retourne tous les lieux de Paris intramuros avec leur score soleil.
+ * Retourne tous les lieux de Paris + petite couronne avec leur score soleil.
  * Colonnes slim — pas de photos ni d'opening_hours.
  *
  * Stratégie de chargement :
- *  1. Filtrage géographique : Paris intramuros uniquement (~13 400 lieux)
- *     → élimine ~8 000 lieux de banlieue (Nanterre, Bondy, Vitry…)
+ *  1. Filtrage géographique : Paris intramuros + petite couronne (~21 000 lieux)
+ *     → couvre Gentilly, Le Kremlin-Bicêtre, Levallois, Boulogne, Vincennes,
+ *       Montrouge, Saint-Mandé, Issy, Clichy, Saint-Ouen… (tout l'import).
+ *       Avant, une bbox trop serrée masquait ~6 600 lieux déjà importés.
  *  2. Pagination serveur rapide : même datacenter → ~5 ms / page
- *     (~14 pages × 5 ms = ~70 ms, vs 22 appels depuis le browser = 10 s)
+ *     (toutes les pages en parallèle, ~1 round-trip)
  *  3. Cache CDN Vercel 30 s → chargement quasi-instantané pour tous les users suivants
  *
  * preferredRegion cdg1 = Paris = même région AWS que Supabase eu-west-3.
@@ -20,8 +22,10 @@ import { createClient } from '@supabase/supabase-js'
 export const preferredRegion = ['cdg1']  // même datacenter que Supabase eu-west-3
 export const dynamic = 'force-dynamic'
 
-// Paris intramuros + Bois de Boulogne + Bois de Vincennes
-const BBOX = { latMin: 48.810, latMax: 48.910, lngMin: 2.215, lngMax: 2.480 }
+// Paris intramuros + petite couronne (92/93/94) — correspond à l'emprise de l'import
+// (grille 48.78→48.96, 2.19→2.51). Élargir cette bbox = montrer plus de bars sans
+// ré-importer : les lieux sont déjà en base, ils étaient juste filtrés ici.
+const BBOX = { latMin: 48.780, latMax: 48.960, lngMin: 2.190, lngMax: 2.520 }
 
 // Colonnes nécessaires pour les pins carte + card peek mobile
 const SLIM = 'id,name,address,lat,lng,type,arrondissement,has_terrace,google_rating,price_level,google_place_id'

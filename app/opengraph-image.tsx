@@ -1,94 +1,108 @@
 import { ImageResponse } from 'next/og'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
-export const runtime = 'edge'
-export const alt = 'HopSoleil — Les terrasses ensoleillées de Paris'
+// Image OG/partage de la page d'accueil : le VRAI logo HopSoleil sur fond crème.
+// S'affiche sur iMessage, WhatsApp, Slack, Facebook, LinkedIn, Twitter/X…
+// (runtime Node par défaut : nécessaire pour lire le PNG du logo via fs.)
+export const alt = 'HopSoleil — Trouve ta terrasse au soleil à Paris'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
-export default function Image() {
+const SOLEIL = '#EDC145'
+const NAVY = '#1F3A5F'
+const CREME = '#FFFDF7'
+
+export default async function Image() {
+  // Logo embarqué en base64 (le plus fiable : aucun fetch réseau au runtime).
+  // Si la lecture échoue, on retombe sur une carte de marque dessinée en CSS.
+  let logoSrc: string | null = null
+  try {
+    const buf = await readFile(join(process.cwd(), 'public', 'logo-hopsoleil.png'))
+    logoSrc = `data:image/png;base64,${buf.toString('base64')}`
+  } catch {
+    logoSrc = null
+  }
+
   return new ImageResponse(
     (
       <div
         style={{
-          background: 'linear-gradient(140deg, #0f2744 0%, #1F3A5F 55%, #0b1f3a 100%)',
           width: '100%',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
+          background: `linear-gradient(160deg, #FFF1C9 0%, ${CREME} 46%, #FFFFFF 100%)`,
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        {/* Glow halo top-right */}
+        {/* Halo solaire haut-droite */}
         <div
           style={{
             position: 'absolute',
-            top: -160,
-            right: -120,
-            width: 560,
-            height: 560,
+            top: -200,
+            right: -160,
+            width: 640,
+            height: 640,
             borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(237,193,69,0.28) 0%, transparent 68%)',
-            display: 'flex',
-          }}
-        />
-        {/* Glow halo bottom-left */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: -100,
-            left: -80,
-            width: 380,
-            height: 380,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(78,163,255,0.16) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(237,193,69,0.45) 0%, transparent 66%)',
             display: 'flex',
           }}
         />
 
-        {/* Sun circle */}
-        <div
-          style={{
-            width: 110,
-            height: 110,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 38% 36%, #ffe066 0%, #EDC145 60%, #f59e0b 100%)',
-            boxShadow: '0 0 0 18px rgba(237,193,69,0.14), 0 0 0 36px rgba(237,193,69,0.07)',
-            marginBottom: 28,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        />
-
-        {/* Brand name */}
-        <div
-          style={{
-            fontSize: 92,
-            fontWeight: 900,
-            color: '#EDC145',
-            letterSpacing: '-3px',
-            lineHeight: 1,
-            marginBottom: 18,
-            display: 'flex',
-          }}
-        >
-          HopSoleil
-        </div>
+        {logoSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoSrc} width={900} height={230} alt="HopSoleil" style={{ objectFit: 'contain' }} />
+        ) : (
+          // Fallback de marque dessiné si le PNG n'est pas lisible
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+            <div
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: '50%',
+                background: `radial-gradient(circle at 38% 36%, #ffe066 0%, ${SOLEIL} 60%, #f59e0b 100%)`,
+                boxShadow: '0 0 0 14px rgba(237,193,69,0.18)',
+                display: 'flex',
+              }}
+            />
+            <div style={{ fontSize: 96, fontWeight: 900, letterSpacing: '-3px', display: 'flex' }}>
+              <span style={{ color: NAVY }}>Hop</span>
+              <span style={{ color: SOLEIL }}>Soleil</span>
+            </div>
+          </div>
+        )}
 
         {/* Tagline */}
         <div
           style={{
-            fontSize: 30,
-            color: 'rgba(255,255,255,0.68)',
-            fontWeight: 500,
-            letterSpacing: '-0.3px',
+            marginTop: 40,
+            fontSize: 40,
+            fontWeight: 700,
+            color: NAVY,
+            letterSpacing: '-0.5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+          }}
+        >
+          ☀ Trouve ta terrasse au soleil à Paris
+        </div>
+
+        {/* Domaine */}
+        <div
+          style={{
+            marginTop: 22,
+            fontSize: 26,
+            fontWeight: 600,
+            color: 'rgba(31,58,95,0.55)',
             display: 'flex',
           }}
         >
-          Les terrasses les plus ensoleillées de Paris ☀
+          hopsoleil.fr
         </div>
       </div>
     ),

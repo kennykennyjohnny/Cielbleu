@@ -9,6 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "import:places": "tsx scripts/importPlaces.ts",
+    "add:place": "tsx scripts/addPlace.ts",
     "buildings:process": "node --max-old-space-size=4096 -r tsx/cjs scripts/processBuildings.ts",
     "scores:compute": "tsx scripts/computeScores.ts"
   },
