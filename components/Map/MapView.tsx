@@ -70,13 +70,19 @@ const LUCIDE_PATHS: Record<string, string[]> = {
 //   • lieux (bar/resto/café/parc) : cercle navy, icône jaune marque
 //   • fontaines : cercle bleu ciel, icône blanche
 //   • sanisettes : cercle vert, icône blanche
+// Suréchantillonnage : on dessine 4× plus gros puis on déclare pixelRatio=4 à
+// Mapbox. La taille logique reste 60 px (icon-size inchangé) mais le bitmap est
+// rendu en 240×240 → net sur écrans retina/HiDPI au lieu d'être flou (upscale).
+const PIN_SCALE = 4
+
 function drawPin(opts: {
   paths: string[]; circle: string; icon: string; radius?: number
 }): { width: number; height: number; data: Uint8Array } {
   const W = 60, H = 60
   const canvas = document.createElement('canvas')
-  canvas.width = W; canvas.height = H
+  canvas.width = W * PIN_SCALE; canvas.height = H * PIN_SCALE
   const ctx = canvas.getContext('2d')!
+  ctx.scale(PIN_SCALE, PIN_SCALE)        // tout le tracé reste en coords logiques 60×60
   const CX = W / 2, CY = H / 2
   const R = opts.radius ?? 17
 
@@ -113,7 +119,11 @@ function drawPin(opts: {
   for (const d of opts.paths) ctx.stroke(new Path2D(d))
   ctx.restore()
 
-  return { width: W, height: H, data: new Uint8Array(ctx.getImageData(0, 0, W, H).data.buffer) }
+  return {
+    width: canvas.width,
+    height: canvas.height,
+    data: new Uint8Array(ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer),
+  }
 }
 
 function drawCategoryPin(type: string): { width: number; height: number; data: Uint8Array } {
@@ -405,16 +415,16 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       // Enregistre une image de pin par catégorie (cercle navy + icône jaune)
       for (const cat of ['bar', 'restaurant', 'cafe', 'park', 'default']) {
         if (!map.hasImage(`pin-${cat}`)) {
-          map.addImage(`pin-${cat}`, drawCategoryPin(cat) as unknown as HTMLImageElement)
+          map.addImage(`pin-${cat}`, drawCategoryPin(cat) as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
         }
       }
       // Pins des commodités (eau / WC) — même langage visuel que les lieux, mais
       // cercle coloré + icône blanche + un peu plus petits (rôle secondaire).
       if (!map.hasImage('pin-fontaine')) {
-        map.addImage('pin-fontaine', drawPin({ paths: LUCIDE_PATHS.fontaine, circle: CIEL, icon: '#ffffff', radius: 16 }) as unknown as HTMLImageElement)
+        map.addImage('pin-fontaine', drawPin({ paths: LUCIDE_PATHS.fontaine, circle: CIEL, icon: '#ffffff', radius: 16 }) as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
       }
       if (!map.hasImage('pin-sanisette')) {
-        map.addImage('pin-sanisette', drawPin({ paths: LUCIDE_PATHS.sanisette, circle: VERT, icon: '#ffffff', radius: 16 }) as unknown as HTMLImageElement)
+        map.addImage('pin-sanisette', drawPin({ paths: LUCIDE_PATHS.sanisette, circle: VERT, icon: '#ffffff', radius: 16 }) as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
       }
 
       // Ombres solaires dès le chargement — utilise l'heure courante via ref
