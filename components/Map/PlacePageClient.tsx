@@ -9,7 +9,9 @@ import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 import { cloudAdjustedScore } from '@/lib/sunScore'
+import { classifyTerrace } from '@/lib/terraceClassify'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
+import TerraceSunMeter from '@/components/Map/TerraceSunMeter'
 import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -182,6 +184,10 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
   const isSunny = currentScore >= 4
 
   const sunWindow = useMemo(() => computeSunWindow(scores), [scores])
+
+  // Statut terrasse (terrace / maybe / none) — pilote le badge « à confirmer »
+  // de la jauge de surface. cf. lib/terraceClassify.
+  const terraceStatus = useMemo(() => classifyTerrace(place), [place])
 
   const photoRefs = useMemo(() => {
     if (!place.photos?.length) return []
@@ -553,6 +559,19 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
             </span>
           </div>
         </div>
+
+        {/* ── JAUGE % DE LA TERRASSE AU SOLEIL (score de surface) ──
+             Emprise réelle (open data terrasses) ou estimée le long de la façade,
+             échantillonnée + testée contre les ombres des bâtiments voisins.
+             Sans objet pour un parc (ciel ouvert) → on n'affiche pas. */}
+        {place.type !== 'park' && (
+          <TerraceSunMeter
+            lat={place.lat}
+            lng={place.lng}
+            hour={hour}
+            unconfirmed={terraceStatus === 'maybe'}
+          />
+        )}
 
         {/* ── AVIS DES VISITEURS ── */}
         {reviews.length > 0 && (

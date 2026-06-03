@@ -24,13 +24,22 @@ async function query(
   limit = 5,
 ): Promise<Record<string, unknown>[]> {
   try {
-    const where = `distance(${geoField}, geogpoint(${lat}, ${lng}), ${distM}m)`
+    // ODSQL v2.1 : la fonction `distance(field, geogpoint(lat,lng), d)` a été
+    // retirée par OPENDATASOFT → on utilise `within_distance` avec un littéral
+    // WKT `geom'POINT(lng lat)'` (ATTENTION : ordre lon puis lat).
+    const where = `within_distance(${geoField}, geom'POINT(${lng} ${lat})', ${distM}m)`
     const url = `${PARIS}/${dataset}/records?where=${encodeURIComponent(where)}&select=${encodeURIComponent(select)}&limit=${limit}`
     const r = await fetch(url, {
       signal: AbortSignal.timeout(5000),
       next: { revalidate: 43200 },
     })
-    if (!r.ok) return []
+    if (!r.ok) {
+      // Log explicite : si OPENDATASOFT change encore sa syntaxe ODSQL, on le
+      // verra dans les logs Vercel au lieu d'un échec silencieux (cf. la panne
+      // `geogpoint` → `within_distance`).
+      console.error(`[place-context] ${dataset} → HTTP ${r.status}`)
+      return []
+    }
     const j = await r.json() as { results?: Record<string, unknown>[] }
     return j.results ?? []
   } catch {
@@ -47,9 +56,10 @@ export async function GET(req: NextRequest) {
   }
 
   const [buildings, terraces, fontaines, sanisettes] = await Promise.allSettled([
-    // Building volumes — geom_x_y est le centroïde du bâtiment
+    // Building volumes — geom_x_y est le centroïde, `geom` la Feature GeoJSON
+    // (le champ `geo_shape` historique a été renommé `geom` par la Ville de Paris).
     query('volumesbatisparis', 'geom_x_y', lat, lng, 100,
-      'nb_pl,l_plan_h,geo_shape,objectid,n_ar,h_et_max', 10),
+      'nb_pl,l_plan_h,geom,objectid,n_ar,h_et_max', 10),
 
     // Terrasses autorisées — geo_point_2d
     query('terrasses-autorisations', 'geo_point_2d', lat, lng, 80,
@@ -69,15 +79,87 @@ export async function GET(req: NextRequest) {
   const buildingList = buildings.status === 'fulfilled' ? buildings.value : []
   const bestBuilding = pickBestBuilding(buildingList, lat, lng)
 
+  // Voisins (polygone + hauteur) pour le calcul du score de surface (ombres).
+  // On renvoie l'anneau extérieur de chaque bâtiment proche + sa hauteur estimée.
+  const neighbors = buildingList
+    .map(toNeighbor)
+    .filter((n): n is { ring: number[][]; height: number } => n !== null)
+
+  // On expose la géométrie sous la forme historique `geo_shape` ({type,coordinates})
+  // pour ne rien casser côté consommateurs (3D, MapView, TerraceSunMeter), et on
+  // retire la Feature `geom` brute (volumineuse) du payload.
+  const building = bestBuilding
+    ? (() => {
+        const { geom: _geom, ...rest } = bestBuilding
+        void _geom
+        return { ...rest, geo_shape: buildingGeometry(bestBuilding) }
+      })()
+    : null
+
   return NextResponse.json(
     {
-      building: bestBuilding,
+      building,
+      neighbors,
       terrace: terraces.status === 'fulfilled' ? (terraces.value[0] ?? null) : null,
       fontaines: fontaines.status === 'fulfilled' ? fontaines.value : [],
       sanisettes: sanisettes.status === 'fulfilled' ? sanisettes.value : [],
     },
     { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
   )
+}
+
+// Extrait la géométrie ({type,coordinates}) d'un enregistrement volumesbatisparis.
+// `geom` est une Feature GeoJSON (nouveau schéma) ; on retombe sur `geo_shape`
+// (ancien schéma) par sécurité.
+function buildingGeometry(
+  b: Record<string, unknown>,
+): { type?: string; coordinates?: unknown } | null {
+  const geom = b.geom as
+    | { type?: string; geometry?: { type?: string; coordinates?: unknown }; coordinates?: unknown }
+    | null
+    | undefined
+  if (geom) {
+    if (geom.type === 'Feature' && geom.geometry) return geom.geometry
+    if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+      return geom as { type: string; coordinates: unknown }
+    }
+  }
+  return (b.geo_shape as { type?: string; coordinates?: unknown } | null) ?? null
+}
+
+// Convertit un enregistrement volumesbatisparis en { ring, height } exploitable.
+function toNeighbor(b: Record<string, unknown>): { ring: number[][]; height: number } | null {
+  const shape = buildingGeometry(b)
+  if (!shape) return null
+  const poly = normalizeToPolygon(shape)
+  const ring = poly?.coordinates?.[0] as number[][] | undefined
+  if (!ring || ring.length < 3) return null
+  const height = buildingHeight(b)
+  if (height < 2) return null
+  return { ring, height }
+}
+
+// Hauteur (m). ⚠️ Sémantique des champs volumesbatisparis (vérifiée sur l'API,
+// ne PAS confondre avec des mètres) :
+//   • nb_pl    = nombre TOTAL de planchers, RDC inclus   (R+5 → 6, R → 1)
+//   • h_et_max = nombre d'étages AU-DESSUS du RDC        (R+5 → 5, R → 0)
+//   • l_plan_h = libellé « R+N »
+// On convertit en mètres : ~3,1 m par niveau. (L'ancien code renvoyait h_et_max
+// tel quel → tous les immeubles haussmanniens « R+5 » lus à 5 m, ombres nulles,
+// terrasses faussement à 100 % de soleil. Corrigé.)
+function buildingHeight(b: Record<string, unknown>): number {
+  const FLOOR_M = 3.1
+  const nbPl = b.nb_pl
+  if (typeof nbPl === 'number' && nbPl > 0) return nbPl * FLOOR_M + 3
+  const hEt = b.h_et_max
+  if (typeof hEt === 'number' && hEt >= 0) return (hEt + 1) * FLOOR_M + 3
+  const planH = b.l_plan_h
+  if (typeof planH === 'string') {
+    const m = planH.match(/R\s*\+\s*(\d+)/i)
+    if (m) return (parseInt(m[1], 10) + 1) * FLOOR_M + 3
+    if (/^\s*R\s*$/i.test(planH)) return 6
+  }
+  return 18
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -91,7 +173,7 @@ function pickBestBuilding(
 
   // Préférer le bâtiment dont le poly contient le point
   for (const b of list) {
-    const shape = b.geo_shape as { type?: string; coordinates?: unknown } | null
+    const shape = buildingGeometry(b)
     if (!shape) continue
     const poly = normalizeToPolygon(shape)
     if (poly && pointInPolygon(lng, lat, poly.coordinates[0] as number[][])) {

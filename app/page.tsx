@@ -16,6 +16,7 @@ import { owmIconToEmoji } from '@/lib/weather'
 import { isOpenAt } from '@/lib/openingHours'
 import { hourToSlot, formatHourLabelPad } from '@/lib/hourSlot'
 import { textMatchScore } from '@/lib/searchUtils'
+import { isHiddenPlace } from '@/lib/terraceClassify'
 import { geocodeParis, type GeoResult } from '@/lib/geocode'
 import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
 
@@ -354,9 +355,10 @@ export default function HomePage() {
   }, [])
 
   const displayedPlaces = useMemo(() => {
-    // Exclure les commerces non-terrasse
-    const EXCLUDE_RE = /franprix|monoprix|carrefour|naturalia|biocoop|lidl|aldi|picard|tabac-presse|pharmacie|pressing|coiffure|coiffeur|kebab|mcdonald|burger.?king|\bkfc\b|\bsubway\b|domino|sushi|\bquick\b/i
-    let result = places.filter(p => !EXCLUDE_RE.test(p.name))
+    // Garder large : on n'exclut QUE les lieux clairement « non-terrasse »
+    // (chaînes, commerces non-conso). Les bars/cafés/restos sans signal restent
+    // affichés (badge « à confirmer » géré dans le panel). cf. lib/terraceClassify.
+    let result = places.filter(p => !isHiddenPlace(p))
 
     // Pondération météo temps réel : sous un ciel chargé, on dégrade les scores
     // affichés (pins, compteur ☀, filtre soleil) pour coller au ressenti réel.

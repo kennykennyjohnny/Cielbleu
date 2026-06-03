@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { createClient } from '@supabase/supabase-js'
+import { isHiddenPlace } from '@/lib/terraceClassify'
 
 // Sitemap : l'accueil + une page indexable par terrasse (/place/[id]).
 // Régénéré 1×/jour (revalidate) — pas à chaque requête : on évite de marteler
@@ -9,13 +10,11 @@ export const revalidate = 86400 // 24 h
 
 const SITE = 'https://hopsoleil.fr'
 
-// Garde en phase (approximative) avec le filtre d'affichage de app/page.tsx :
-// on n'indexe pas les chaînes / commerces sans vraie terrasse → pages pauvres.
-const NON_TERRACE_RE = /franprix|monoprix|carrefour|naturalia|biocoop|lidl|aldi|picard|tabac-presse|pharmacie|pressing|coiffure|coiffeur|kebab|mcdonald|burger.?king|\bkfc\b|\bsubway\b|domino|sushi|\bquick\b/i
-
 interface PlaceRow {
   id: string
   name: string
+  type: string | null
+  has_terrace: boolean | null
   created_at: string | null
 }
 
@@ -36,7 +35,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (let from = 0; from < MAX; from += PAGE) {
       const { data, error } = await sb
         .from('places')
-        .select('id, name, created_at')
+        .select('id, name, type, has_terrace, created_at')
         .order('created_at', { ascending: false })
         .range(from, from + PAGE - 1)
       if (error || !data?.length) break
@@ -45,7 +44,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
 
     const placeUrls: MetadataRoute.Sitemap = rows
-      .filter((p) => p.name && !NON_TERRACE_RE.test(p.name))
+      .filter((p) => p.name && !isHiddenPlace(p))
       .map((p) => ({
         url: `${SITE}/place/${p.id}`,
         lastModified: p.created_at ? new Date(p.created_at) : undefined,
