@@ -18,9 +18,30 @@ interface PlaceRow {
   created_at: string | null
 }
 
+// Landing pages SEO — prioritaires pour Google (high signal).
+const SEO_LANDINGS: MetadataRoute.Sitemap = (() => {
+  const today = new Date()
+  const arrs = Array.from({ length: 20 }, (_, i) => i + 1)
+  const ord = (n: number) => (n === 1 ? 'er' : 'e')
+  return [
+    { url: `${SITE}/terrasses-ensoleillees-paris`, lastModified: today, changeFrequency: 'daily', priority: 0.95 },
+    { url: `${SITE}/bar-terrasse-paris`,           lastModified: today, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${SITE}/cafe-terrasse-paris`,          lastModified: today, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${SITE}/restaurant-terrasse-paris`,    lastModified: today, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${SITE}/rooftop-paris`,                lastModified: today, changeFrequency: 'daily', priority: 0.9 },
+    ...arrs.map((n) => ({
+      url: `${SITE}/terrasses-ensoleillees-paris/${n}${ord(n)}-arrondissement`,
+      lastModified: today,
+      changeFrequency: 'daily' as const,
+      priority: 0.85,
+    })),
+  ]
+})()
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base: MetadataRoute.Sitemap = [
     { url: SITE, lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
+    ...SEO_LANDINGS,
   ]
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL

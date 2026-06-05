@@ -588,6 +588,52 @@ export default function HomePage() {
 
   return (
     <main className="relative h-dvh w-full overflow-hidden">
+      {/* ─── Contenu SEO indexable (invisible — accessibilité + Google) ───
+         h1 + texte sémantique riche pour les moteurs. Aucun impact visuel
+         (sr-only) ni accessibilité (lu par lecteurs d'écran). */}
+      <div className="sr-only">
+        <h1>Terrasses ensoleillées à Paris — carte en temps réel</h1>
+        <p>
+          HopSoleil est le radar des terrasses au soleil à Paris. Plus de
+          19 000 bars, cafés, restaurants et parcs parisiens classés en direct
+          selon leur ensoleillement, l’ombre projetée par les bâtiments voisins
+          et la météo en temps réel. Trouvez la meilleure terrasse au soleil
+          près de chez vous, dans le Marais, à Bastille, sur le canal
+          Saint-Martin, à Oberkampf, Montmartre, Pigalle, Belleville,
+          Saint-Germain, aux Batignolles ou ailleurs dans Paris.
+        </p>
+        <h2>Comment ça marche</h2>
+        <p>
+          Le score soleil va de 1 (à l’ombre) à 5 (plein soleil) et se met à
+          jour toutes les 30 minutes. Il combine la position réelle du soleil
+          (SunCalc), les hauteurs de bâtiments OpenStreetMap (ombres projetées
+          en 3D) et la couverture nuageuse en direct sur Paris. Vous pouvez
+          aussi visualiser la fenêtre d’ensoleillement de chaque terrasse
+          heure par heure.
+        </p>
+        <h2>Catégories couvertes</h2>
+        <ul>
+          <li>Bars avec terrasse au soleil à Paris</li>
+          <li>Cafés avec terrasse ensoleillée à Paris</li>
+          <li>Restaurants avec terrasse au soleil à Paris</li>
+          <li>Rooftops et bars en hauteur à Paris</li>
+          <li>Parcs et jardins ensoleillés à Paris</li>
+        </ul>
+        <h2>Arrondissements</h2>
+        <p>
+          Couverture des 20 arrondissements de Paris : 1er (Châtelet, Louvre),
+          2e (Sentier), 3e (Haut Marais, Temple), 4e (Marais, Saint-Paul,
+          Île Saint-Louis), 5e (Quartier latin), 6e (Saint-Germain,
+          Luxembourg), 7e (Invalides, Tour Eiffel), 8e (Champs-Élysées,
+          Madeleine), 9e (Opéra, Pigalle), 10e (Canal Saint-Martin,
+          République), 11e (Bastille, Oberkampf, Charonne), 12e (Bercy,
+          Nation), 13e (Gobelins, Butte-aux-Cailles), 14e (Denfert,
+          Montparnasse), 15e (Grenelle), 16e (Trocadéro, Passy, Auteuil),
+          17e (Batignolles), 18e (Montmartre, Pigalle, Sacré-Cœur), 19e
+          (Buttes-Chaumont, Belleville), 20e (Ménilmontant, Père-Lachaise).
+        </p>
+      </div>
+
       {/* Carte plein écran */}
       <div className="absolute left-0 right-0 bottom-0" style={{ top: isDesktop ? headerH : 0 }} role="application" aria-label="Carte des terrasses ensoleillées à Paris">
         <MapView
