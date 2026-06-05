@@ -129,11 +129,23 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const typeLabel = TYPE_LABEL[place.type] ?? place.type
   const arr = place.arrondissement
   const where = arr != null ? `${arr}${arr === 1 ? 'er' : 'e'} arrondissement` : 'Paris'
-  const title = `${place.name} — Terrasse ensoleillée à Paris | HopSoleil`
-  const description = `${typeLabel} · ${where}. Vois l’ensoleillement de ${place.name} heure par heure et trouve le meilleur moment au soleil sur HopSoleil.`
+  const title = arr != null
+    ? `${place.name} — Terrasse au soleil à Paris ${arr}${arr === 1 ? 'er' : 'e'} ☀️`
+    : `${place.name} — Terrasse au soleil à Paris ☀️`
+  const description = `${typeLabel} avec terrasse au soleil à Paris (${where}). Score d’ensoleillement en temps réel pour ${place.name} : voir la fenêtre soleil heure par heure, anticiper les ombres, choisir le meilleur moment pour s’installer en terrasse.`
+  const keywords = [
+    place.name,
+    `${place.name} terrasse`,
+    `${place.name} paris`,
+    `${typeLabel.toLowerCase()} ${where}`,
+    `terrasse ${where}`,
+    `${typeLabel.toLowerCase()} terrasse soleil paris`,
+    'terrasse ensoleillée paris',
+    'HopSoleil',
+  ]
 
   return {
-    title, description,
+    title, description, keywords,
     alternates: { canonical: url },
     openGraph: { title, description, url, siteName: 'HopSoleil', locale: 'fr_FR', type: 'website' },
     twitter: { card: 'summary_large_image', title, description },
@@ -189,14 +201,37 @@ export default async function PlacePage({ params }: PageProps) {
       geo: { '@type': 'GeoCoordinates', latitude: place.lat, longitude: place.lng },
     } : {}),
     ...(place.google_rating != null ? {
-      aggregateRating: { '@type': 'AggregateRating', ratingValue: place.google_rating, bestRating: 5, worstRating: 1 },
+      aggregateRating: { '@type': 'AggregateRating', ratingValue: place.google_rating, bestRating: 5, worstRating: 1, ratingCount: 1 },
     } : {}),
     ...(place.price_level ? { priceRange: '€'.repeat(place.price_level) } : {}),
+  }
+
+  // Fil d'Ariane → enrichissement SERP
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Accueil', item: SITE },
+      { '@type': 'ListItem', position: 2, name: 'Terrasses ensoleillées Paris', item: `${SITE}/terrasses-ensoleillees-paris` },
+      ...(place.arrondissement != null ? [{
+        '@type': 'ListItem' as const,
+        position: 3,
+        name: `${place.arrondissement}${ordinal} arrondissement`,
+        item: `${SITE}/terrasses-ensoleillees-paris/${place.arrondissement}${ordinal}-arrondissement`,
+      }] : []),
+      {
+        '@type': 'ListItem',
+        position: place.arrondissement != null ? 4 : 3,
+        name: place.name,
+        item: `${SITE}/place/${id}`,
+      },
+    ],
   }
 
   return (
     <main style={{ ...PAGE_WRAP, justifyContent: 'flex-start' }}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
 
       <BrandHeader />
 
@@ -274,6 +309,57 @@ export default async function PlacePage({ params }: PageProps) {
           )}
         </div>
       </article>
+
+      {/* Maillage interne — liens vers landings SEO */}
+      <nav
+        aria-label="Explorer plus de terrasses"
+        style={{ width: '100%', maxWidth: 560, marginTop: 18 }}
+      >
+        <h2 style={{ fontSize: 14, fontWeight: 800, color: 'rgba(31,58,95,0.65)', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Explorer plus de terrasses au soleil
+        </h2>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {place.arrondissement != null && (
+            <li>
+              <Link
+                href={`/terrasses-ensoleillees-paris/${place.arrondissement}${ordinal}-arrondissement`}
+                style={{ display: 'inline-block', padding: '7px 12px', borderRadius: 999, background: 'rgba(31,58,95,0.06)', color: NAVY, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}
+              >
+                Terrasses {place.arrondissement}{ordinal} arrondissement
+              </Link>
+            </li>
+          )}
+          <li>
+            <Link
+              href="/terrasses-ensoleillees-paris"
+              style={{ display: 'inline-block', padding: '7px 12px', borderRadius: 999, background: 'rgba(31,58,95,0.06)', color: NAVY, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}
+            >
+              Toutes les terrasses ensoleillées Paris
+            </Link>
+          </li>
+          {place.type === 'bar' && (
+            <li>
+              <Link href="/bar-terrasse-paris" style={{ display: 'inline-block', padding: '7px 12px', borderRadius: 999, background: 'rgba(31,58,95,0.06)', color: NAVY, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                🍻 Bars terrasse soleil
+              </Link>
+            </li>
+          )}
+          {place.type === 'cafe' && (
+            <li>
+              <Link href="/cafe-terrasse-paris" style={{ display: 'inline-block', padding: '7px 12px', borderRadius: 999, background: 'rgba(31,58,95,0.06)', color: NAVY, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                ☕ Cafés terrasse soleil
+              </Link>
+            </li>
+          )}
+          {place.type === 'restaurant' && (
+            <li>
+              <Link href="/restaurant-terrasse-paris" style={{ display: 'inline-block', padding: '7px 12px', borderRadius: 999, background: 'rgba(31,58,95,0.06)', color: NAVY, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                🍽 Restaurants terrasse soleil
+              </Link>
+            </li>
+          )}
+        </ul>
+      </nav>
 
       <p style={{ marginTop: 22, fontSize: 13, color: 'rgba(31,58,95,0.5)' }}>
         <Link href="/" style={{ color: NAVY, fontWeight: 700, textDecoration: 'none' }}>HopSoleil</Link>
