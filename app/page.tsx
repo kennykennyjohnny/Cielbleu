@@ -19,6 +19,7 @@ import { textMatchScore } from '@/lib/searchUtils'
 import { isHiddenPlace } from '@/lib/terraceClassify'
 import { geocodeParis, type GeoResult } from '@/lib/geocode'
 import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
+import PwaInstallPrompt from '@/components/PwaInstallPrompt'
 
 function nowQuarter(): number {
   const now = new Date()
@@ -61,7 +62,7 @@ const DAY_MONTH_LABEL = (() => {
 
 export default function HomePage() {
   const [places, setPlaces] = useState<Place[]>([])
-  const [activeFilters, setActiveFilters] = useState<FilterType[]>([])
+  const [activeFilters, setActiveFilters] = useState<FilterType[]>(['terrace'])
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   // ── Recherche d'adresses / rues (géocodage Mapbox) ─────────────────────
@@ -188,7 +189,12 @@ export default function HomePage() {
   // focusPlace mémoisé pour éviter de re-déclencher le flyTo de la carte
   // à chaque rendu (ex. quand l'heure change dans le slider)
   const mapFocusPlace = useMemo(
-    () => selectedPlace ? { lng: selectedPlace.lng, lat: selectedPlace.lat } : null,
+    () => selectedPlace ? {
+      lng: selectedPlace.lng,
+      lat: selectedPlace.lat,
+      terraceLat: selectedPlace.terrace_lat ?? null,
+      terraceLng: selectedPlace.terrace_lng ?? null,
+    } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedPlace?.id],
   )
@@ -378,6 +384,7 @@ export default function HomePage() {
       activeFilters.every(f => f === 'fontaine' || f === 'sanisette')
     if (ameniteOnly) return []
 
+    if (activeFilters.includes('terrace')) result = result.filter((p) => p.has_terrace === true)
     if (typeFilters.length > 0) result = result.filter((p) => typeFilters.includes(p.type))
     if (activeFilters.includes('sun')) result = result.filter((p) => (p.currentScore ?? 0) >= 4)
     if (activeFilters.includes('open')) {
@@ -1403,6 +1410,7 @@ export default function HomePage() {
       )}
 
 
+      <PwaInstallPrompt />
     </main>
   )
 }

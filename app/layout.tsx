@@ -51,6 +51,7 @@ export const metadata: Metadata = {
     canonical: 'https://hopsoleil.fr',
     languages: { 'fr-FR': 'https://hopsoleil.fr' },
   },
+  manifest: '/manifest.json',
   icons: {
     icon: [
       { url: '/favicon-vdef.png', type: 'image/png', sizes: '192x192' },

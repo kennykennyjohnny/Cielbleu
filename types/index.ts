@@ -1,5 +1,5 @@
 export type PlaceType = 'bar' | 'restaurant' | 'cafe' | 'park'
-export type FilterType = 'sun' | 'open' | 'bar' | 'restaurant' | 'cafe' | 'park' | 'fontaine' | 'sanisette'
+export type FilterType = 'terrace' | 'sun' | 'open' | 'bar' | 'restaurant' | 'cafe' | 'park' | 'fontaine' | 'sanisette'
 
 export interface AmeniteInfo {
   type: 'fontaine' | 'sanisette'
@@ -35,6 +35,11 @@ export interface Place {
   opening_hours?: Record<string, unknown>
   arrondissement?: number
   created_at: string
+  // Coordonnées de la terrasse autorisée (open data Paris)
+  terrace_lat?: number | null
+  terrace_lng?: number | null
+  terrace_longueur?: number | null
+  terrace_largeur?: number | null
   // Champs calculés côté client
   currentScore?: number
   distance?: number

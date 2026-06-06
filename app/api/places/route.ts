@@ -28,12 +28,14 @@ export const dynamic = 'force-dynamic'
 const BBOX = { latMin: 48.780, latMax: 48.960, lngMin: 2.190, lngMax: 2.520 }
 
 // Colonnes nécessaires pour les pins carte + card peek mobile
-const SLIM = 'id,name,address,lat,lng,type,arrondissement,has_terrace,google_rating,price_level,google_place_id'
+const SLIM = 'id,name,address,lat,lng,type,arrondissement,has_terrace,terrace_lat,terrace_lng,terrace_longueur,terrace_largeur,google_rating,price_level,google_place_id'
 
 interface PlaceSlim {
   id: string; name: string; address: string
   lat: number; lng: number; type: string
   arrondissement: number | null; has_terrace: boolean | null
+  terrace_lat: number | null; terrace_lng: number | null
+  terrace_longueur: number | null; terrace_largeur: number | null
   google_rating: number | null; price_level: number | null
   google_place_id: string | null
 }
