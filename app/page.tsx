@@ -19,6 +19,7 @@ import { textMatchScore } from '@/lib/searchUtils'
 import { isHiddenPlace } from '@/lib/terraceClassify'
 import { geocodeParis, type GeoResult } from '@/lib/geocode'
 import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
+import PwaInstallPrompt from '@/components/PwaInstallPrompt'
 
 function nowQuarter(): number {
   const now = new Date()
@@ -188,7 +189,12 @@ export default function HomePage() {
   // focusPlace mémoisé pour éviter de re-déclencher le flyTo de la carte
   // à chaque rendu (ex. quand l'heure change dans le slider)
   const mapFocusPlace = useMemo(
-    () => selectedPlace ? { lng: selectedPlace.lng, lat: selectedPlace.lat } : null,
+    () => selectedPlace ? {
+      lng: selectedPlace.lng,
+      lat: selectedPlace.lat,
+      terraceLat: selectedPlace.terrace_lat ?? null,
+      terraceLng: selectedPlace.terrace_lng ?? null,
+    } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedPlace?.id],
   )
@@ -1404,6 +1410,7 @@ export default function HomePage() {
       )}
 
 
+      <PwaInstallPrompt />
     </main>
   )
 }

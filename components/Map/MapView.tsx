@@ -389,7 +389,9 @@ interface Props {
   cinematicFocus?: { lng: number; lat: number } | null
   // Zoom doux sur un lieu sélectionné (page d'accueil). Quand null → retour
   // à la caméra précédente. Ne recrée PAS la carte, économise les tiles.
-  focusPlace?: { lng: number; lat: number } | null
+  // terraceLat/Lng optionnels : si dispo, la caméra se centre sur la terrasse
+  // plutôt que sur l'entrée du bar → terrasse bien visible, moins masquée.
+  focusPlace?: { lng: number; lat: number; terraceLat?: number | null; terraceLng?: number | null } | null
   // Heure solaire (0..24) — pilote `lightPreset` de Mapbox Standard pour
   // changer dawn/day/dusk/night en direct avec le slider. Passer un nombre
   // évite les problèmes de référence d'objet Date dans les deps useEffect.
@@ -786,6 +788,30 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       if (!hits.length) { onSelectRef.current(null); onAmeniteRef.current?.(null) }
     })
 
+    // ── Auto-3D : bascule en vue pitchée quand l'utilisateur zoome ──────────
+    // Seuils : zoom ≥ 16 → pitch 48° (vue oblique, bâtiments visibles)
+    //          zoom <  14 → retour pitch 0° (vue aérienne, lisibilité globale)
+    // On ne s'applique pas si l'utilisateur pilote lui-même le pitch (geste
+    // trackpad 2D / pinch) ni pendant les transitions flyTo/focusPlace.
+    let autoPitch = false // true = la caméra est en mode auto-3D
+    let flyingTo  = false // true = transition programmatique en cours
+    map.on('movestart', (e) => {
+      // Les transitions flyTo/easeTo portent un originalEvent null
+      if (!e.originalEvent) flyingTo = true
+    })
+    map.on('moveend', () => { flyingTo = false })
+    map.on('zoomend', () => {
+      if (flyingTo) return // ne pas interférer avec focusPlace / homeView
+      const z = map.getZoom()
+      if (z >= 16 && !autoPitch) {
+        autoPitch = true
+        map.easeTo({ pitch: 48, duration: 800 })
+      } else if (z < 14 && autoPitch) {
+        autoPitch = false
+        map.easeTo({ pitch: 0, duration: 600 })
+      }
+    })
+
     mapRef.current = map
     // DEBUG : expose la carte pour inspection console
     ;(window as unknown as { _cbMap?: mapboxgl.Map })._cbMap = map
@@ -912,16 +938,31 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         bearing: map.getBearing(),
       }
       const isMobile = window.matchMedia('(max-width: 899px)').matches
+
+      // Centre sur la terrasse si dispo (quelques mètres devant le bar),
+      // sinon sur le pin Google Places.
+      const centerLng = focusPlace.terraceLng ?? focusPlace.lng
+      const centerLat = focusPlace.terraceLat ?? focusPlace.lat
+
+      // Bearing : pointer la caméra depuis la rue vers le bar (direction inverse terrasse→bar)
+      let autoBearing = 0
+      if (focusPlace.terraceLat && focusPlace.terraceLng) {
+        const cosLat = Math.cos(focusPlace.lat * Math.PI / 180)
+        const dx = (focusPlace.lng - focusPlace.terraceLng) * cosLat
+        const dy = focusPlace.lat - focusPlace.terraceLat
+        autoBearing = ((Math.atan2(dx, dy) * 180 / Math.PI) + 360) % 360
+      }
+
       map.flyTo({
-        center:  [focusPlace.lng, focusPlace.lat],
-        zoom:    17.7,           // assez proche pour lire les ombres + le 3D des bâtiments
-        pitch:   50,             // vue plongeante : on voit les façades et l'ombre portée
-        bearing: 0,
-        duration: 1400,
-        curve:   1.4,
+        center:   [centerLng, centerLat],
+        zoom:     19.2,          // très près : la terrasse remplit le viewport
+        pitch:    62,            // plongeant : les bâtiments voisins ne masquent pas
+        bearing:  autoBearing,  // face à la façade
+        duration: 1600,
+        curve:    1.4,
         essential: true,
         padding: {
-          top: 20,
+          top:    20,
           bottom: isMobile ? Math.round(window.innerHeight * 0.52) : 20,
           left:   20,
           right:  isMobile ? 20 : 430,
