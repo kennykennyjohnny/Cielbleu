@@ -1,10 +1,11 @@
 'use client'
 
 import type { FilterType } from '@/types'
-import { Sun, Beer, UtensilsCrossed, Trees, Droplet, Toilet, type LucideIcon } from 'lucide-react'
+import { Sun, Beer, UtensilsCrossed, Trees, Droplet, Toilet, Armchair, type LucideIcon } from 'lucide-react'
 
 // Café et Ouvert retirés (trop instables)
 const FILTERS: { id: FilterType; label: string; icon: LucideIcon }[] = [
+  { id: 'terrace',    label: 'Terrasse',  icon: Armchair },
   { id: 'sun',        label: 'Au soleil', icon: Sun },
   { id: 'bar',        label: 'Bars',      icon: Beer },
   { id: 'restaurant', label: 'Restos',    icon: UtensilsCrossed },
@@ -14,6 +15,12 @@ const FILTERS: { id: FilterType; label: string; icon: LucideIcon }[] = [
 ]
 
 function activeStyle(id: FilterType): React.CSSProperties {
+  if (id === 'terrace') return {
+    background: 'rgba(255,190,11,0.18)',
+    color: '#1F3A5F',
+    border: '1.5px solid rgba(255,190,11,0.70)',
+    boxShadow: '0 3px 12px rgba(255,190,11,0.22)',
+  }
   if (id === 'sun') return {
     background: 'rgba(237,193,69,0.22)',
     color: '#1F3A5F',

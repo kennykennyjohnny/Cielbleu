@@ -171,7 +171,7 @@ async function main() {
   console.log('📍 Récupération des places depuis Supabase…')
   let placesQuery = supabase
     .from('places')
-    .select('id, name, lat, lng')
+    .select('id, name, lat, lng, terrace_lat, terrace_lng')
     .not('lat', 'is', null)
     .not('lng', 'is', null)
   if (argId)   placesQuery = placesQuery.eq('id', argId)
@@ -195,10 +195,14 @@ async function main() {
     const p = places[i]
     const t1 = Date.now()
 
-    const candidates = nearbyBuildings(index, p.lat, p.lng)
-    const nearby = filterByRadius(candidates, p.lat, p.lng, SHADOW_LOOKUP_RADIUS_M)
+    // Utilise les coords de la terrasse si dispo — plus précis que le centroïde Google
+    const scoreLat = (p as { terrace_lat?: number | null }).terrace_lat ?? p.lat
+    const scoreLng = (p as { terrace_lng?: number | null }).terrace_lng ?? p.lng
 
-    const monthly = precomputeForPlace(p.lat, p.lng, nearby)
+    const candidates = nearbyBuildings(index, scoreLat, scoreLng)
+    const nearby = filterByRadius(candidates, scoreLat, scoreLng, SHADOW_LOOKUP_RADIUS_M)
+
+    const monthly = precomputeForPlace(scoreLat, scoreLng, nearby)
     const rows = monthly.map((r) => ({
       place_id: p.id,
       month: r.month,

@@ -61,7 +61,7 @@ const DAY_MONTH_LABEL = (() => {
 
 export default function HomePage() {
   const [places, setPlaces] = useState<Place[]>([])
-  const [activeFilters, setActiveFilters] = useState<FilterType[]>([])
+  const [activeFilters, setActiveFilters] = useState<FilterType[]>(['terrace'])
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   // ── Recherche d'adresses / rues (géocodage Mapbox) ─────────────────────
@@ -378,6 +378,7 @@ export default function HomePage() {
       activeFilters.every(f => f === 'fontaine' || f === 'sanisette')
     if (ameniteOnly) return []
 
+    if (activeFilters.includes('terrace')) result = result.filter((p) => p.has_terrace === true)
     if (typeFilters.length > 0) result = result.filter((p) => typeFilters.includes(p.type))
     if (activeFilters.includes('sun')) result = result.filter((p) => (p.currentScore ?? 0) >= 4)
     if (activeFilters.includes('open')) {
