@@ -432,36 +432,23 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     })),
   }), [places])
 
-  // GeoJSON des emprises terrasse (polygones rectangulaires sur le trottoir)
-  const terraceGeojson = useMemo((): GeoJSON.FeatureCollection => ({
-    type: 'FeatureCollection',
-    features: places
-      .filter(p => p.terrace_lat != null && p.terrace_lng != null)
-      .map(p => {
-        const ring = buildTerraceRect(
-          p.lat, p.lng,
-          p.terrace_lat!, p.terrace_lng!,
-          p.terrace_longueur ?? 7,
-          p.terrace_largeur  ?? 3,
-        )
-        return {
-          type: 'Feature' as const,
-          geometry: { type: 'Polygon' as const, coordinates: [ring] },
-          properties: { id: p.id, name: p.name },
-        }
-      }),
-  }), [places])
-
-  // GeoJSON des centres de terrasse — pour les dots au dézoom (zoom < 15)
+  // GeoJSON des emprises terrasse — points uniquement (cercles Mapbox).
+  // Plus de polygones rectangulaires : illisibles, orientation bancale.
+  // Chaque terrasse = un cercle centré sur le point open data (trottoir),
+  // rayon proportionnel à sqrt(longueur × largeur) pour refléter la taille réelle.
   const terraceDotsGeojson = useMemo((): GeoJSON.FeatureCollection => ({
     type: 'FeatureCollection',
     features: places
       .filter(p => p.terrace_lat != null && p.terrace_lng != null)
-      .map(p => ({
-        type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: [p.terrace_lng!, p.terrace_lat!] },
-        properties: { id: p.id },
-      })),
+      .map(p => {
+        const area   = (p.terrace_longueur ?? 6) * (p.terrace_largeur ?? 3)
+        const radius = Math.max(3, Math.min(10, Math.sqrt(area)))
+        return {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [p.terrace_lng!, p.terrace_lat!] },
+          properties: { id: p.id, name: p.name, r: radius },
+        }
+      }),
   }), [places])
 
   // Refs accessibles depuis la closure de l'init effect (deps=[]) :
@@ -469,8 +456,6 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   // - sunHourRef : permet d'appliquer les ombres dès style.load sans attendre le slider
   const geojsonRef  = useRef(geojson)
   geojsonRef.current = geojson
-  const terraceGeojsonRef = useRef(terraceGeojson)
-  terraceGeojsonRef.current = terraceGeojson
   const terraceDotsGeojsonRef = useRef(terraceDotsGeojson)
   terraceDotsGeojsonRef.current = terraceDotsGeojson
   const sunHourRef  = useRef(sunHour)
@@ -596,62 +581,40 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         },
       })
 
-      // ── Emprises terrasse ───────────────────────────────────────────────────
-      //
-      // Deux représentations selon le zoom :
-      //   zoom 13-15 : point coloré (circle layer) centré sur la terrasse
-      //   zoom 15+   : emprise rectangulaire (fill-extrusion 0.4 m de haut)
-      //                Le fill-extrusion est rendu AU-DESSUS du sol Mapbox,
-      //                donc visible même par-dessus les bâtiments en vue pitchée.
-      //
-      map.addSource('terraces', {
-        type: 'geojson',
-        data: terraceGeojsonRef.current,
-      })
+      // ── Terrasses — cercles propres à toutes les échelles ──────────────────
+      // Un seul layer circle, slot 'top' pour passer au-dessus des bâtiments 3D.
+      // Rayon proportionnel à la taille réelle de la terrasse (propriété `r`).
+      // Couleur : ambre chaud (#FFBE0B fill, contour blanc) — lisible sans agresser.
       map.addSource('terraces-pts', {
         type: 'geojson',
         data: terraceDotsGeojsonRef.current,
       })
 
-      // slot 'top' du style Mapbox Standard → rendu au-dessus des bâtiments 3D et des labels
       const slotTop = { slot: 'top' } as object
 
-      // Dots (dézoom) — orange brûlé pour contraster sur la carte claire
       map.addLayer({
         id: 'terraces-dots', type: 'circle', source: 'terraces-pts',
         ...slotTop,
         minzoom: 13,
-        maxzoom: 15,
         paint: {
-          'circle-color':        '#FF8C00',
-          'circle-radius':       ['interpolate', ['linear'], ['zoom'], 13, 3, 15, 6],
-          'circle-opacity':      0.85,
+          // Rayon pixel proportionnel à la taille réelle de la terrasse.
+          // r = sqrt(longueur × largeur), entre 3 (petite) et 10 (grande).
+          // Facteurs calés pour Paris lat 48.9° :
+          //   zoom 13 : ~2-4 px (point discret)
+          //   zoom 15 : ~4-8 px (dot lisible)
+          //   zoom 17 : ~8-20 px (zone clairement visible)
+          //   zoom 19 : ~20-55 px (remplit l'espace terrasse réel)
+          'circle-radius': ['interpolate', ['linear'], ['zoom'],
+            13, ['*', ['get', 'r'], 0.3],
+            15, ['*', ['get', 'r'], 0.8],
+            17, ['*', ['get', 'r'], 2.2],
+            19, ['*', ['get', 'r'], 6.0],
+          ],
+          'circle-color':        '#FFBE0B',
+          'circle-opacity':      ['interpolate', ['linear'], ['zoom'], 13, 0.70, 17, 0.80],
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1.5,
-        },
-      } as Parameters<typeof map.addLayer>[0])
-
-      // Emprises (zoom proche) — fill + contour, slot:'top' pour passer AU-DESSUS
-      // des bâtiments 3D du style Mapbox Standard (sinon le fill passe dessous).
-      // slot 'top' = rendu après les labels → au-dessus de tout dans la scène.
-      map.addLayer({
-        id: 'terraces-fill', type: 'fill', source: 'terraces',
-        ...slotTop,
-        minzoom: 15,
-        paint: {
-          'fill-color':   '#FFBE0B',
-          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.60, 18, 0.80],
-          'fill-outline-color': '#E07A00',
-        },
-      } as Parameters<typeof map.addLayer>[0])
-      map.addLayer({
-        id: 'terraces-outline', type: 'line', source: 'terraces',
-        ...slotTop,
-        minzoom: 15,
-        paint: {
-          'line-color':   '#E07A00',
-          'line-width':   ['interpolate', ['linear'], ['zoom'], 15, 2, 18, 3.5],
-          'line-opacity': 1,
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 13, 1, 17, 2.5],
+          'circle-stroke-opacity': 0.95,
         },
       } as Parameters<typeof map.addLayer>[0])
 
@@ -728,8 +691,8 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (place) onSelectRef.current(place)
       })
 
-      // Click emprise terrasse → ouvrir le lieu correspondant
-      for (const lyr of ['terraces-fill', 'terraces-dots']) {
+      // Click cercle terrasse → ouvrir le lieu correspondant
+      for (const lyr of ['terraces-dots']) {
         map.on('click', lyr, (e) => {
           e.originalEvent.stopPropagation()
           const id = e.features?.[0]?.properties?.id as string | undefined
@@ -783,31 +746,24 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     // Clic fond → déselection
     map.on('click', (e) => {
       const hits = map.queryRenderedFeatures(e.point, {
-        layers: ['places-pins', 'clusters', 'fontaines-layer', 'sanisettes-layer', 'terraces-fill', 'terraces-dots'],
+        layers: ['places-pins', 'clusters', 'fontaines-layer', 'sanisettes-layer', 'terraces-dots'],
       })
       if (!hits.length) { onSelectRef.current(null); onAmeniteRef.current?.(null) }
     })
 
     // ── Auto-3D : bascule en vue pitchée quand l'utilisateur zoome ──────────
-    // Seuils : zoom ≥ 16 → pitch 48° (vue oblique, bâtiments visibles)
-    //          zoom <  14 → retour pitch 0° (vue aérienne, lisibilité globale)
-    // On ne s'applique pas si l'utilisateur pilote lui-même le pitch (geste
-    // trackpad 2D / pinch) ni pendant les transitions flyTo/focusPlace.
-    let autoPitch = false // true = la caméra est en mode auto-3D
-    let flyingTo  = false // true = transition programmatique en cours
-    map.on('movestart', (e) => {
-      // Les transitions flyTo/easeTo portent un originalEvent null
-      if (!e.originalEvent) flyingTo = true
-    })
-    map.on('moveend', () => { flyingTo = false })
+    // Zoom ≥ 16 → pitch 48° automatique (bâtiments 3D, ombres visibles)
+    // Zoom <  14 → retour pitch 0° (vue aérienne, lisibilité globale)
+    // Simple et fiable : pas de flag complexe, focusPlace/homeView
+    // écrasent le pitch via flyTo de toute façon.
+    let autoPitchOn = false
     map.on('zoomend', () => {
-      if (flyingTo) return // ne pas interférer avec focusPlace / homeView
       const z = map.getZoom()
-      if (z >= 16 && !autoPitch) {
-        autoPitch = true
-        map.easeTo({ pitch: 48, duration: 800 })
-      } else if (z < 14 && autoPitch) {
-        autoPitch = false
+      if (z >= 16 && !autoPitchOn) {
+        autoPitchOn = true
+        map.easeTo({ pitch: 48, duration: 900, easing: t => t * (2 - t) })
+      } else if (z < 14 && autoPitchOn) {
+        autoPitchOn = false
         map.easeTo({ pitch: 0, duration: 600 })
       }
     })
@@ -905,15 +861,13 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     return () => { map.off('style.load', onReady); map.off('idle', onReady) }
   }, [geojson])
 
-  // Mise à jour des emprises terrasse quand les places changent
+  // Mise à jour des cercles terrasse quand les places changent
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
     const trySet = (): boolean => {
-      const src  = map.getSource('terraces')     as mapboxgl.GeoJSONSource | undefined
       const srcp = map.getSource('terraces-pts') as mapboxgl.GeoJSONSource | undefined
-      if (!src || !srcp) return false
-      src.setData(terraceGeojsonRef.current)
+      if (!srcp) return false
       srcp.setData(terraceDotsGeojsonRef.current)
       return true
     }
@@ -921,7 +875,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     const onReady = () => { if (trySet()) { map.off('idle', onReady) } }
     map.on('idle', onReady)
     return () => { map.off('idle', onReady) }
-  }, [terraceGeojson, terraceDotsGeojson])
+  }, [terraceDotsGeojson])
 
   // ── Zoom doux sur un lieu sélectionné (page d'accueil) ───────────────
   // focusPlace set → sauvegarde caméra + flyTo
@@ -955,10 +909,10 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
 
       map.flyTo({
         center:   [centerLng, centerLat],
-        zoom:     19.2,          // très près : la terrasse remplit le viewport
-        pitch:    62,            // plongeant : les bâtiments voisins ne masquent pas
-        bearing:  autoBearing,  // face à la façade
-        duration: 1600,
+        zoom:     17.5,          // aérien : on voit la terrasse + le contexte de rue
+        pitch:    35,            // légèrement oblique : 3D visible sans tout cacher
+        bearing:  autoBearing,
+        duration: 1400,
         curve:    1.4,
         essential: true,
         padding: {
