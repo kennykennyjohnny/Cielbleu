@@ -315,65 +315,80 @@ function applyStyle(map: mapboxgl.Map) {
   }
 }
 
-// ── Emprise terrasse ──────────────────────────────────────────────────────
+// ── Empreinte terrasse — concept « bassin de lumière » ─────────────────────
 //
-// Stratégie de placement :
-//   • Le point GPS de la terrasse (open data Paris) est SUR le trottoir, devant
-//     la façade. On le prend comme coin "côté façade" du rectangle.
-//   • Direction "vers la rue" = bearing de (place → terrasse). Quand la distance
-//     est < 3 m (données imprécises), on utilise le bearing E-O (~110°) par défaut,
-//     direction la plus courante des rues parisiennes.
-//   • Le rectangle part du point terrasse et s'étend vers la rue de `largeur` m,
-//     et de `longueur` m le long de la façade.
-//   • Taille minimum 6 m × 3 m pour que le polygone soit visible à tout zoom.
+// Chaque terrasse est dessinée comme une empreinte AU SOL réaliste :
+//   • Orientation : alignée sur la façade. On déduit la normale façade→rue du
+//     vecteur (bar → point terrasse open data), qui pointe vers l'extérieur du
+//     bâtiment. La longueur court LE LONG de la façade, la profondeur VERS la rue.
+//   • Forme : rectangle à coins arrondis (stadium) — beaucoup plus doux et
+//     « mobilier urbain » qu'un rectangle dur. Les coins sont échantillonnés en arcs.
+//   • Dimensions : vraies cotes open data (longueur × largeur), bornées pour rester
+//     lisibles. L'empreinte est CENTRÉE sur le point terrasse (= centroïde trottoir).
+//   • Couleur (gérée côté layer) : dérivée du score soleil → doré au soleil,
+//     gris-bleu froid à l'ombre. C'est ça qui fait « briller » les bonnes terrasses.
 //
 const M_DEG = 111_320
-function buildTerraceRect(
+
+/** Direction unitaire façade→rue (E, N) déduite du vecteur bar→terrasse. */
+function terraceForward(
+  placeLat: number, placeLng: number, terraceLat: number, terraceLng: number,
+): [number, number] {
+  const cosP = Math.cos((placeLat * Math.PI) / 180)
+  const dE = (terraceLng - placeLng) * M_DEG * cosP
+  const dN = (terraceLat - placeLat) * M_DEG
+  const dist = Math.hypot(dE, dN)
+  if (dist >= 2) return [dE / dist, dN / dist]
+  // Fallback : façade orientée ~E-O (rues parisiennes), terrasse côté sud.
+  const b = 110 * Math.PI / 180
+  return [Math.sin(b), -Math.cos(b)]
+}
+
+/**
+ * Empreinte « stadium » (rectangle à coins arrondis) centrée sur la terrasse,
+ * orientée le long de la façade. Retourne un anneau fermé [lng, lat].
+ */
+function buildTerraceFootprint(
   placeLat: number, placeLng: number,
   terraceLat: number, terraceLng: number,
   longueur: number, largeur: number,
 ): [number, number][] {
   const cosT = Math.cos((terraceLat * Math.PI) / 180)
-  const cosP = Math.cos((placeLat   * Math.PI) / 180)
+  const [fwdE, fwdN] = terraceForward(placeLat, placeLng, terraceLat, terraceLng)
+  const tanE = -fwdN, tanN = fwdE  // le long de la façade
 
-  const dE = (terraceLng - placeLng) * M_DEG * cosP
-  const dN = (terraceLat - placeLat) * M_DEG
-  const dist = Math.sqrt(dE * dE + dN * dN)
+  // Demi-dimensions (m). half = le long façade, depth = vers la rue.
+  // Minimums généreux : beaucoup d'autorisations font 0,7 m de profondeur →
+  // un sliver illisible. On élargit pour que l'empreinte lise comme une zone
+  // d'assise, sans dépasser des cotes plausibles.
+  const half  = Math.max(5,   Math.min(24, longueur)) / 2
+  const depth = Math.max(2.6, Math.min(6,  largeur))  / 2
+  const r = Math.min(depth, half) * 0.5  // rayon des coins arrondis
 
-  // Direction "vers la rue" (depuis le bâtiment / l'entrée → terrasse)
-  let fwdE: number, fwdN: number
-  if (dist >= 3) {
-    fwdE = dE / dist
-    fwdN = dN / dist
-  } else {
-    // Bearing ~110° (E-O légèrement incliné = direction dominante des rues paris.)
-    const bearRad = 110 * Math.PI / 180
-    fwdE =  Math.sin(bearRad)   //  0.94
-    fwdN = -Math.cos(bearRad)   //  0.34
-  }
-
-  // Perpendiculaire : le long de la façade
-  const tanE = -fwdN
-  const tanN =  fwdE
-
-  // Dimensions — minimum pour la lisibilité
-  const W = Math.max(6,  Math.min(40, longueur))  // largeur le long de la façade
-  const D = Math.max(3,  Math.min(10, largeur))   // profondeur vers la rue
-
-  const hw = W / 2
-
-  // Offset en coordonnées géo depuis le point terrasse (déjà sur le trottoir)
   const off = (de: number, dn: number): [number, number] =>
     [terraceLng + de / (M_DEG * cosT), terraceLat + dn / M_DEG]
+  // Point local (u = le long façade, v = vers la rue) → géo
+  const pt = (u: number, v: number) => off(tanE * u + fwdE * v, tanN * u + fwdN * v)
 
-  // Le rectangle démarre 0.5 m derrière le point terrasse (côté façade)
-  // et s'étend D mètres vers la rue.
-  const back = 0.5
-  const p0 = off(tanE * (-hw) - fwdE * back, tanN * (-hw) - fwdN * back)
-  const p1 = off(tanE *   hw  - fwdE * back, tanN *   hw  - fwdN * back)
-  const p2 = off(tanE *   hw  + fwdE * (D - back), tanN *   hw  + fwdN * (D - back))
-  const p3 = off(tanE * (-hw) + fwdE * (D - back), tanN * (-hw) + fwdN * (D - back))
-  return [p0, p1, p2, p3, p0]
+  const ux = half - r   // limite du segment droit le long façade
+  const vy = depth - r  // limite du segment droit vers la rue
+  const ring: [number, number][] = []
+  const ARC = 5 // points par coin
+  // 4 coins, sens trigo : (+u,+v) (-u,+v) (-u,-v) (+u,-v)
+  const corners: [number, number, number][] = [
+    [ ux,  vy, 0],          // angle de départ par coin (rad), centre
+    [-ux,  vy, Math.PI / 2],
+    [-ux, -vy, Math.PI],
+    [ ux, -vy, 3 * Math.PI / 2],
+  ]
+  for (const [cu, cv, a0] of corners) {
+    for (let i = 0; i <= ARC; i++) {
+      const a = a0 + (i / ARC) * (Math.PI / 2)
+      ring.push(pt(cu + r * Math.cos(a), cv + r * Math.sin(a)))
+    }
+  }
+  ring.push(ring[0])
+  return ring
 }
 
 // ── Composant ──────────────────────────────────────────────────────────────
@@ -432,24 +447,42 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     })),
   }), [places])
 
-  // GeoJSON des emprises terrasse — points uniquement (cercles Mapbox).
-  // Plus de polygones rectangulaires : illisibles, orientation bancale.
-  // Chaque terrasse = un cercle centré sur le point open data (trottoir),
-  // rayon proportionnel à sqrt(longueur × largeur) pour refléter la taille réelle.
+  // ── Terrasses « bassins de lumière » ──────────────────────────────────────
+  // Deux sources dérivées des places qui ont des coordonnées de terrasse :
+  //   • terracePolyGeojson : empreintes au sol (stadium orienté façade) — zoom proche
+  //   • terraceDotsGeojson : points pour le halo doux + les dots de dézoom
+  // Chaque feature porte `s` = score soleil courant (0–5) → pilote la couleur.
+  const terracePlaces = useMemo(
+    () => places.filter(p => p.terrace_lat != null && p.terrace_lng != null),
+    [places],
+  )
+
+  const terracePolyGeojson = useMemo((): GeoJSON.FeatureCollection => ({
+    type: 'FeatureCollection',
+    features: terracePlaces.map(p => ({
+      type: 'Feature' as const,
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [buildTerraceFootprint(
+          p.lat, p.lng, p.terrace_lat!, p.terrace_lng!,
+          p.terrace_longueur ?? 7, p.terrace_largeur ?? 3,
+        )],
+      },
+      properties: { id: p.id, name: p.name, s: p.currentScore ?? 3 },
+    })),
+  }), [terracePlaces])
+
   const terraceDotsGeojson = useMemo((): GeoJSON.FeatureCollection => ({
     type: 'FeatureCollection',
-    features: places
-      .filter(p => p.terrace_lat != null && p.terrace_lng != null)
-      .map(p => {
-        const area   = (p.terrace_longueur ?? 6) * (p.terrace_largeur ?? 3)
-        const radius = Math.max(3, Math.min(10, Math.sqrt(area)))
-        return {
-          type: 'Feature' as const,
-          geometry: { type: 'Point' as const, coordinates: [p.terrace_lng!, p.terrace_lat!] },
-          properties: { id: p.id, name: p.name, r: radius },
-        }
-      }),
-  }), [places])
+    features: terracePlaces.map(p => {
+      const area = (p.terrace_longueur ?? 6) * (p.terrace_largeur ?? 3)
+      return {
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [p.terrace_lng!, p.terrace_lat!] },
+        properties: { id: p.id, name: p.name, s: p.currentScore ?? 3, r: Math.max(3, Math.min(10, Math.sqrt(area))) },
+      }
+    }),
+  }), [terracePlaces])
 
   // Refs accessibles depuis la closure de l'init effect (deps=[]) :
   // - geojsonRef : permet d'init la source avec les places déjà chargées (évite la race condition)
@@ -458,6 +491,8 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   geojsonRef.current = geojson
   const terraceDotsGeojsonRef = useRef(terraceDotsGeojson)
   terraceDotsGeojsonRef.current = terraceDotsGeojson
+  const terracePolyGeojsonRef = useRef(terracePolyGeojson)
+  terracePolyGeojsonRef.current = terracePolyGeojson
   const sunHourRef  = useRef(sunHour)
   sunHourRef.current = sunHour
 
@@ -581,40 +616,68 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         },
       })
 
-      // ── Terrasses — cercles propres à toutes les échelles ──────────────────
-      // Un seul layer circle, slot 'top' pour passer au-dessus des bâtiments 3D.
-      // Rayon proportionnel à la taille réelle de la terrasse (propriété `r`).
-      // Couleur : ambre chaud (#FFBE0B fill, contour blanc) — lisible sans agresser.
-      map.addSource('terraces-pts', {
-        type: 'geojson',
-        data: terraceDotsGeojsonRef.current,
-      })
+      // ── Terrasses « bassins de lumière » ───────────────────────────────────
+      //
+      // L'idée : faire BRILLER les terrasses ensoleillées. Chaque terrasse a une
+      // couleur dérivée de son score soleil courant — doré au soleil, gris-bleu
+      // froid à l'ombre. Trois couches empilées, toutes slot:'top' (au-dessus du 3D) :
+      //   1. terraces-glow : halo flou (circle blur) = la « lueur » au sol
+      //   2. terraces-fill : empreinte stadium orientée façade, remplissage doux
+      //   3. terraces-edge : liseré fin de la même teinte (définit le contour)
+      // Au dézoom (< 15.5) seul le halo subsiste → carte de chaleur des coins au soleil.
+
+      // Échelle de couleur partagée (score 0–5 → teinte)
+      const SUN_COLOR: unknown = ['interpolate', ['linear'], ['get', 's'],
+        0, '#7E8CA0',   // nuit / pleine ombre → gris ardoise froid
+        2, '#B8B49A',   // ombragé → beige terne
+        3, '#F4C95D',   // mitigé → ambre clair
+        4, '#FFBE0B',   // ensoleillé → jaune marque
+        5, '#FF9E00',   // plein soleil → or chaud
+      ]
+
+      map.addSource('terraces-poly', { type: 'geojson', data: terracePolyGeojsonRef.current })
+      map.addSource('terraces-pts',  { type: 'geojson', data: terraceDotsGeojsonRef.current })
 
       const slotTop = { slot: 'top' } as object
 
+      // 1) Halo doux — la « lueur » de la terrasse, visible à toutes les échelles
       map.addLayer({
-        id: 'terraces-dots', type: 'circle', source: 'terraces-pts',
+        id: 'terraces-glow', type: 'circle', source: 'terraces-pts',
         ...slotTop,
         minzoom: 13,
         paint: {
-          // Rayon pixel proportionnel à la taille réelle de la terrasse.
-          // r = sqrt(longueur × largeur), entre 3 (petite) et 10 (grande).
-          // Facteurs calés pour Paris lat 48.9° :
-          //   zoom 13 : ~2-4 px (point discret)
-          //   zoom 15 : ~4-8 px (dot lisible)
-          //   zoom 17 : ~8-20 px (zone clairement visible)
-          //   zoom 19 : ~20-55 px (remplit l'espace terrasse réel)
           'circle-radius': ['interpolate', ['linear'], ['zoom'],
-            13, ['*', ['get', 'r'], 0.3],
-            15, ['*', ['get', 'r'], 0.8],
-            17, ['*', ['get', 'r'], 2.2],
-            19, ['*', ['get', 'r'], 6.0],
+            13, ['*', ['get', 'r'], 0.6],
+            16, ['*', ['get', 'r'], 2.2],
+            19, ['*', ['get', 'r'], 7.0],
           ],
-          'circle-color':        '#FFBE0B',
-          'circle-opacity':      ['interpolate', ['linear'], ['zoom'], 13, 0.70, 17, 0.80],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 13, 1, 17, 2.5],
-          'circle-stroke-opacity': 0.95,
+          'circle-color':   SUN_COLOR,
+          'circle-blur':    1.0,
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.55, 16, 0.45, 19, 0.30],
+        },
+      } as Parameters<typeof map.addLayer>[0])
+
+      // 2) Empreinte au sol (stadium orienté façade) — apparaît en zoom proche
+      map.addLayer({
+        id: 'terraces-fill', type: 'fill', source: 'terraces-poly',
+        ...slotTop,
+        minzoom: 15.5,
+        paint: {
+          'fill-color':   SUN_COLOR,
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0, 16.5, 0.55, 19, 0.7],
+        },
+      } as Parameters<typeof map.addLayer>[0])
+
+      // 3) Liseré fin
+      map.addLayer({
+        id: 'terraces-edge', type: 'line', source: 'terraces-poly',
+        ...slotTop,
+        minzoom: 15.5,
+        paint: {
+          'line-color':   SUN_COLOR,
+          'line-width':   ['interpolate', ['linear'], ['zoom'], 15.5, 0.5, 19, 2],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0, 16.5, 0.9],
+          'line-blur':    0.3,
         },
       } as Parameters<typeof map.addLayer>[0])
 
@@ -691,8 +754,8 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (place) onSelectRef.current(place)
       })
 
-      // Click cercle terrasse → ouvrir le lieu correspondant
-      for (const lyr of ['terraces-dots']) {
+      // Click empreinte / halo terrasse → ouvrir le lieu correspondant
+      for (const lyr of ['terraces-fill', 'terraces-glow']) {
         map.on('click', lyr, (e) => {
           e.originalEvent.stopPropagation()
           const id = e.features?.[0]?.properties?.id as string | undefined
@@ -746,7 +809,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     // Clic fond → déselection
     map.on('click', (e) => {
       const hits = map.queryRenderedFeatures(e.point, {
-        layers: ['places-pins', 'clusters', 'fontaines-layer', 'sanisettes-layer', 'terraces-dots'],
+        layers: ['places-pins', 'clusters', 'fontaines-layer', 'sanisettes-layer', 'terraces-fill', 'terraces-glow'],
       })
       if (!hits.length) { onSelectRef.current(null); onAmeniteRef.current?.(null) }
     })
@@ -861,21 +924,23 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     return () => { map.off('style.load', onReady); map.off('idle', onReady) }
   }, [geojson])
 
-  // Mise à jour des cercles terrasse quand les places changent
+  // Mise à jour des terrasses (empreintes + halos) quand les places / scores changent
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
     const trySet = (): boolean => {
-      const srcp = map.getSource('terraces-pts') as mapboxgl.GeoJSONSource | undefined
-      if (!srcp) return false
-      srcp.setData(terraceDotsGeojsonRef.current)
+      const srcPoly = map.getSource('terraces-poly') as mapboxgl.GeoJSONSource | undefined
+      const srcPts  = map.getSource('terraces-pts')  as mapboxgl.GeoJSONSource | undefined
+      if (!srcPoly || !srcPts) return false
+      srcPoly.setData(terracePolyGeojsonRef.current)
+      srcPts.setData(terraceDotsGeojsonRef.current)
       return true
     }
     if (trySet()) return
     const onReady = () => { if (trySet()) { map.off('idle', onReady) } }
     map.on('idle', onReady)
     return () => { map.off('idle', onReady) }
-  }, [terraceDotsGeojson])
+  }, [terraceDotsGeojson, terracePolyGeojson])
 
   // ── Zoom doux sur un lieu sélectionné (page d'accueil) ───────────────
   // focusPlace set → sauvegarde caméra + flyTo
