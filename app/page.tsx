@@ -21,7 +21,7 @@ import { geocodeParis, type GeoResult } from '@/lib/geocode'
 import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
 import PwaInstallPrompt from '@/components/PwaInstallPrompt'
 import SunnyStrip from '@/components/SunnyStrip'
-import { recommendSunnyTerraces, placeCoord } from '@/lib/sunNote'
+import { sunNote10, placeCoord, distanceM } from '@/lib/sunNote'
 import { terraceSunScore } from '@/lib/terraceSun'
 
 function nowQuarter(): number {
@@ -369,11 +369,12 @@ export default function HomePage() {
     // affichés (badge « à confirmer » géré dans le panel). cf. lib/terraceClassify.
     let result = places.filter(p => !isHiddenPlace(p))
 
-    // Pondération météo temps réel : sous un ciel chargé, on dégrade les scores
-    // affichés (pins, compteur ☀, filtre soleil) pour coller au ressenti réel.
-    // En ciel dégagé (ou météo indispo) on ne touche à rien → zéro surcoût.
+    // Pondération météo temps réel UNIQUEMENT pour les lieux SANS terrasse
+    // géolocalisée (score DB/altitude). Les terrasses ont déjà leur score calculé
+    // en direct par terraceSunScore() qui intègre les nuages → pas de double peine.
     if (cloudForHour != null && cloudForHour > 45) {
       result = result.map((p) => {
+        if (p.terrace_lat != null) return p
         const raw = p.currentScore ?? 3
         const adj = cloudAdjustedScore(raw, cloudForHour)
         return adj === raw ? p : { ...p, currentScore: adj }
@@ -389,7 +390,7 @@ export default function HomePage() {
 
     if (activeFilters.includes('terrace')) result = result.filter((p) => p.has_terrace === true)
     if (typeFilters.length > 0) result = result.filter((p) => typeFilters.includes(p.type))
-    if (activeFilters.includes('sun')) result = result.filter((p) => (p.currentScore ?? 0) >= 4)
+    if (activeFilters.includes('sun')) result = result.filter((p) => (p.currentScore ?? 0) >= 3.5)
     if (activeFilters.includes('open')) {
       const dayOfWeek = new Date().getDay()
       result = result.filter((p) => isOpenAt(p.opening_hours ?? null, dayOfWeek, hour, p.type))
@@ -501,28 +502,55 @@ export default function HomePage() {
     [displayedPlaces]
   )
 
-  // ── Recommandations « terrasses au soleil » ───────────────────────────────
-  // Au-dessus de la recherche : les terrasses les plus ensoleillées maintenant
-  // (parmi les lieux affichés, donc filtrées par la zone/filtres actifs).
-  const sunnyTop = useMemo(
-    () => recommendSunnyTerraces(displayedPlaces, { minNote: 7, limit: 12 }),
-    [displayedPlaces]
+  // ── Recommandations « trouver une terrasse ensoleillée » ──────────────────
+  // Classement par EXPOSITION géométrique (soleil + orientation, SANS nuages) :
+  // il y a donc toujours des suggestions de jour, même par ciel voilé (on le
+  // signale dans le titre). Uniquement les terrasses GÉOLOCALISÉES (terrace_lat).
+  const allTerraces = useMemo(
+    () => places.filter(p => p.terrace_lat != null && p.terrace_lng != null && !isHiddenPlace(p)),
+    [places]
   )
+  const hourDate = useMemo(() => {
+    const d = new Date()
+    d.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
+    return d
+  }, [hour])
+  const exposureOf = useCallback(
+    (p: Place) => terraceSunScore(p, hourDate, 0), // cloud=0 → exposition pure
+    [hourDate]
+  )
+  const veiled = (cloudForHour ?? 0) > 45
 
-  // Au-dessus de la fiche : terrasses PLUS ensoleillées que la sélection, à
-  // proximité immédiate (≤ 600 m). Aide à « trouver mieux juste à côté ».
+  // Au-dessus de la recherche : les mieux exposées maintenant
+  const sunnyTop = useMemo(() => {
+    return allTerraces
+      .map(p => ({ p, e: exposureOf(p) }))
+      .filter(x => x.e >= 3.5)
+      .sort((a, b) => b.e - a.e || (b.p.google_rating ?? 0) - (a.p.google_rating ?? 0))
+      .slice(0, 12)
+      .map(x => x.p)
+  }, [allTerraces, exposureOf])
+
+  // Fiche ouverte : bonnes terrasses ensoleillées à proximité (≤ 700 m),
+  // triées par exposition. On met en avant celles MIEUX exposées que la
+  // sélection (le « mieux à côté »), mais on complète avec les autres bien
+  // exposées pour toujours proposer des options utiles.
   const sunnyNearby = useMemo(() => {
     if (!selectedPlace) return []
     const [la, lo] = placeCoord(selectedPlace)
-    const selNote = (selectedPlace.currentScore ?? 0) * 2
-    return recommendSunnyTerraces(displayedPlaces, {
-      nearLat: la, nearLng: lo,
-      excludeId: selectedPlace.id,
-      minNote: Math.max(7, Math.ceil(selNote) + 1),
-      maxDistanceM: 600,
-      limit: 8,
-    })
-  }, [selectedPlace, displayedPlaces])
+    const selExp = exposureOf(selectedPlace)
+    const near = allTerraces
+      .filter(p => p.id !== selectedPlace.id)
+      .map(p => { const [pa, po] = placeCoord(p); return { p, e: exposureOf(p), d: distanceM(la, lo, pa, po) } })
+      .filter(x => x.d <= 700 && x.e >= 3.5)
+      .sort((a, b) => b.e - a.e || a.d - b.d)
+    // priorité aux strictement mieux exposées, puis on complète
+    const better = near.filter(x => x.e >= selExp + 0.4)
+    const list = (better.length >= 3 ? better : near).slice(0, 8)
+    return list.map(x => x.p)
+  }, [selectedPlace, allTerraces, exposureOf])
+
+  const recoNote = useCallback((p: Place) => sunNote10(exposureOf(p)), [exposureOf])
 
   // ── Position du bouton "recentrer" — toujours au-dessus du panel ouvert ──
   // Le bouton suit le bord supérieur du panel (même transition que le sheet)
@@ -1216,9 +1244,10 @@ export default function HomePage() {
             {!searchQuery.trim() && sunnyTop.length > 0 && (
               <div className="px-3 pt-3">
                 <SunnyStrip
-                  title="Au soleil maintenant"
+                  title={veiled ? 'Mieux exposées (ciel voilé)' : 'Au soleil maintenant'}
                   items={sunnyTop}
                   onSelect={handlePlaceSelect}
+                  noteOf={recoNote}
                   compact
                 />
               </div>
@@ -1429,9 +1458,10 @@ export default function HomePage() {
           {sunnyNearby.length > 0 && (
             <div style={{ padding: '10px 14px 9px', borderBottom: '1px solid rgba(31,58,95,0.08)', flexShrink: 0 }}>
               <SunnyStrip
-                title="Plus ensoleillées à proximité"
+                title="Mieux exposées à proximité"
                 items={sunnyNearby}
                 onSelect={handlePlaceSelect}
+                noteOf={recoNote}
                 compact
               />
             </div>
@@ -1478,9 +1508,10 @@ export default function HomePage() {
         >
           <div style={{ pointerEvents: 'auto' }}>
             <SunnyStrip
-              title="Plus ensoleillées à proximité"
+              title="Mieux exposées à proximité"
               items={sunnyNearby}
               onSelect={handlePlaceSelect}
+              noteOf={recoNote}
               mini
             />
           </div>

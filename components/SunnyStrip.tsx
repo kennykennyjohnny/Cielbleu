@@ -18,6 +18,8 @@ interface Props {
   compact?: boolean
   /** mode ultra-compact : une seule ligne de mini-pastilles, posé sur la carte */
   mini?: boolean
+  /** note à afficher par lieu (défaut : note /10 du score courant) */
+  noteOf?: (p: Place) => number
 }
 
 function arrLabel(p: Place): string {
@@ -27,8 +29,9 @@ function arrLabel(p: Place): string {
   return (p.address?.split(',')[0] ?? '').trim()
 }
 
-export default function SunnyStrip({ title, items, onSelect, compact, mini }: Props) {
+export default function SunnyStrip({ title, items, onSelect, compact, mini, noteOf }: Props) {
   if (items.length === 0) return null
+  const getNote = (p: Place) => (noteOf ? noteOf(p) : sunNote10(p.currentScore))
 
   // ── Mode mini : une seule ligne de mini-pastilles posées sur la carte ──
   if (mini) {
@@ -38,7 +41,7 @@ export default function SunnyStrip({ title, items, onSelect, compact, mini }: Pr
           ☀️ Mieux à côté
         </span>
         {items.map(p => {
-          const note = sunNote10(p.currentScore)
+          const note = getNote(p)
           const col = noteColor(note)
           return (
             <button
@@ -84,7 +87,7 @@ export default function SunnyStrip({ title, items, onSelect, compact, mini }: Pr
         style={{ gap: compact ? 7 : 8, paddingBottom: 2, scrollSnapType: 'x proximity' }}
       >
         {items.map(p => {
-          const note = sunNote10(p.currentScore)
+          const note = getNote(p)
           const col = noteColor(note)
           return (
             <button
