@@ -542,7 +542,7 @@ export default function HomePage() {
     const near = allTerraces
       .filter(p => p.id !== selectedPlace.id)
       .map(p => { const [pa, po] = placeCoord(p); return { p, e: exposureOf(p), d: distanceM(la, lo, pa, po) } })
-      .filter(x => x.d <= 700 && x.e >= 3.5)
+      .filter(x => x.d <= 450 && x.e >= 3.5)
       .sort((a, b) => b.e - a.e || a.d - b.d)
     // priorité aux strictement mieux exposées, puis on complète
     const better = near.filter(x => x.e >= selExp + 0.4)
@@ -560,8 +560,11 @@ export default function HomePage() {
     if (selectedPlace && !isDesktop) return '52dvh'
     if (selectedAmenite) return 'calc(62vh + 14px)'
     if (showProfile)     return 'calc(90dvh + 14px)' // off-screen, OK
-    return 'calc(max(env(safe-area-inset-bottom, 0px), 10px) + 225px)'
-  }, [isDesktop, selectedPlace, selectedAmenite, showProfile])
+    // La pill du bas est plus haute quand la bande de recommandations s'affiche
+    // → on remonte le bouton pour ne pas le masquer.
+    const base = (!searchQuery.trim() && sunnyTop.length > 0) ? 289 : 225
+    return `calc(max(env(safe-area-inset-bottom, 0px), 10px) + ${base}px)`
+  }, [isDesktop, selectedPlace, selectedAmenite, showProfile, searchQuery, sunnyTop.length])
 
   // ── Sync scores du slider (debounce 400 ms) ──────────────────────────────
   // Quand l'heure change, re-fetche sun_scores pour le nouveau créneau.
@@ -1495,18 +1498,7 @@ export default function HomePage() {
           activeSlot={activeSlot}
           onSlotPreview={previewSlot}
           cloudCover={cloudForHour}
-        />
-      )}
-
-
-      {/* Reco « mieux à côté » — mini-bande posée sur la carte, juste au-dessus
-          du sheet (mobile). Compacte, une seule ligne, scroll horizontal. */}
-      {selectedPlace && !isDesktop && sunnyNearby.length > 0 && (
-        <div
-          className="absolute inset-x-0 z-30"
-          style={{ bottom: 'calc(50dvh + 10px)', padding: '0 10px', pointerEvents: 'none' }}
-        >
-          <div style={{ pointerEvents: 'auto' }}>
+          reco={sunnyNearby.length > 0 ? (
             <SunnyStrip
               title="Mieux exposées à proximité"
               items={sunnyNearby}
@@ -1514,9 +1506,10 @@ export default function HomePage() {
               noteOf={recoNote}
               mini
             />
-          </div>
-        </div>
+          ) : null}
+        />
       )}
+
 
       <PwaInstallPrompt />
     </main>

@@ -108,10 +108,12 @@ interface PlacePreviewProps {
   onSlotPreview?: (startH: number, endH: number, idx: number) => void
   /** Couverture nuageuse (%) à l'heure affichée — pondère le score en direct */
   cloudCover?: number | null
+  /** Bande de recommandations « mieux exposées à proximité » épinglée en haut de la card */
+  reco?: React.ReactNode
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function PlacePreview({ place, hour, onClose, userId = null, onOpenProfile, sunsetHour = 21.5, activeSlot = null, onSlotPreview, cloudCover = null }: PlacePreviewProps) {
+export default function PlacePreview({ place, hour, onClose, userId = null, onOpenProfile, sunsetHour = 21.5, activeSlot = null, onSlotPreview, cloudCover = null, reco = null }: PlacePreviewProps) {
 
   // ── Snap ─────────────────────────────────────────────────────────────────
   type SnapLevel = 1|2|3|4|5|6|7|8|9|10
@@ -405,6 +407,13 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             className="rounded-t-[28px] sm:rounded-[28px] shadow-[0_-12px_40px_rgba(27,40,56,0.22)] flex flex-col overflow-hidden"
             style={{ height: '92dvh', background: 'rgba(255,252,243,0.97)', backdropFilter: 'blur(18px)' }}
           >
+
+            {/* ── Reco « mieux exposées à proximité » épinglée tout en haut ── */}
+            {reco && (
+              <div style={{ flexShrink: 0, padding: '10px 12px 8px', borderBottom: '1px solid rgba(31,58,95,0.08)' }}>
+                {reco}
+              </div>
+            )}
 
             {/* ── ZONE DRAGGABLE — handle + peek + action bar ───────────────────
                  touch-action:none sur le wrapper = toute la zone initie le drag.
