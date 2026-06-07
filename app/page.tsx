@@ -1323,9 +1323,10 @@ export default function HomePage() {
       <div
         style={{
           position: 'absolute',
-          top: `calc(${headerH}px + 10px)`,
+          top: `calc(${headerH || 64}px + 12px)`,
           right: isDesktop && (selectedPlace || selectedAmenite || showProfile) ? 434 : 14,
-          zIndex: 22,
+          // z sous le header (z-20) : si jamais ça chevauche, le slider passe DEVANT
+          zIndex: 15,
           display: 'flex', flexDirection: 'column', gap: 8,
           transition: 'right 280ms cubic-bezier(0.2,0.8,0.2,1)',
         }}
