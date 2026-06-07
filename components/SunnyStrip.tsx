@@ -16,6 +16,8 @@ interface Props {
   items: Place[]
   onSelect: (p: Place) => void
   compact?: boolean
+  /** mode ultra-compact : une seule ligne de mini-pastilles, posé sur la carte */
+  mini?: boolean
 }
 
 function arrLabel(p: Place): string {
@@ -25,8 +27,43 @@ function arrLabel(p: Place): string {
   return (p.address?.split(',')[0] ?? '').trim()
 }
 
-export default function SunnyStrip({ title, items, onSelect, compact }: Props) {
+export default function SunnyStrip({ title, items, onSelect, compact, mini }: Props) {
   if (items.length === 0) return null
+
+  // ── Mode mini : une seule ligne de mini-pastilles posées sur la carte ──
+  if (mini) {
+    return (
+      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none" style={{ scrollSnapType: 'x proximity' }}>
+        <span className="shrink-0 inline-flex items-center gap-1" style={{ fontFamily: 'var(--font-outfit)', fontSize: 10.5, fontWeight: 800, color: '#1F3A5F', paddingRight: 2 }}>
+          ☀️ Mieux à côté
+        </span>
+        {items.map(p => {
+          const note = sunNote10(p.currentScore)
+          const col = noteColor(note)
+          return (
+            <button
+              key={p.id}
+              onClick={() => onSelect(p)}
+              className="shrink-0 inline-flex items-center active:scale-[0.95] transition-transform"
+              style={{
+                scrollSnapAlign: 'start', gap: 6, height: 30, paddingLeft: 5, paddingRight: 10,
+                background: '#ffffff', border: '1px solid rgba(31,58,95,0.12)', borderRadius: 999,
+                boxShadow: '0 2px 8px rgba(31,58,95,0.10)', maxWidth: 150,
+              }}
+            >
+              <span className="shrink-0 inline-flex items-center justify-center"
+                style={{ width: 20, height: 20, borderRadius: 7, background: col, lineHeight: 1 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#fff', fontFamily: 'var(--font-outfit)' }}>{note}</span>
+              </span>
+              <span className="truncate" style={{ fontSize: 11.5, fontWeight: 700, color: '#1F3A5F', fontFamily: 'var(--font-outfit)' }}>
+                {p.name}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
   // Tailles : compact (au-dessus de la recherche) plus petit que la version fiche
   const D = compact
     ? { chipW: 132, pad: '6px 8px', gap: 7, badge: 30, num: 12, slash: 6.5, name: 11, meta: 9.5, title: 11, titleEmoji: 11 }

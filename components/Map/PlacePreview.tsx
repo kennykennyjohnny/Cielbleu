@@ -441,7 +441,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
               <div style={{ padding: '0 16px 12px' }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, paddingRight: 40, alignItems: 'center' }}>
                   {place.type !== 'park' && (() => {
-                    const note = sunNote10(score)
+                    const note = sunNote10(place.currentScore ?? score)
                     const col = noteColor(note)
                     return (
                       <span style={{ ...MINI_BADGE, background: `${col}22`, color: col, border: `1.5px solid ${col}`, fontWeight: 800 }}>
