@@ -7,6 +7,7 @@ import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 import { cloudAdjustedScore } from '@/lib/sunScore'
+import { sunNote10, noteColor } from '@/lib/sunNote'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 import type { Place } from '@/types'
@@ -438,7 +439,16 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
               {/* ── PEEK ZONE ── */}
               <div style={{ padding: '0 16px 12px' }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, paddingRight: 40 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, paddingRight: 40, alignItems: 'center' }}>
+                  {place.type !== 'park' && (() => {
+                    const note = sunNote10(score)
+                    const col = noteColor(note)
+                    return (
+                      <span style={{ ...MINI_BADGE, background: `${col}22`, color: col, border: `1.5px solid ${col}`, fontWeight: 800 }}>
+                        ☀ {note}/10
+                      </span>
+                    )
+                  })()}
                   {isSunny && sunWindow && (
                     <span style={{ ...MINI_BADGE, background: '#fff1b8', color: '#5c3d00' }}>
                       ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}

@@ -9,6 +9,7 @@ import { todayHoursLabel } from '@/lib/openingHours'
 import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 import { cloudAdjustedScore } from '@/lib/sunScore'
+import { sunNote10, noteColor, noteLabel } from '@/lib/sunNote'
 import { classifyTerrace } from '@/lib/terraceClassify'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import TerraceSunMeter from '@/components/Map/TerraceSunMeter'
@@ -476,6 +477,27 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
 
         {/* ── PLACE HEAD ── */}
         <div style={{ padding:'18px 0 14px' }}>
+          {/* Note soleil /10 — réponse directe : au soleil ou pas ? */}
+          {place.type !== 'park' && (() => {
+            const note = sunNote10(cloudAdjustedScore(place.currentScore ?? 0, cloudCover))
+            const col = noteColor(note)
+            return (
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+                <span style={{
+                  display:'inline-flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                  width:48, height:48, borderRadius:14, background:`${col}22`, border:`2px solid ${col}`, lineHeight:1,
+                }}>
+                  <span style={{ fontSize:19, fontWeight:800, color:col }}>{note}</span>
+                  <span style={{ fontSize:8.5, fontWeight:700, color:col, opacity:0.8 }}>/10</span>
+                </span>
+                <span style={{ display:'flex', flexDirection:'column' }}>
+                  <span style={{ fontSize:9.5, fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase', color:'#6f7a8a' }}>Note soleil</span>
+                  <span style={{ fontSize:15, fontWeight:800, color:col }}>{noteLabel(note)}</span>
+                </span>
+              </div>
+            )
+          })()}
+
           {/* Kicker row */}
           <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:11 }}>
             {isSunny && sunWindow && (
