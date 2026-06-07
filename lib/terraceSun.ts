@@ -57,35 +57,32 @@ export function terraceSunScore(p: Place, date: Date, cloudCover?: number | null
   const tLng = p.terrace_lng ?? p.lng
   const pos = getSunPosition(date, tLat, tLng)
   const altDeg = (pos.altitude * 180) / Math.PI
-  if (altDeg <= 0.5) return 0 // soleil couché
+  if (altDeg <= 0.5) return 0 // soleil sous l'horizon → nuit, score 0
 
-  // Azimut solaire en compass (0=N, 90=E…). SunCalc: 0=sud, +ouest.
+  // ── Modèle physique simple et intuitif ────────────────────────────────────
+  // 1) Force du soleil = irradiance ∝ sin(hauteur). 0 à l'horizon, max au zénith.
+  //    → arc journalier naturel : faible à l'aube/au crépuscule, fort à midi.
+  const sinAlt = Math.sin(pos.altitude) // 0…1
+
+  // 2) Soleil DIRECT reçu par la terrasse selon son orientation :
+  //    exposure = cos(écart azimut soleil ↔ direction « ouverte » de la terrasse).
+  //    direct = 1 quand le soleil est pile en face, 0 quand il passe derrière
+  //    la façade (la terrasse est alors à l'ombre de son propre bâtiment).
   const sunAz = ((pos.azimuth * 180) / Math.PI + 180) % 360
   const openDeg = openDirectionDeg(p)
-
-  // Écart angulaire entre le soleil et la direction « ouverte » (0 = soleil pile
-  // en face de la terrasse ; 180 = soleil derrière la façade).
   const diff = Math.abs(((sunAz - openDeg + 540) % 360) - 180)
-  const exposure = Math.cos((diff * Math.PI) / 180) // 1 (plein face) … -1 (derrière)
+  const exposure = Math.cos((diff * Math.PI) / 180) // 1 … -1
+  const direct = Math.max(0, exposure)              // 0 … 1
 
-  // Atténuation par hauteur du soleil (rasant = plus faible) — continue, pas de
-  // paliers → la note évolue en douceur quand on bouge le curseur.
-  const altF = Math.max(0.32, Math.min(1, altDeg / 35))
+  // 3) Score = lumière ambiante du ciel (présente même à l'ombre, ↑ avec le soleil
+  //    haut) + bonus de soleil DIRECT (↑ avec direct ET avec la hauteur du soleil).
+  //    Plein soleil midi ≈ 5 · ombre de façade midi ≈ 2 · aube/crépuscule faible.
+  const ambient = 0.8 + 1.2 * sinAlt                     // ~0.9 (aube) … ~2.0 (midi)
+  const directBonus = 3.2 * direct * (0.35 + 0.65 * sinAlt) // 0 … ~3.2
+  let score = ambient + directBonus                     // ~0.9 … ~5
 
-  // Exposition directionnelle : 1 = soleil pile en face, 0 = derrière la façade.
-  const dir = Math.max(0, (exposure + 0.25) / 1.25)
-  // Soleil zénithal : haut dans le ciel, il éclaire AUSSI les terrasses de côté
-  // (la façade ne fait plus d'ombre longue). Monte de 0 (~18°) à ~0.6 (zénith).
-  const overhead = Math.max(0, Math.min(1, (altDeg - 18) / 52)) * 0.6
-  const light = Math.max(dir, overhead) // 0…1
-
-  let score: number
-  if (light <= 0.04) {
-    // soleil franchement derrière le bâtiment et bas → ombre de la façade
-    score = 1.2
-  } else {
-    score = (1.3 + 3.7 * light) * (0.5 + 0.5 * altF) // ~1.4 … 5
-  }
+  // Rampe crépuscule : soleil très bas (0→3°) → extinction douce vers 0.
+  if (altDeg < 3) score *= altDeg / 3
 
   // Couverture nuageuse — atténuation MULTIPLICATIVE : les nuages baissent la
   // lumière mais préservent la hiérarchie d'orientation (un coin bien exposé
