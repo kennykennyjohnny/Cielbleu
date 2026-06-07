@@ -347,15 +347,34 @@ function terraceForward(
 /**
  * Empreinte « stadium » (rectangle à coins arrondis) centrée sur la terrasse,
  * orientée le long de la façade. Retourne un anneau fermé [lng, lat].
+ *
+ * `bearingDeg` (optionnel) = direction de la façade précalculée offline
+ * (terrace_bearing). Quand fournie, l'empreinte court LE LONG de cet axe —
+ * alignement réaliste. Sinon on retombe sur le vecteur bar→terrasse.
  */
 function buildTerraceFootprint(
   placeLat: number, placeLng: number,
   terraceLat: number, terraceLng: number,
   longueur: number, largeur: number,
+  bearingDeg?: number | null,
 ): [number, number][] {
   const cosT = Math.cos((terraceLat * Math.PI) / 180)
-  const [fwdE, fwdN] = terraceForward(placeLat, placeLng, terraceLat, terraceLng)
-  const tanE = -fwdN, tanN = fwdE  // le long de la façade
+
+  let tanE: number, tanN: number, fwdE: number, fwdN: number
+  if (bearingDeg != null) {
+    // tan = le long de la façade (axe du bearing) ; fwd = perpendiculaire vers la rue
+    const a = (bearingDeg * Math.PI) / 180
+    tanE = Math.sin(a); tanN = Math.cos(a)
+    // deux normales possibles ; on choisit celle qui pointe vers la terrasse
+    // (loin du bâtiment) via le vecteur bar→terrasse
+    const [bE, bN] = terraceForward(placeLat, placeLng, terraceLat, terraceLng)
+    const n1E = -tanN, n1N = tanE
+    fwdE = (n1E * bE + n1N * bN) >= 0 ? n1E : -n1E
+    fwdN = (n1E * bE + n1N * bN) >= 0 ? n1N : -n1N
+  } else {
+    ;[fwdE, fwdN] = terraceForward(placeLat, placeLng, terraceLat, terraceLng)
+    tanE = -fwdN; tanN = fwdE  // le long de la façade
+  }
 
   // Demi-dimensions (m). half = le long façade, depth = vers la rue.
   // Minimums généreux : beaucoup d'autorisations font 0,7 m de profondeur →
@@ -466,6 +485,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         coordinates: [buildTerraceFootprint(
           p.lat, p.lng, p.terrace_lat!, p.terrace_lng!,
           p.terrace_longueur ?? 7, p.terrace_largeur ?? 3,
+          p.terrace_bearing ?? null,
         )],
       },
       properties: { id: p.id, name: p.name, s: p.currentScore ?? 3 },
@@ -612,7 +632,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'icon-anchor': 'center',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.55, 14, 0.80, 16, 0.95, 18, 1.15],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.40, 14, 0.56, 16, 0.68, 18, 0.82],
         },
       })
 
@@ -730,7 +750,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'icon-anchor': 'center',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.72, 14, 0.98, 16, 1.12, 18, 1.32],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.52, 14, 0.72, 16, 0.86, 18, 1.0],
         },
       })
 

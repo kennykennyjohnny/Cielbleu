@@ -40,6 +40,7 @@ export interface Place {
   terrace_lng?: number | null
   terrace_longueur?: number | null
   terrace_largeur?: number | null
+  terrace_bearing?: number | null
   // Champs calculés côté client
   currentScore?: number
   distance?: number
