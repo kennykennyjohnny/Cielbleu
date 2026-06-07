@@ -302,7 +302,7 @@ export default function HomePage() {
       } catch { /* fall through */ }
 
       // Fallback : Supabase direct
-      const SLIM = 'id,name,address,lat,lng,type,arrondissement,has_terrace,google_rating,price_level,google_place_id'
+      const SLIM = 'id,name,address,lat,lng,type,arrondissement,has_terrace,terrace_lat,terrace_lng,terrace_longueur,terrace_largeur,terrace_bearing,google_rating,price_level,google_place_id'
       const PAGE = 1000
       const BBOX = { latMin: 48.810, latMax: 48.910, lngMin: 2.215, lngMax: 2.480 }
       try {
