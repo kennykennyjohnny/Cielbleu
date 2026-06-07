@@ -465,9 +465,31 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       const area = (p.terrace_longueur ?? 6) * (p.terrace_largeur ?? 3)
       // Facteur de taille du parasol selon la surface réelle (petite 0.8 → grande 1.35)
       const sz = Math.max(0.8, Math.min(1.35, 0.7 + Math.sqrt(area) / 14))
+
+      // Décale le parasol depuis le bord du trottoir VERS la rue (loin de la
+      // façade) → posé sur la terrasse, plus contre le bâtiment, et séparé du
+      // pin du lieu. Direction = bar→terrasse ; à défaut, perpendiculaire au
+      // bearing de façade côté sud ; à défaut, sud.
+      const M = 111_320
+      const cosLat = Math.cos((p.terrace_lat! * Math.PI) / 180)
+      let ux = 0, uy = -1 // sud par défaut
+      const dE = (p.terrace_lng! - p.lng) * M * cosLat
+      const dN = (p.terrace_lat! - p.lat) * M
+      const dist = Math.hypot(dE, dN)
+      if (dist > 2) { ux = dE / dist; uy = dN / dist }
+      else if (p.terrace_bearing != null) {
+        const a = (p.terrace_bearing * Math.PI) / 180
+        const n1x = Math.cos(a), n1y = -Math.sin(a) // perpendiculaire au bearing
+        // choisit la normale qui pointe le plus vers le sud (meilleure expo)
+        ;[ux, uy] = n1y <= 0 ? [n1x, n1y] : [-n1x, -n1y]
+      }
+      const push = Math.max(2.5, (p.terrace_largeur ?? 3) / 2 + 2) // m vers la rue
+      const lng = p.terrace_lng! + (ux * push) / (M * cosLat)
+      const lat = p.terrace_lat! + (uy * push) / M
+
       return {
         type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: [p.terrace_lng!, p.terrace_lat!] },
+        geometry: { type: 'Point' as const, coordinates: [lng, lat] },
         properties: { id: p.id, name: p.name, s: p.currentScore ?? 3, r: Math.max(3, Math.min(10, Math.sqrt(area))), sz },
       }
     }),
