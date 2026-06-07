@@ -24,8 +24,6 @@ import * as dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
 const DRY_RUN = process.argv.includes('--dry-run')
-const RADIUS_IDX = process.argv.indexOf('--radius')
-const RADIUS_M   = RADIUS_IDX >= 0 ? parseInt(process.argv[RADIUS_IDX + 1]) : 80
 
 const M_PER_DEG_LAT = 111_320
 
@@ -55,6 +53,35 @@ function distM(lat1: number, lng1: number, lat2: number, lng2: number): number {
   return Math.sqrt(dE * dE + dN * dN)
 }
 
+// ── Normalisation de nom pour le matching d'enseigne ──────────────────────────
+const STOP = new Set([
+  'le', 'la', 'les', 'l', 'd', 'de', 'du', 'des', 'au', 'aux', 'a', 'et', 'the',
+  'bar', 'cafe', 'café', 'restaurant', 'resto', 'brasserie', 'chez', 'pub',
+  'bistrot', 'bistro', 'sarl', 'sas', 'eurl', 'snc', 'paris',
+])
+function normName(s: string | null): string[] {
+  if (!s) return []
+  return s
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // accents
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !STOP.has(w))
+}
+/** Similarité de nom 0..1 (Jaccard sur tokens significatifs + bonus inclusion). */
+function nameScore(aTok: string[], bTok: string[]): number {
+  if (aTok.length === 0 || bTok.length === 0) return 0
+  const A = new Set(aTok), B = new Set(bTok)
+  let inter = 0
+  for (const w of A) if (B.has(w)) inter++
+  const jac = inter / (A.size + B.size - inter)
+  // bonus si un token rare (≥4 lettres) est commun → forte indication
+  const rareCommon = [...A].some(w => w.length >= 4 && B.has(w))
+  return Math.min(1, jac + (rareCommon ? 0.35 : 0))
+}
+
+interface IndexedTerrace extends TerraceAuth { tok: string[] }
+
 async function main() {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,8 +93,19 @@ async function main() {
   console.log('Chargement des terrasses open data…')
   const dataPath = path.join(process.cwd(), 'data', 'terrasses-autorisations.json')
   const terrasses: TerraceAuth[] = JSON.parse(fs.readFileSync(dataPath, 'utf8'))
-  const valid = terrasses.filter(t => t.geo_point_2d?.lat && t.geo_point_2d?.lon)
+  const valid: IndexedTerrace[] = terrasses
+    .filter(t => t.geo_point_2d?.lat && t.geo_point_2d?.lon)
+    .map(t => ({ ...t, tok: normName(t.nom_enseigne) }))
   console.log(`${valid.length} terrasses avec coordonnées GPS sur ${terrasses.length} total`)
+
+  // Index spatial des terrasses (cellules ~110 m) pour ne tester que le voisinage
+  const GRID = 0.0015
+  const cellKey = (lat: number, lng: number) => `${Math.floor(lng / GRID)}:${Math.floor(lat / GRID)}`
+  const tGrid = new Map<string, IndexedTerrace[]>()
+  for (const t of valid) {
+    const k = cellKey(t.geo_point_2d!.lat, t.geo_point_2d!.lon)
+    const a = tGrid.get(k) ?? []; a.push(t); tGrid.set(k, a)
+  }
 
   // ── Charge toutes les places ────────────────────────────────────────────────
   console.log('Chargement des places Supabase…')
@@ -88,43 +126,71 @@ async function main() {
   console.log(`${allPlaces.length} places chargées`)
 
   // ── Matching ────────────────────────────────────────────────────────────────
-  let matched = 0, alreadyDone = 0, skipped = 0
+  // Recalcul complet (corrige les anciens placements approximatifs). Pour chaque
+  // lieu, parmi les terrasses du voisinage :
+  //   1) MATCH PAR NOM : meilleure similarité d'enseigne dans NAME_RADIUS (≤ 90 m)
+  //      → la plus fiable (terrasse réellement rattachée à cet établissement)
+  //   2) sinon PROXIMITÉ STRICTE : la plus proche dans PROX_RADIUS (≤ 35 m)
+  //   3) sinon rien (on ne place pas un parasol au hasard)
+  const NAME_RADIUS = 90
+  const PROX_RADIUS = 35
+  const NAME_MIN = 0.5
+  let byName = 0, byProx = 0, skipped = 0
   const updates: { id: string; has_terrace: boolean; terrace_lat: number; terrace_lng: number; terrace_longueur: number | null; terrace_largeur: number | null }[] = []
 
   for (const place of allPlaces) {
-    if (place.terrace_lat != null && place.terrace_lng != null) {
-      alreadyDone++
-      continue
+    const pTok = normName(place.name)
+    const cx = Math.floor(place.lng / GRID), cy = Math.floor(place.lat / GRID)
+
+    let bestProxD = Infinity, bestProx: IndexedTerrace | null = null
+    let bestNameScore = 0, bestNameD = Infinity, bestName: IndexedTerrace | null = null
+
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      const arr = tGrid.get(`${cx + dx}:${cy + dy}`)
+      if (!arr) continue
+      for (const t of arr) {
+        const d = distM(place.lat, place.lng, t.geo_point_2d!.lat, t.geo_point_2d!.lon)
+        if (d <= PROX_RADIUS && d < bestProxD) { bestProxD = d; bestProx = t }
+        if (d <= NAME_RADIUS && pTok.length) {
+          const ns = nameScore(pTok, t.tok)
+          // départage par score, puis par distance
+          if (ns > bestNameScore || (ns === bestNameScore && d < bestNameD)) {
+            bestNameScore = ns; bestNameD = d; bestName = t
+          }
+        }
+      }
     }
 
-    let bestDist = Infinity
-    let bestT: TerraceAuth | null = null
+    let chosen: IndexedTerrace | null = null
+    if (bestName && bestNameScore >= NAME_MIN) { chosen = bestName; byName++ }
+    else if (bestProx) { chosen = bestProx; byProx++ }
+    else { skipped++ }
 
-    for (const t of valid) {
-      const d = distM(place.lat, place.lng, t.geo_point_2d!.lat, t.geo_point_2d!.lon)
-      if (d < bestDist) { bestDist = d; bestT = t }
-      if (d < 5) break // très proche, inutile de continuer
-    }
-
-    if (bestDist <= RADIUS_M && bestT) {
+    if (chosen) {
       updates.push({
         id: place.id,
         has_terrace: true,
-        terrace_lat: bestT.geo_point_2d!.lat,
-        terrace_lng: bestT.geo_point_2d!.lon,
-        terrace_longueur: bestT.longueur,
-        terrace_largeur:  bestT.largeur,
+        terrace_lat: chosen.geo_point_2d!.lat,
+        terrace_lng: chosen.geo_point_2d!.lon,
+        terrace_longueur: chosen.longueur,
+        terrace_largeur:  chosen.largeur,
       })
-      matched++
-    } else {
-      skipped++
     }
   }
 
+  // Nettoyage : lieux qui avaient une terrasse en base mais ne matchent plus
+  // (anciens placements approximatifs) → on remet à zéro pour éviter un parasol
+  // au mauvais endroit.
+  const matchedIds = new Set(updates.map(u => u.id))
+  const clears = allPlaces
+    .filter(p => p.terrace_lat != null && !matchedIds.has(p.id))
+    .map(p => p.id)
+
   console.log(`\nRésultats :`)
-  console.log(`  Déjà renseignées : ${alreadyDone}`)
-  console.log(`  Matchées (≤${RADIUS_M} m)  : ${matched}`)
-  console.log(`  Sans match       : ${skipped}`)
+  console.log(`  Match par nom (≤${NAME_RADIUS} m) : ${byName}`)
+  console.log(`  Match proximité (≤${PROX_RADIUS} m) : ${byProx}`)
+  console.log(`  Sans match : ${skipped}`)
+  console.log(`  À nettoyer (placements périmés) : ${clears.length}`)
 
   if (DRY_RUN) {
     console.log('\n[--dry-run] Aucune écriture en base.')
@@ -154,6 +220,22 @@ async function main() {
     process.stdout.write(`\rÉcriture… ${written}/${updates.length}`)
   }
   console.log(`\n✅ ${written} places mises à jour.`)
+
+  // Nettoyage des placements périmés
+  let cleared = 0
+  for (let i = 0; i < clears.length; i += BATCH) {
+    const batch = clears.slice(i, i + BATCH)
+    await Promise.all(batch.map(id =>
+      supabase.from('places').update({
+        has_terrace: false,
+        terrace_lat: null, terrace_lng: null,
+        terrace_longueur: null, terrace_largeur: null, terrace_bearing: null,
+      }).eq('id', id)
+    ))
+    cleared += batch.length
+    process.stdout.write(`\rNettoyage… ${cleared}/${clears.length}`)
+  }
+  if (clears.length) console.log(`\n🧹 ${cleared} placements périmés nettoyés.`)
 }
 
 main().catch(e => { console.error(e); process.exit(1) })

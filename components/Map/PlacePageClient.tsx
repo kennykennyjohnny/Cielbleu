@@ -479,7 +479,7 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
         <div style={{ padding:'18px 0 14px' }}>
           {/* Note soleil /10 — réponse directe : au soleil ou pas ? */}
           {place.type !== 'park' && (() => {
-            const note = sunNote10(cloudAdjustedScore(place.currentScore ?? 0, cloudCover))
+            const note = sunNote10(place.currentScore ?? 0)
             const col = noteColor(note)
             return (
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>

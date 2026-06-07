@@ -22,6 +22,7 @@ import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/typ
 import PwaInstallPrompt from '@/components/PwaInstallPrompt'
 import SunnyStrip from '@/components/SunnyStrip'
 import { recommendSunnyTerraces, placeCoord } from '@/lib/sunNote'
+import { terraceSunScore } from '@/lib/terraceSun'
 
 function nowQuarter(): number {
   const now = new Date()
@@ -547,17 +548,26 @@ export default function HomePage() {
         .from('sun_scores').select('place_id, score')
         .eq('month', month).eq('time_slot', slot)
 
-      // Toujours mettre à jour tous les lieux : DB score si dispo, sinon altitude solaire
       const d = new Date()
       d.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
       const pos = getSunPosition(d, 48.8566, 2.3522)
       const alt = (pos.altitude * 180) / Math.PI
       const altScore = pos.altitude <= 0 ? 0 : alt < 5 ? 2 : alt < 15 ? 3 : alt < 35 ? 4 : 5
       const byId = new Map((data ?? []).map(r => [r.place_id, r.score]))
-      setPlaces(prev => prev.map(p => ({ ...p, currentScore: byId.get(p.id) ?? altScore })))
+
+      // Score par lieu :
+      //  • terrasse géolocalisée → calcul EN DIRECT (soleil + orientation façade
+      //    + nuages, à la position de la terrasse) — répond précisément à l'heure
+      //  • sinon → score DB précalculé (ombres bâtiments) ou fallback altitude
+      setPlaces(prev => prev.map(p => {
+        if (p.terrace_lat != null && p.terrace_lng != null) {
+          return { ...p, currentScore: terraceSunScore(p, d, cloudForHour) }
+        }
+        return { ...p, currentScore: byId.get(p.id) ?? altScore }
+      }))
     }, 250)
     return () => window.clearTimeout(t)
-  }, [hour]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hour, cloudForHour]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleFilter = useCallback((filter: FilterType) => {
     setActiveFilters((prev) =>
@@ -1417,11 +1427,12 @@ export default function HomePage() {
           role="complementary" aria-label={`Détails de ${selectedPlace.name}`}
         >
           {sunnyNearby.length > 0 && (
-            <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid rgba(31,58,95,0.08)', flexShrink: 0 }}>
+            <div style={{ padding: '10px 14px 9px', borderBottom: '1px solid rgba(31,58,95,0.08)', flexShrink: 0 }}>
               <SunnyStrip
-                title="Plus ensoleillées dans le quartier"
+                title="Plus ensoleillées à proximité"
                 items={sunnyNearby}
                 onSelect={handlePlaceSelect}
+                compact
               />
             </div>
           )}
@@ -1458,28 +1469,19 @@ export default function HomePage() {
       )}
 
 
-      {/* Reco « plus ensoleillées » flottante au-dessus du sheet (mobile) */}
+      {/* Reco « mieux à côté » — mini-bande posée sur la carte, juste au-dessus
+          du sheet (mobile). Compacte, une seule ligne, scroll horizontal. */}
       {selectedPlace && !isDesktop && sunnyNearby.length > 0 && (
         <div
           className="absolute inset-x-0 z-30"
-          style={{ bottom: 'calc(50dvh + 8px)', padding: '0 10px', pointerEvents: 'none' }}
+          style={{ bottom: 'calc(50dvh + 10px)', padding: '0 10px', pointerEvents: 'none' }}
         >
-          <div
-            style={{
-              pointerEvents: 'auto',
-              background: 'rgba(255,248,234,0.97)',
-              backdropFilter: 'blur(18px)',
-              WebkitBackdropFilter: 'blur(18px)',
-              border: '1.5px solid rgba(31,58,95,0.10)',
-              borderRadius: 16,
-              boxShadow: '0 6px 22px rgba(31,58,95,0.14)',
-              padding: '8px 10px 10px',
-            }}
-          >
+          <div style={{ pointerEvents: 'auto' }}>
             <SunnyStrip
-              title="Plus ensoleillées dans le quartier"
+              title="Plus ensoleillées à proximité"
               items={sunnyNearby}
               onSelect={handlePlaceSelect}
+              mini
             />
           </div>
         </div>
