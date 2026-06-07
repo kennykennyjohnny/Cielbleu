@@ -554,15 +554,20 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       if (!map.hasImage('pin-sanisette')) {
         map.addImage('pin-sanisette', drawPin({ paths: LUCIDE_PATHS.sanisette, circle: VERT, icon: '#ffffff', radius: 16 }) as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
       }
-      // Parasols de terrasse, teintés selon l'ensoleillement
+      // Parasols de terrasse — 4 teintes calées EXACTEMENT sur l'échelle de la
+      // note /10 (lib/sunNote.noteColor) pour que carte et pastilles coïncident :
+      //   note ≥8 or chaud · 6-7 jaune marque · 4-5 ambre terne · <4 gris-bleu
       if (!map.hasImage('parasol-sun')) {
-        map.addImage('parasol-sun',   drawParasol('#FFC233', '#F49000') as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
+        map.addImage('parasol-sun',    drawParasol('#FFB020', '#E07A00') as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
+      }
+      if (!map.hasImage('parasol-bright')) {
+        map.addImage('parasol-bright', drawParasol('#FFD24D', '#F2B70A') as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
       }
       if (!map.hasImage('parasol-mid')) {
-        map.addImage('parasol-mid',   drawParasol('#FAD98A', '#E0B25A') as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
+        map.addImage('parasol-mid',    drawParasol('#E6D08A', '#C49A3F') as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
       }
       if (!map.hasImage('parasol-shade')) {
-        map.addImage('parasol-shade', drawParasol('#AEB8C7', '#8694A6') as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
+        map.addImage('parasol-shade',  drawParasol('#B6C0CE', '#8694A6') as unknown as HTMLImageElement, { pixelRatio: PIN_SCALE })
       }
 
       // Ombres solaires dès le chargement — utilise l'heure courante via ref
@@ -650,10 +655,10 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         id: 'terraces-glow', type: 'circle', source: 'terraces-pts',
         ...slotTop,
         minzoom: 15,
-        filter: ['>=', ['get', 's'], 3.5],
+        filter: ['>=', ['get', 's'], 3],
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 15, 10, 17, 20, 19, 34],
-          'circle-color':  '#FFC233',
+          'circle-color':  '#FFB020',
           'circle-blur':   1.0,
           'circle-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0, 16, 0.35, 19, 0.45],
         },
@@ -665,7 +670,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         ...slotTop,
         minzoom: 15,
         layout: {
-          'icon-image': ['step', ['get', 's'], 'parasol-shade', 2, 'parasol-mid', 3.5, 'parasol-sun'],
+          'icon-image': ['step', ['get', 's'], 'parasol-shade', 2, 'parasol-mid', 3, 'parasol-bright', 4, 'parasol-sun'],
           'icon-anchor': 'bottom',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
