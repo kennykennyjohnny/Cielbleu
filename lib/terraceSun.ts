@@ -77,11 +77,14 @@ export function terraceSunScore(p: Place, date: Date, cloudCover?: number | null
     score = (1.3 + 3.7 * light) * (0.5 + 0.5 * altF) // ~1.4 … 5
   }
 
-  // Couverture nuageuse en direct
-  if (cloudCover != null) {
-    if (cloudCover > 85) score = Math.min(score, 1)
-    else if (cloudCover > 65) score -= 2
-    else if (cloudCover > 45) score -= 1
+  // Couverture nuageuse — atténuation MULTIPLICATIVE : les nuages baissent la
+  // lumière mais préservent la hiérarchie d'orientation (un coin bien exposé
+  // reste le plus lumineux, même par ciel voilé). Évite d'écraser tout à plat.
+  //   ciel clair (≤25%)  → facteur ~1
+  //   ciel couvert (100%) → facteur ~0.30
+  if (cloudCover != null && cloudCover > 25) {
+    const cloudF = Math.max(0.3, 1 - (cloudCover - 25) / 105)
+    score = 1 + (score - 1) * cloudF
   }
 
   return Math.max(0, Math.min(5, score))

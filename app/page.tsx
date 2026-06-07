@@ -503,54 +503,51 @@ export default function HomePage() {
   )
 
   // ── Recommandations « trouver une terrasse ensoleillée » ──────────────────
-  // Classement par EXPOSITION géométrique (soleil + orientation, SANS nuages) :
-  // il y a donc toujours des suggestions de jour, même par ciel voilé (on le
-  // signale dans le titre). Uniquement les terrasses GÉOLOCALISÉES (terrace_lat).
+  // IMPORTANT : on classe et on affiche avec la MÊME note que la fiche
+  // (currentScore = score RÉEL en direct : soleil + orientation + nuages).
+  // → la note de la pastille == la note de la card quand on clique. Cohérent.
+  // Uniquement les terrasses géolocalisées (terrace_lat).
   const allTerraces = useMemo(
     () => places.filter(p => p.terrace_lat != null && p.terrace_lng != null && !isHiddenPlace(p)),
     [places]
   )
-  const hourDate = useMemo(() => {
+  const recoNote = useCallback((p: Place) => sunNote10(p.currentScore), [])
+  const MIN_RECO = 2 // score ≥ 2 → note ≥ 4 (on montre toujours les meilleures du moment)
+
+  // Score live d'un lieu à l'heure courante (utilisé à la sélection pour que la
+  // card affiche EXACTEMENT la même note que la carte/les recos).
+  const liveScoreOf = useCallback((p: Place) => {
+    if (p.terrace_lat == null || p.terrace_lng == null) return p.currentScore ?? 3
     const d = new Date()
     d.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
-    return d
-  }, [hour])
-  const exposureOf = useCallback(
-    (p: Place) => terraceSunScore(p, hourDate, 0), // cloud=0 → exposition pure
-    [hourDate]
-  )
-  const veiled = (cloudForHour ?? 0) > 45
+    return terraceSunScore(p, d, cloudForHour)
+  }, [hour, cloudForHour])
+  // Titre adaptatif : « au soleil » seulement si le top est franchement ensoleillé
+  const sunnyTitle = (cloudForHour ?? 0) > 50 ? 'Les plus lumineuses maintenant' : 'Au soleil maintenant'
 
-  // Au-dessus de la recherche : les mieux exposées maintenant
+  // Au-dessus de la recherche : les terrasses les plus ensoleillées maintenant
   const sunnyTop = useMemo(() => {
     return allTerraces
-      .map(p => ({ p, e: exposureOf(p) }))
-      .filter(x => x.e >= 3.5)
-      .sort((a, b) => b.e - a.e || (b.p.google_rating ?? 0) - (a.p.google_rating ?? 0))
+      .filter(p => (p.currentScore ?? 0) >= MIN_RECO)
+      .sort((a, b) => (b.currentScore ?? 0) - (a.currentScore ?? 0) || (b.google_rating ?? 0) - (a.google_rating ?? 0))
       .slice(0, 12)
-      .map(x => x.p)
-  }, [allTerraces, exposureOf])
+  }, [allTerraces])
 
-  // Fiche ouverte : bonnes terrasses ensoleillées à proximité (≤ 700 m),
-  // triées par exposition. On met en avant celles MIEUX exposées que la
-  // sélection (le « mieux à côté »), mais on complète avec les autres bien
-  // exposées pour toujours proposer des options utiles.
+  // Fiche ouverte : terrasses plus ensoleillées à proximité (≤ 450 m).
   const sunnyNearby = useMemo(() => {
     if (!selectedPlace) return []
     const [la, lo] = placeCoord(selectedPlace)
-    const selExp = exposureOf(selectedPlace)
+    const selScore = selectedPlace.currentScore ?? 0
     const near = allTerraces
       .filter(p => p.id !== selectedPlace.id)
-      .map(p => { const [pa, po] = placeCoord(p); return { p, e: exposureOf(p), d: distanceM(la, lo, pa, po) } })
-      .filter(x => x.d <= 450 && x.e >= 3.5)
-      .sort((a, b) => b.e - a.e || a.d - b.d)
-    // priorité aux strictement mieux exposées, puis on complète
-    const better = near.filter(x => x.e >= selExp + 0.4)
+      .map(p => { const [pa, po] = placeCoord(p); return { p, s: p.currentScore ?? 0, d: distanceM(la, lo, pa, po) } })
+      .filter(x => x.d <= 450 && x.s >= MIN_RECO)
+      .sort((a, b) => b.s - a.s || a.d - b.d)
+    // priorité aux strictement mieux ensoleillées que la sélection, puis on complète
+    const better = near.filter(x => x.s >= selScore + 0.5)
     const list = (better.length >= 3 ? better : near).slice(0, 8)
     return list.map(x => x.p)
-  }, [selectedPlace, allTerraces, exposureOf])
-
-  const recoNote = useCallback((p: Place) => sunNote10(exposureOf(p)), [exposureOf])
+  }, [selectedPlace, allTerraces])
 
   // ── Position du bouton "recentrer" — toujours au-dessus du panel ouvert ──
   // Le bouton suit le bord supérieur du panel (même transition que le sheet)
@@ -566,39 +563,55 @@ export default function HomePage() {
     return `calc(max(env(safe-area-inset-bottom, 0px), 10px) + ${base}px)`
   }, [isDesktop, selectedPlace, selectedAmenite, showProfile, searchQuery, sunnyTop.length])
 
-  // ── Sync scores du slider (debounce 400 ms) ──────────────────────────────
-  // Quand l'heure change, re-fetche sun_scores pour le nouveau créneau.
-  // Si la DB n'a pas encore de données → fallback suncalc (altitude solaire Paris).
+  // ── Scores en DIRECT au mouvement du slider ───────────────────────────────
+  // Les TERRASSES sont recalculées LOCALEMENT (terraceSunScore : soleil +
+  // orientation + nuages) sans attendre le réseau → réactif au curseur.
+  // Petit debounce 90 ms pour throttler le rebuild de la couche carte.
   useEffect(() => {
     if (!places.length) return
-    const slot   = hourToSlot(hour)
-    const month  = new Date().getMonth() + 1
+    const d = new Date()
+    d.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
 
+    const t = window.setTimeout(() => {
+      setPlaces(prev => prev.map(p =>
+        (p.terrace_lat != null && p.terrace_lng != null)
+          ? { ...p, currentScore: terraceSunScore(p, d, cloudForHour) }
+          : p
+      ))
+      // La fiche ouverte suit aussi le curseur en direct
+      setSelectedPlace(prev =>
+        prev && prev.terrace_lat != null && prev.terrace_lng != null
+          ? { ...prev, currentScore: terraceSunScore(prev, d, cloudForHour) }
+          : prev
+      )
+    }, 90)
+    return () => window.clearTimeout(t)
+  }, [hour, cloudForHour]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Scores des lieux SANS terrasse géolocalisée (DB précalculée) ──────────
+  // Séparé et plus lent (réseau) — n'impacte pas la réactivité des terrasses.
+  useEffect(() => {
+    if (!places.length) return
+    const slot  = hourToSlot(hour)
+    const month = new Date().getMonth() + 1
     const t = window.setTimeout(async () => {
       const { data } = await supabase
         .from('sun_scores').select('place_id, score')
         .eq('month', month).eq('time_slot', slot)
-
       const d = new Date()
       d.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
       const pos = getSunPosition(d, 48.8566, 2.3522)
       const alt = (pos.altitude * 180) / Math.PI
       const altScore = pos.altitude <= 0 ? 0 : alt < 5 ? 2 : alt < 15 ? 3 : alt < 35 ? 4 : 5
       const byId = new Map((data ?? []).map(r => [r.place_id, r.score]))
-
-      // Score par lieu :
-      //  • terrasse géolocalisée → calcul EN DIRECT (soleil + orientation façade
-      //    + nuages, à la position de la terrasse) — répond précisément à l'heure
-      //  • sinon → score DB précalculé (ombres bâtiments) ou fallback altitude
-      setPlaces(prev => prev.map(p => {
-        if (p.terrace_lat != null && p.terrace_lng != null) {
-          return { ...p, currentScore: terraceSunScore(p, d, cloudForHour) }
-        }
-        return { ...p, currentScore: byId.get(p.id) ?? altScore }
-      }))
-    }, 250)
+      setPlaces(prev => prev.map(p =>
+        (p.terrace_lat != null && p.terrace_lng != null)
+          ? p
+          : { ...p, currentScore: byId.get(p.id) ?? altScore }
+      ))
+    }, 350)
     return () => window.clearTimeout(t)
-  }, [hour, cloudForHour]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hour]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleFilter = useCallback((filter: FilterType) => {
     setActiveFilters((prev) =>
@@ -609,7 +622,8 @@ export default function HomePage() {
   const handlePlaceSelect = useCallback(async (place: Place | null) => {
     if (!place) { setSelectedPlace(null); return }
     setSelectedAmenite(null)
-    setSelectedPlace(place)   // affiche la card immédiatement avec les données slim
+    // currentScore garanti → la card affiche la même note que la carte/les recos
+    setSelectedPlace({ ...place, currentScore: liveScoreOf(place) })
     setSearchQuery('')
     setSelectedScores([])     // vide les scores de la fiche précédente
 
@@ -627,12 +641,12 @@ export default function HomePage() {
     if (fullPlace) {
       setSelectedPlace(prev =>
         prev?.id === place.id
-          ? ({ ...fullPlace, currentScore: prev.currentScore } as Place)
+          ? ({ ...fullPlace, currentScore: liveScoreOf(fullPlace as Place) } as Place)
           : prev
       )
     }
     setSelectedScores(scores ?? [])
-  }, [])
+  }, [liveScoreOf])
 
   const handleClose = useCallback(() => {
     setSelectedPlace(null)
@@ -1247,7 +1261,7 @@ export default function HomePage() {
             {!searchQuery.trim() && sunnyTop.length > 0 && (
               <div className="px-3 pt-3">
                 <SunnyStrip
-                  title={veiled ? 'Mieux exposées (ciel voilé)' : 'Au soleil maintenant'}
+                  title={sunnyTitle}
                   items={sunnyTop}
                   onSelect={handlePlaceSelect}
                   noteOf={recoNote}
