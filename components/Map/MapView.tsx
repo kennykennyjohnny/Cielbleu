@@ -425,13 +425,16 @@ interface Props {
   showSanisettes?: boolean
   // Callback quand l'utilisateur clique sur une fontaine / sanisette
   onAmeniteSelect?: (amenite: AmeniteInfo | null) => void
+  // Incrémenter ce compteur déclenche la géolocalisation (point bleu + centrage)
+  geolocateNonce?: number
 }
 
-export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, flyToTarget, showFontaines, showSanisettes, onAmeniteSelect, highlightPlaceId }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, flyToTarget, showFontaines, showSanisettes, onAmeniteSelect, highlightPlaceId, geolocateNonce }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
   const onSelectRef   = useRef(onPlaceSelect)
+  const geoRef        = useRef<mapboxgl.GeolocateControl | null>(null)
   placesRef.current   = places
   onSelectRef.current = onPlaceSelect
 
@@ -532,10 +535,16 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     })
 
     map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-left')
-    map.addControl(
-      new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true, showUserHeading: true }),
-      'bottom-right'
-    )
+    // Géolocalisation : on garde le contrôle Mapbox (point bleu + suivi) mais on
+    // masque son bouton par défaut — il est déclenché par notre bouton custom en
+    // haut (via la prop geolocateNonce). Le conteneur est caché en CSS.
+    const geo = new mapboxgl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true }, trackUserLocation: true, showUserHeading: true,
+    })
+    map.addControl(geo, 'bottom-right')
+    geoRef.current = geo
+    // Cache le bouton par défaut (on pilote via notre UI)
+    try { (geo as unknown as { _container?: HTMLElement })._container!.style.display = 'none' } catch { /* noop */ }
 
     map.on('style.load', () => {
       applyStyle(map)
@@ -1008,6 +1017,12 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     })
   }, [homeView]) // eslint-disable-line
 
+  // ── Géolocalisation déclenchée depuis le bouton custom (en haut) ────────
+  useEffect(() => {
+    if (!geolocateNonce) return
+    try { geoRef.current?.trigger() } catch { /* noop */ }
+  }, [geolocateNonce])
+
   // ── Recentrage sur une rue / adresse géocodée (recherche) ──────────────
   useEffect(() => {
     if (!flyToTarget) return
@@ -1049,6 +1064,11 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (map.getLayer('cluster-count'))   map.setPaintProperty('cluster-count', 'text-opacity', 0.55)
         if (map.getLayer('fontaines-layer')) map.setPaintProperty('fontaines-layer', 'icon-opacity', 0.55)
         if (map.getLayer('sanisettes-layer')) map.setPaintProperty('sanisettes-layer', 'icon-opacity', 0.55)
+        // Le parasol du lieu choisi reste net, les autres s'estompent
+        if (map.getLayer('terraces-parasol')) map.setPaintProperty('terraces-parasol', 'icon-opacity',
+          ['case', ['==', ['get', 'id'], highlightPlaceId], 1, 0.30])
+        if (map.getLayer('terraces-glow')) map.setPaintProperty('terraces-glow', 'circle-opacity',
+          ['case', ['==', ['get', 'id'], highlightPlaceId], 0.5, 0.1])
       } else {
         map.setPaintProperty('places-pins', 'icon-opacity', 1)
         if (map.getLayer('clusters'))        map.setPaintProperty('clusters', 'circle-opacity', 1)
@@ -1056,6 +1076,9 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (map.getLayer('cluster-count'))   map.setPaintProperty('cluster-count', 'text-opacity', 1)
         if (map.getLayer('fontaines-layer')) map.setPaintProperty('fontaines-layer', 'icon-opacity', 1)
         if (map.getLayer('sanisettes-layer')) map.setPaintProperty('sanisettes-layer', 'icon-opacity', 1)
+        if (map.getLayer('terraces-parasol')) map.setPaintProperty('terraces-parasol', 'icon-opacity', 1)
+        if (map.getLayer('terraces-glow')) map.setPaintProperty('terraces-glow', 'circle-opacity',
+          ['interpolate', ['linear'], ['zoom'], 15, 0, 16, 0.35, 19, 0.45])
       }
       const selSrc = map.getSource('selected-place') as mapboxgl.GeoJSONSource | undefined
       if (selSrc) {

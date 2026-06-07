@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Search, X, Clock, UserCircle, Compass, MapPin, ArrowUpRight, Sun } from 'lucide-react'
+import { Search, X, Clock, UserCircle, Compass, MapPin, ArrowUpRight, Sun, LocateFixed } from 'lucide-react'
 import PlaceTypeIcon from '@/components/Map/PlaceTypeIcon'
 import { supabase } from '@/lib/supabase'
 import { getSunPosition, getSunTimes } from '@/lib/suncalc'
@@ -82,6 +82,7 @@ export default function HomePage() {
   const slotAnimRef = useRef<number | null>(null)
   const [isDesktop, setIsDesktop] = useState(false)
   const [homeViewCount, setHomeViewCount] = useState(0)
+  const [geolocateNonce, setGeolocateNonce] = useState(0)
   const [showProfile, setShowProfile] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null)
@@ -549,19 +550,6 @@ export default function HomePage() {
     return list.map(x => x.p)
   }, [selectedPlace, allTerraces])
 
-  // ── Position du bouton "recentrer" — toujours au-dessus du panel ouvert ──
-  // Le bouton suit le bord supérieur du panel (même transition que le sheet)
-  // et reste visible quelle que soit la card ouverte.
-  const recenterBottom = useMemo(() => {
-    if (isDesktop) return '165px'
-    if (selectedPlace && !isDesktop) return '52dvh'
-    if (selectedAmenite) return 'calc(62vh + 14px)'
-    if (showProfile)     return 'calc(90dvh + 14px)' // off-screen, OK
-    // La pill du bas est plus haute quand la bande de recommandations s'affiche
-    // → on remonte le bouton pour ne pas le masquer.
-    const base = (!searchQuery.trim() && sunnyTop.length > 0) ? 289 : 225
-    return `calc(max(env(safe-area-inset-bottom, 0px), 10px) + ${base}px)`
-  }, [isDesktop, selectedPlace, selectedAmenite, showProfile, searchQuery, sunnyTop.length])
 
   // ── Scores en DIRECT au mouvement du slider ───────────────────────────────
   // Les TERRASSES sont recalculées LOCALEMENT (terraceSunScore : soleil +
@@ -734,6 +722,7 @@ export default function HomePage() {
           showFontaines={activeFilters.includes('fontaine')}
           showSanisettes={activeFilters.includes('sanisette')}
           onAmeniteSelect={handleAmeniteSelect}
+          geolocateNonce={geolocateNonce}
         />
       </div>
 
@@ -1328,31 +1317,48 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ─── Bouton recentrer ─── toujours visible, flotte au-dessus du panel ── */}
-      <button
-        onClick={() => { setHomeViewCount(c => c + 1) }}
-        aria-label="Recentrer la carte sur Paris"
-        title="Recentrer"
-        className="active:scale-[0.88] transition-transform"
+      {/* ─── Contrôles carte : géoloc + recentrer ─── en HAUT à droite, sous le
+           slider (jamais masqués par la card du bas). Décalés à gauche du panneau
+           desktop quand il est ouvert. */}
+      <div
         style={{
           position: 'absolute',
-          right: 14,
-          bottom: recenterBottom,
+          top: `calc(${headerH}px + 10px)`,
+          right: isDesktop && (selectedPlace || selectedAmenite || showProfile) ? 434 : 14,
           zIndex: 22,
-          width: 42, height: 42,
-          borderRadius: '50%',
-          background: 'rgba(255,252,243,0.97)',
-          backdropFilter: 'blur(18px)',
-          WebkitBackdropFilter: 'blur(18px)',
-          border: '1.5px solid rgba(31,58,95,0.12)',
-          boxShadow: '0 4px 16px rgba(31,58,95,0.14)',
-          cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'bottom 280ms cubic-bezier(0.2,0.8,0.2,1)',
+          display: 'flex', flexDirection: 'column', gap: 8,
+          transition: 'right 280ms cubic-bezier(0.2,0.8,0.2,1)',
         }}
       >
-        <Compass size={18} strokeWidth={2} style={{ color: '#1F3A5F' }} />
-      </button>
+        <button
+          onClick={() => setGeolocateNonce(c => c + 1)}
+          aria-label="Me localiser"
+          title="Me localiser"
+          className="active:scale-[0.88] transition-transform"
+          style={{
+            width: 42, height: 42, borderRadius: '50%',
+            background: 'rgba(255,252,243,0.97)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+            border: '1.5px solid rgba(31,58,95,0.12)', boxShadow: '0 4px 16px rgba(31,58,95,0.14)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <LocateFixed size={18} strokeWidth={2} style={{ color: '#3A86FF' }} />
+        </button>
+        <button
+          onClick={() => { setHomeViewCount(c => c + 1) }}
+          aria-label="Recentrer la carte sur Paris"
+          title="Recentrer"
+          className="active:scale-[0.88] transition-transform"
+          style={{
+            width: 42, height: 42, borderRadius: '50%',
+            background: 'rgba(255,252,243,0.97)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+            border: '1.5px solid rgba(31,58,95,0.12)', boxShadow: '0 4px 16px rgba(31,58,95,0.14)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Compass size={18} strokeWidth={2} style={{ color: '#1F3A5F' }} />
+        </button>
+      </div>
 
       {/* ─── Panel Profil (desktop : côté droit, mobile : bottom sheet) ─── */}
       {showProfile && isDesktop && (

@@ -16,27 +16,40 @@
 import type { Place } from '@/types'
 import { getSunPosition } from '@/lib/suncalc'
 
-/** Direction (deg compass, 0=N) vers laquelle la terrasse est « ouverte » (la rue). */
+const angDiff = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180)
+
+/**
+ * Direction (deg compass, 0=N) vers laquelle la terrasse est « ouverte » (la rue).
+ * Stratégie fiable :
+ *   • AXE de la façade = terrace_bearing (précalculé sur les vrais bâtiments) —
+ *     beaucoup plus stable que le vecteur bar→terrasse seul.
+ *   • CÔTÉ rue (laquelle des 2 perpendiculaires) = donné par le vecteur
+ *     bar→terrasse s'il est franc (≥ 4 m), sinon le côté le plus au sud.
+ *   • Pas de bearing → on retombe sur le vecteur, puis sud.
+ */
 function openDirectionDeg(p: Place): number {
   const tLat = p.terrace_lat ?? p.lat
   const tLng = p.terrace_lng ?? p.lng
-  // 1) vecteur lieu(bar) → terrasse : pointe du bâtiment vers la rue (le plus fiable)
-  if (Math.abs(tLat - p.lat) > 1e-7 || Math.abs(tLng - p.lng) > 1e-7) {
-    const cosLat = Math.cos((p.lat * Math.PI) / 180)
-    const dx = (tLng - p.lng) * cosLat
-    const dy = tLat - p.lat
-    return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360
-  }
-  // 2) à défaut : perpendiculaire à la façade, côté le plus ensoleillé (sud)
+
+  // Vecteur bar→terrasse (côté rue) — seulement s'il est assez franc
+  let vecDeg: number | null = null
+  const cosLat = Math.cos((p.lat * Math.PI) / 180)
+  const dx = (tLng - p.lng) * cosLat
+  const dy = tLat - p.lat
+  const distM = Math.hypot(dx, dy) * 111_320
+  if (distM >= 4) vecDeg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360
+
   if (p.terrace_bearing != null) {
-    const a = p.terrace_bearing
-    const n1 = (a + 90) % 360
-    const n2 = (a + 270) % 360
-    // on choisit la normale la plus proche du sud (180°) = meilleure expo
-    const dTo = (x: number) => Math.abs(((x - 180 + 540) % 360) - 180)
-    return dTo(n1) <= dTo(n2) ? n1 : n2
+    const n1 = (p.terrace_bearing + 90) % 360
+    const n2 = (p.terrace_bearing + 270) % 360
+    if (vecDeg != null) {
+      // normale la plus alignée avec le côté rue observé
+      return angDiff(n1, vecDeg) <= angDiff(n2, vecDeg) ? n1 : n2
+    }
+    // sinon : côté le plus au sud (meilleure expo par défaut)
+    return angDiff(n1, 180) <= angDiff(n2, 180) ? n1 : n2
   }
-  return 180 // sud par défaut
+  return vecDeg ?? 180
 }
 
 export function terraceSunScore(p: Place, date: Date, cloudCover?: number | null): number {
@@ -55,12 +68,9 @@ export function terraceSunScore(p: Place, date: Date, cloudCover?: number | null
   const diff = Math.abs(((sunAz - openDeg + 540) % 360) - 180)
   const exposure = Math.cos((diff * Math.PI) / 180) // 1 (plein face) … -1 (derrière)
 
-  // Atténuation par hauteur du soleil (rasant = plus faible / vite masqué)
-  const altF =
-    altDeg >= 35 ? 1 :
-    altDeg >= 20 ? 0.9 :
-    altDeg >= 10 ? 0.7 :
-    altDeg >= 5  ? 0.5 : 0.32
+  // Atténuation par hauteur du soleil (rasant = plus faible) — continue, pas de
+  // paliers → la note évolue en douceur quand on bouge le curseur.
+  const altF = Math.max(0.32, Math.min(1, altDeg / 35))
 
   // Exposition directionnelle : 1 = soleil pile en face, 0 = derrière la façade.
   const dir = Math.max(0, (exposure + 0.25) / 1.25)
