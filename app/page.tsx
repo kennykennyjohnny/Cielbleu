@@ -20,6 +20,8 @@ import { isHiddenPlace } from '@/lib/terraceClassify'
 import { geocodeParis, type GeoResult } from '@/lib/geocode'
 import type { Place, FilterType, WeatherForecastEntry, AmeniteInfo } from '@/types'
 import PwaInstallPrompt from '@/components/PwaInstallPrompt'
+import SunnyStrip from '@/components/SunnyStrip'
+import { recommendSunnyTerraces, placeCoord } from '@/lib/sunNote'
 
 function nowQuarter(): number {
   const now = new Date()
@@ -497,6 +499,29 @@ export default function HomePage() {
     () => displayedPlaces.filter((p) => (p.currentScore ?? 0) >= 4).length,
     [displayedPlaces]
   )
+
+  // ── Recommandations « terrasses au soleil » ───────────────────────────────
+  // Au-dessus de la recherche : les terrasses les plus ensoleillées maintenant
+  // (parmi les lieux affichés, donc filtrées par la zone/filtres actifs).
+  const sunnyTop = useMemo(
+    () => recommendSunnyTerraces(displayedPlaces, { minNote: 7, limit: 12 }),
+    [displayedPlaces]
+  )
+
+  // Au-dessus de la fiche : terrasses PLUS ensoleillées que la sélection, à
+  // proximité immédiate (≤ 600 m). Aide à « trouver mieux juste à côté ».
+  const sunnyNearby = useMemo(() => {
+    if (!selectedPlace) return []
+    const [la, lo] = placeCoord(selectedPlace)
+    const selNote = (selectedPlace.currentScore ?? 0) * 2
+    return recommendSunnyTerraces(displayedPlaces, {
+      nearLat: la, nearLng: lo,
+      excludeId: selectedPlace.id,
+      minNote: Math.max(7, Math.ceil(selNote) + 1),
+      maxDistanceM: 600,
+      limit: 8,
+    })
+  }, [selectedPlace, displayedPlaces])
 
   // ── Position du bouton "recentrer" — toujours au-dessus du panel ouvert ──
   // Le bouton suit le bord supérieur du panel (même transition que le sheet)
@@ -1177,6 +1202,18 @@ export default function HomePage() {
               </div>
             )}
 
+            {/* ── Reco terrasses au soleil maintenant (cachées en recherche) ── */}
+            {!searchQuery.trim() && sunnyTop.length > 0 && (
+              <div className="px-3 pt-3">
+                <SunnyStrip
+                  title="Au soleil maintenant"
+                  items={sunnyTop}
+                  onSelect={handlePlaceSelect}
+                  compact
+                />
+              </div>
+            )}
+
             {/* ── Bulles d'aperçu solaire ── (cachées pendant une recherche) */}
             {!searchQuery.trim() && (
               <div className="px-3 pt-3">
@@ -1379,19 +1416,30 @@ export default function HomePage() {
           }}
           role="complementary" aria-label={`Détails de ${selectedPlace.name}`}
         >
-          <PlacePageClient
-            place={selectedPlace}
-            scores={selectedScores}
-            hour={hour}
-            onHourChange={setHour}
-            onClose={handleClose}
-            userId={userId}
-            onOpenProfile={() => { setShowProfile(true); setSelectedPlace(null) }}
-            sunsetHour={sunsetHour}
-            activeSlot={activeSlot}
-            onSlotPreview={previewSlot}
-            cloudCover={cloudForHour}
-          />
+          {sunnyNearby.length > 0 && (
+            <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid rgba(31,58,95,0.08)', flexShrink: 0 }}>
+              <SunnyStrip
+                title="Plus ensoleillées dans le quartier"
+                items={sunnyNearby}
+                onSelect={handlePlaceSelect}
+              />
+            </div>
+          )}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <PlacePageClient
+              place={selectedPlace}
+              scores={selectedScores}
+              hour={hour}
+              onHourChange={setHour}
+              onClose={handleClose}
+              userId={userId}
+              onOpenProfile={() => { setShowProfile(true); setSelectedPlace(null) }}
+              sunsetHour={sunsetHour}
+              activeSlot={activeSlot}
+              onSlotPreview={previewSlot}
+              cloudCover={cloudForHour}
+            />
+          </div>
         </aside>
       )}
 
@@ -1409,6 +1457,33 @@ export default function HomePage() {
         />
       )}
 
+
+      {/* Reco « plus ensoleillées » flottante au-dessus du sheet (mobile) */}
+      {selectedPlace && !isDesktop && sunnyNearby.length > 0 && (
+        <div
+          className="absolute inset-x-0 z-30"
+          style={{ bottom: 'calc(50dvh + 8px)', padding: '0 10px', pointerEvents: 'none' }}
+        >
+          <div
+            style={{
+              pointerEvents: 'auto',
+              background: 'rgba(255,248,234,0.97)',
+              backdropFilter: 'blur(18px)',
+              WebkitBackdropFilter: 'blur(18px)',
+              border: '1.5px solid rgba(31,58,95,0.10)',
+              borderRadius: 16,
+              boxShadow: '0 6px 22px rgba(31,58,95,0.14)',
+              padding: '8px 10px 10px',
+            }}
+          >
+            <SunnyStrip
+              title="Plus ensoleillées dans le quartier"
+              items={sunnyNearby}
+              onSelect={handlePlaceSelect}
+            />
+          </div>
+        </div>
+      )}
 
       <PwaInstallPrompt />
     </main>

@@ -463,10 +463,12 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     type: 'FeatureCollection',
     features: terracePlaces.map(p => {
       const area = (p.terrace_longueur ?? 6) * (p.terrace_largeur ?? 3)
+      // Facteur de taille du parasol selon la surface réelle (petite 0.8 → grande 1.35)
+      const sz = Math.max(0.8, Math.min(1.35, 0.7 + Math.sqrt(area) / 14))
       return {
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [p.terrace_lng!, p.terrace_lat!] },
-        properties: { id: p.id, name: p.name, s: p.currentScore ?? 3, r: Math.max(3, Math.min(10, Math.sqrt(area))) },
+        properties: { id: p.id, name: p.name, s: p.currentScore ?? 3, r: Math.max(3, Math.min(10, Math.sqrt(area))), sz },
       }
     }),
   }), [terracePlaces])
@@ -645,7 +647,11 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'icon-anchor': 'bottom',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 15, 0.42, 17, 0.7, 19, 1.0],
+          'icon-size': ['interpolate', ['linear'], ['zoom'],
+            15, ['*', 0.42, ['coalesce', ['get', 'sz'], 1]],
+            17, ['*', 0.70, ['coalesce', ['get', 'sz'], 1]],
+            19, ['*', 1.00, ['coalesce', ['get', 'sz'], 1]],
+          ],
         },
       } as Parameters<typeof map.addLayer>[0])
 
