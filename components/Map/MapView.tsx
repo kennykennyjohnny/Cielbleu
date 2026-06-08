@@ -410,7 +410,7 @@ interface Props {
   // à la caméra précédente. Ne recrée PAS la carte, économise les tiles.
   // terraceLat/Lng optionnels : si dispo, la caméra se centre sur la terrasse
   // plutôt que sur l'entrée du bar → terrasse bien visible, moins masquée.
-  focusPlace?: { lng: number; lat: number; terraceLat?: number | null; terraceLng?: number | null } | null
+  focusPlace?: { lng: number; lat: number; terraceLat?: number | null; terraceLng?: number | null; terraceBearing?: number | null } | null
   // Heure solaire (0..24) — pilote `lightPreset` de Mapbox Standard pour
   // changer dawn/day/dusk/night en direct avec le slider. Passer un nombre
   // évite les problèmes de référence d'objet Date dans les deps useEffect.
@@ -435,6 +435,10 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   const placesRef     = useRef<Place[]>(places)
   const onSelectRef   = useRef(onPlaceSelect)
   const geoRef        = useRef<mapboxgl.GeolocateControl | null>(null)
+  // Auto-3D : pitch automatique au zoom. Refs pour pouvoir le suspendre pendant
+  // une séquence de focus (sinon le zoomend réécraserait le pitch choisi).
+  const autoPitchRef     = useRef(false)
+  const suppressAutoPitchRef = useRef(false)
   placesRef.current   = places
   onSelectRef.current = onPlaceSelect
 
@@ -827,16 +831,16 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     // ── Auto-3D : bascule en vue pitchée quand l'utilisateur zoome ──────────
     // Zoom ≥ 16 → pitch 48° automatique (bâtiments 3D, ombres visibles)
     // Zoom <  14 → retour pitch 0° (vue aérienne, lisibilité globale)
-    // Simple et fiable : pas de flag complexe, focusPlace/homeView
-    // écrasent le pitch via flyTo de toute façon.
-    let autoPitchOn = false
+    // Suspendu pendant une séquence de focus (suppressAutoPitchRef) pour ne pas
+    // réécraser le pitch/bearing choisi en arrivant sur une terrasse.
     map.on('zoomend', () => {
+      if (suppressAutoPitchRef.current) return
       const z = map.getZoom()
-      if (z >= 16 && !autoPitchOn) {
-        autoPitchOn = true
+      if (z >= 16 && !autoPitchRef.current) {
+        autoPitchRef.current = true
         map.easeTo({ pitch: 48, duration: 900, easing: t => t * (2 - t) })
-      } else if (z < 14 && autoPitchOn) {
-        autoPitchOn = false
+      } else if (z < 14 && autoPitchRef.current) {
+        autoPitchRef.current = false
         map.easeTo({ pitch: 0, duration: 600 })
       }
     })
@@ -971,21 +975,41 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       const centerLng = focusPlace.terraceLng ?? focusPlace.lng
       const centerLat = focusPlace.terraceLat ?? focusPlace.lat
 
-      // Bearing : pointer la caméra depuis la rue vers le bar (direction inverse terrasse→bar)
-      let autoBearing = 0
+      // ── Rotation pour DÉGAGER la terrasse ──────────────────────────────────
+      // La caméra doit regarder la façade DEPUIS la rue : terrasse au 1er plan,
+      // immeuble derrière (jamais devant). Direction de regard = du trottoir vers
+      // le bâtiment ≈ vecteur terrasse→bar.
+      let camBearing = 0
+      let vecBearing: number | null = null
       if (focusPlace.terraceLat && focusPlace.terraceLng) {
         const cosLat = Math.cos(focusPlace.lat * Math.PI / 180)
         const dx = (focusPlace.lng - focusPlace.terraceLng) * cosLat
         const dy = focusPlace.lat - focusPlace.terraceLat
-        autoBearing = ((Math.atan2(dx, dy) * 180 / Math.PI) + 360) % 360
+        if (Math.hypot(dx, dy) * 111320 >= 3) {
+          vecBearing = ((Math.atan2(dx, dy) * 180 / Math.PI) + 360) % 360
+        }
       }
+      if (focusPlace.terraceBearing != null) {
+        // Axe de façade fiable → on regarde perpendiculairement, côté bâtiment.
+        const n1 = (focusPlace.terraceBearing + 90) % 360
+        const n2 = (focusPlace.terraceBearing + 270) % 360
+        const dd = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180)
+        const ref = vecBearing ?? 0
+        camBearing = dd(n1, ref) <= dd(n2, ref) ? n1 : n2
+      } else if (vecBearing != null) {
+        camBearing = vecBearing
+      }
+
+      // Verrou : empêcher l'auto-3D (zoomend) d'écraser le pitch/bearing à l'arrivée
+      suppressAutoPitchRef.current = true
+      autoPitchRef.current = true
 
       map.flyTo({
         center:   [centerLng, centerLat],
-        zoom:     17.5,          // aérien : on voit la terrasse + le contexte de rue
-        pitch:    35,            // légèrement oblique : 3D visible sans tout cacher
-        bearing:  autoBearing,
-        duration: 1400,
+        zoom:     18.7,          // gros plan : les parasols sont bien lisibles
+        pitch:    55,            // bien oblique : on voit les parasols en 3D
+        bearing:  camBearing,    // façade en face → terrasse dégagée au 1er plan
+        duration: 1500,
         curve:    1.4,
         essential: true,
         padding: {
@@ -995,6 +1019,9 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           right:  isMobile ? 20 : 430,
         },
       })
+    } else {
+      // Sortie de focus → on réautorise l'auto-3D
+      suppressAutoPitchRef.current = false
     }
     // Quand focusPlace → null : la carte reste à sa position courante.
     // (Pas de fly-back — l'utilisateur glisse bas pour fermer, la vue ne bouge pas.)
