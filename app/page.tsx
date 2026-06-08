@@ -198,6 +198,7 @@ export default function HomePage() {
       lat: selectedPlace.lat,
       terraceLat: selectedPlace.terrace_lat ?? null,
       terraceLng: selectedPlace.terrace_lng ?? null,
+      terraceBearing: selectedPlace.terrace_bearing ?? null,
     } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedPlace?.id],
