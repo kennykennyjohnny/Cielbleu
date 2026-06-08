@@ -534,21 +534,25 @@ export default function HomePage() {
       .slice(0, 12)
   }, [allTerraces])
 
-  // Fiche ouverte : terrasses plus ensoleillées à proximité (≤ 450 m).
+  // Fiche ouverte : UNIQUEMENT des terrasses vraiment ensoleillées (note ≥ 7)
+  // ET strictement mieux exposées que la sélection, à proximité (≤ 450 m).
+  // Pas de remplissage trompeur → si vide, on affiche un message honnête.
+  const SUNNY = 3.5 // score ≥ 3.5 → note ≥ 7 (« ensoleillé »)
   const sunnyNearby = useMemo(() => {
     if (!selectedPlace) return []
     const [la, lo] = placeCoord(selectedPlace)
     const selScore = selectedPlace.currentScore ?? 0
-    const near = allTerraces
+    return allTerraces
       .filter(p => p.id !== selectedPlace.id)
       .map(p => { const [pa, po] = placeCoord(p); return { p, s: p.currentScore ?? 0, d: distanceM(la, lo, pa, po) } })
-      .filter(x => x.d <= 450 && x.s >= MIN_RECO)
+      .filter(x => x.d <= 450 && x.s >= SUNNY && x.s >= selScore + 0.5)
       .sort((a, b) => b.s - a.s || a.d - b.d)
-    // priorité aux strictement mieux ensoleillées que la sélection, puis on complète
-    const better = near.filter(x => x.s >= selScore + 0.5)
-    const list = (better.length >= 3 ? better : near).slice(0, 8)
-    return list.map(x => x.p)
+      .slice(0, 8)
+      .map(x => x.p)
   }, [selectedPlace, allTerraces])
+
+  // L'endroit choisi est-il déjà bien ensoleillé ? (pour le message si aucune reco)
+  const selectedIsSunny = (selectedPlace?.currentScore ?? 0) >= SUNNY
 
 
   // ── Scores en DIRECT au mouvement du slider ───────────────────────────────
@@ -660,6 +664,35 @@ export default function HomePage() {
     history.replaceState(null, '', '/')
     handleSelectPlaceFromProfile(id)
   }, [handleSelectPlaceFromProfile])
+
+  // Contenu de la reco « à proximité » dans la card : soit la bande de
+  // terrasses ensoleillées, soit un message honnête s'il n'y en a pas.
+  const renderNearbyReco = (variant: 'compact' | 'mini') => {
+    if (sunnyNearby.length > 0) {
+      return (
+        <SunnyStrip
+          title="Plus ensoleillées à proximité"
+          items={sunnyNearby}
+          onSelect={handlePlaceSelect}
+          noteOf={recoNote}
+          compact={variant === 'compact'}
+          mini={variant === 'mini'}
+        />
+      )
+    }
+    const msg = selectedIsSunny
+      ? '☀️ Déjà l’une des plus ensoleillées du quartier'
+      : '🌥️ Aucune terrasse vraiment au soleil juste à côté'
+    return (
+      <div style={{
+        fontFamily: 'var(--font-outfit)', fontSize: variant === 'mini' ? 11.5 : 12.5,
+        fontWeight: 700, color: 'rgba(31,58,95,0.65)', display: 'flex', alignItems: 'center', gap: 6,
+        padding: '2px 2px',
+      }}>
+        {msg}
+      </div>
+    )
+  }
 
   return (
     <main className="relative h-dvh w-full overflow-hidden">
@@ -1479,17 +1512,9 @@ export default function HomePage() {
           }}
           role="complementary" aria-label={`Détails de ${selectedPlace.name}`}
         >
-          {sunnyNearby.length > 0 && (
-            <div style={{ padding: '10px 14px 9px', borderBottom: '1px solid rgba(31,58,95,0.08)', flexShrink: 0 }}>
-              <SunnyStrip
-                title="Mieux exposées à proximité"
-                items={sunnyNearby}
-                onSelect={handlePlaceSelect}
-                noteOf={recoNote}
-                compact
-              />
-            </div>
-          )}
+          <div style={{ padding: '10px 14px 9px', borderBottom: '1px solid rgba(31,58,95,0.08)', flexShrink: 0 }}>
+            {renderNearbyReco('compact')}
+          </div>
           <div style={{ flex: 1, minHeight: 0 }}>
             <PlacePageClient
               place={selectedPlace}
@@ -1519,15 +1544,7 @@ export default function HomePage() {
           activeSlot={activeSlot}
           onSlotPreview={previewSlot}
           cloudCover={cloudForHour}
-          reco={sunnyNearby.length > 0 ? (
-            <SunnyStrip
-              title="Mieux exposées à proximité"
-              items={sunnyNearby}
-              onSelect={handlePlaceSelect}
-              noteOf={recoNote}
-              mini
-            />
-          ) : null}
+          reco={renderNearbyReco('mini')}
         />
       )}
 
