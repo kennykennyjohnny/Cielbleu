@@ -11,6 +11,7 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import type { Place, AmeniteInfo } from '@/types'
 import { getSunPosition } from '@/lib/suncalc'
+import { openDirectionDeg, openDirectionFrom } from '@/lib/terraceSun'
 
 const PARIS_CENTER: [number, number] = [2.3522, 48.8566]
 
@@ -473,24 +474,18 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       // Facteur de taille du parasol selon la surface réelle (petite 0.8 → grande 1.35)
       const sz = Math.max(0.8, Math.min(1.35, 0.7 + Math.sqrt(area) / 14))
 
-      // Décale le parasol depuis le bord du trottoir VERS la rue (loin de la
-      // façade) → posé sur la terrasse, plus contre le bâtiment, et séparé du
-      // pin du lieu. Direction = bar→terrasse ; à défaut, perpendiculaire au
-      // bearing de façade côté sud ; à défaut, sud.
+      // Décale le parasol depuis la façade VERS la rue → posé sur la terrasse,
+      // jamais contre/dans le bâtiment, et séparé du pin du lieu.
+      // Direction = openDirectionDeg (axe de façade réel + désambiguïsation
+      // fiable) : EXACTEMENT la même « direction de la rue » que le score et la
+      // caméra → tout s'accorde. (Avant : vecteur bar→terrasse seul, qui pouvait
+      // pointer DANS le bâtiment quand le pin Google était décalé.)
       const M = 111_320
       const cosLat = Math.cos((p.terrace_lat! * Math.PI) / 180)
-      let ux = 0, uy = -1 // sud par défaut
-      const dE = (p.terrace_lng! - p.lng) * M * cosLat
-      const dN = (p.terrace_lat! - p.lat) * M
-      const dist = Math.hypot(dE, dN)
-      if (dist > 2) { ux = dE / dist; uy = dN / dist }
-      else if (p.terrace_bearing != null) {
-        const a = (p.terrace_bearing * Math.PI) / 180
-        const n1x = Math.cos(a), n1y = -Math.sin(a) // perpendiculaire au bearing
-        // choisit la normale qui pointe le plus vers le sud (meilleure expo)
-        ;[ux, uy] = n1y <= 0 ? [n1x, n1y] : [-n1x, -n1y]
-      }
-      const push = Math.max(2.5, (p.terrace_largeur ?? 3) / 2 + 2) // m vers la rue
+      const openRad = (openDirectionDeg(p) * Math.PI) / 180
+      const ux = Math.sin(openRad) // composante Est (vers la rue)
+      const uy = Math.cos(openRad) // composante Nord
+      const push = Math.min(4, Math.max(2, (p.terrace_largeur ?? 3) / 2 + 1)) // m vers la rue
       const lng = p.terrace_lng! + (ux * push) / (M * cosLat)
       const lat = p.terrace_lat! + (uy * push) / M
 
@@ -975,40 +970,41 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       const centerLng = focusPlace.terraceLng ?? focusPlace.lng
       const centerLat = focusPlace.terraceLat ?? focusPlace.lat
 
-      // ── Rotation pour DÉGAGER la terrasse ──────────────────────────────────
-      // La caméra doit regarder la façade DEPUIS la rue : terrasse au 1er plan,
-      // immeuble derrière (jamais devant). Direction de regard = du trottoir vers
-      // le bâtiment ≈ vecteur terrasse→bar.
-      let camBearing = 0
-      let vecBearing: number | null = null
-      if (focusPlace.terraceLat && focusPlace.terraceLng) {
-        const cosLat = Math.cos(focusPlace.lat * Math.PI / 180)
-        const dx = (focusPlace.lng - focusPlace.terraceLng) * cosLat
-        const dy = focusPlace.lat - focusPlace.terraceLat
-        if (Math.hypot(dx, dy) * 111320 >= 3) {
-          vecBearing = ((Math.atan2(dx, dy) * 180 / Math.PI) + 360) % 360
-        }
-      }
-      if (focusPlace.terraceBearing != null) {
-        // Axe de façade fiable → on regarde perpendiculairement, côté bâtiment.
-        const n1 = (focusPlace.terraceBearing + 90) % 360
-        const n2 = (focusPlace.terraceBearing + 270) % 360
-        const dd = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180)
-        const ref = vecBearing ?? 0
-        camBearing = dd(n1, ref) <= dd(n2, ref) ? n1 : n2
-      } else if (vecBearing != null) {
-        camBearing = vecBearing
-      }
+      // ── Orientation caméra : DÉGAGER la terrasse ──────────────────────────
+      // On REGARDE la façade depuis la rue : terrasse au 1er plan, immeuble
+      // DERRIÈRE — jamais un bâtiment entre l'œil et la terrasse.
+      // Direction « ouverte » (vers la rue) = openDirectionFrom : axe de façade
+      // réel + désambiguïsation fiable, IDENTIQUE au score et au parasol. La
+      // caméra regarde dans le sens inverse (rue → façade) ⇒ elle se place côté
+      // rue, l'immeuble passe au fond. (Avant : départage par le vecteur
+      // bar→terrasse seul, qui pouvait inverser le côté → bâtiment devant.)
+      const openDeg = openDirectionFrom({
+        lat: focusPlace.lat,
+        lng: focusPlace.lng,
+        terraceLat: focusPlace.terraceLat,
+        terraceLng: focusPlace.terraceLng,
+        terraceBearing: focusPlace.terraceBearing,
+      })
+      const camBearing = (openDeg + 180) % 360
+
+      // Léger recentrage vers la rue (≈ 4 m le long de la direction ouverte) :
+      // la terrasse occupe le 1er plan, l'immeuble n'écrase pas le cadre.
+      const oRad = (openDeg * Math.PI) / 180
+      const M = 111_320
+      const cosC = Math.cos((centerLat * Math.PI) / 180)
+      const offM = 4
+      const lookLng = centerLng + (Math.sin(oRad) * offM) / (M * cosC)
+      const lookLat = centerLat + (Math.cos(oRad) * offM) / M
 
       // Verrou : empêcher l'auto-3D (zoomend) d'écraser le pitch/bearing à l'arrivée
       suppressAutoPitchRef.current = true
       autoPitchRef.current = true
 
       map.flyTo({
-        center:   [centerLng, centerLat],
-        zoom:     18.7,          // gros plan : les parasols sont bien lisibles
-        pitch:    55,            // bien oblique : on voit les parasols en 3D
-        bearing:  camBearing,    // façade en face → terrasse dégagée au 1er plan
+        center:   [lookLng, lookLat],
+        zoom:     19.2,          // gros plan net : parasols bien lisibles
+        pitch:    52,            // oblique mais sans écraser : terrasse dégagée
+        bearing:  camBearing,    // façade en face → terrasse au 1er plan
         duration: 1500,
         curve:    1.4,
         essential: true,
