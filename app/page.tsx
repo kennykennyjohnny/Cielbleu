@@ -1373,17 +1373,21 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ─── Contrôles carte : géoloc + recentrer ─── en HAUT à droite, sous le
-           slider (jamais masqués par la card du bas). Décalés à gauche du panneau
-           desktop quand il est ouvert. */}
+      {/* ─── Contrôles carte : géoloc + recentrer ───
+           • Desktop : colonne, sous le header (le slider est DANS le header).
+           • Mobile : RANGÉE côte à côte, juste SOUS le slider flottant — sinon le
+             slider pleine largeur (z-18) les recouvrait. z au-dessus du slider +
+             clairance verticale → jamais masqués.
+           Décalés à gauche du panneau desktop quand il est ouvert. */}
       <div
         style={{
           position: 'absolute',
-          top: `calc(${headerH || 64}px + 12px)`,
+          top: isDesktop
+            ? `calc(${headerH || 64}px + 12px)`
+            : 'calc(max(env(safe-area-inset-top, 0px), 8px) + 142px)',
           right: isDesktop && (selectedPlace || selectedAmenite || showProfile) ? 434 : 14,
-          // z sous le header (z-20) : si jamais ça chevauche, le slider passe DEVANT
-          zIndex: 15,
-          display: 'flex', flexDirection: 'column', gap: 8,
+          zIndex: 19, // au-dessus du slider mobile (z-18) → jamais caché
+          display: 'flex', flexDirection: isDesktop ? 'column' : 'row', gap: 8,
           transition: 'right 280ms cubic-bezier(0.2,0.8,0.2,1)',
         }}
       >
