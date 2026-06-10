@@ -185,10 +185,32 @@ export default function HomePage() {
   }, [weather, hour])
 
   // Couverture nuageuse (%) à l'heure du slider — module les scores en direct.
+  // LISSÉE : moyenne pondérée des 2 créneaux de prévision (3h) qui encadrent
+  // l'heure choisie. Évite qu'un seul bucket nuageux (un passage de nuages)
+  // fasse chuter brutalement TOUS les scores — la couverture varie en douceur,
+  // comme le ressenti réel d'un après-midi « soleil et nuages ».
   const cloudForHour = useMemo<number | null>(() => {
+    // Quantifié à l'heure pleine : la valeur reste STABLE entre les ticks
+    // sous-horaires du slider → `displayedPlaces` (7000+ lieux) ne se recalcule
+    // pas à chaque frame pendant le drag (même fréquence qu'avant, + le lissage).
+    const qh = Math.round(hour)
+    const list = weather?.forecast
+    if (list && list.length > 0) {
+      const sorted = [...list].sort(
+        (a, b) => Math.abs((a.hour ?? 0) - qh) - Math.abs((b.hour ?? 0) - qh),
+      )
+      const a = sorted[0]
+      const b = sorted[1] ?? a
+      const da = Math.abs((a.hour ?? 0) - qh)
+      const db = Math.abs((b.hour ?? 0) - qh)
+      const wTot = da + db
+      // Le créneau le plus proche pèse le plus (poids ∝ distance de l'autre).
+      const blended = wTot === 0 ? a.cloudCover : (a.cloudCover * db + b.cloudCover * da) / wTot
+      return Math.round(blended)
+    }
     const c = weatherForHour as { cloudCover?: number } | null
     return typeof c?.cloudCover === 'number' ? c.cloudCover : null
-  }, [weatherForHour])
+  }, [weather, weatherForHour, hour])
 
   // focusPlace mémoisé pour éviter de re-déclencher le flyTo de la carte
   // à chaque rendu (ex. quand l'heure change dans le slider)
@@ -374,7 +396,7 @@ export default function HomePage() {
     // Pondération météo temps réel UNIQUEMENT pour les lieux SANS terrasse
     // géolocalisée (score DB/altitude). Les terrasses ont déjà leur score calculé
     // en direct par terraceSunScore() qui intègre les nuages → pas de double peine.
-    if (cloudForHour != null && cloudForHour > 45) {
+    if (cloudForHour != null && cloudForHour > 55) {
       result = result.map((p) => {
         if (p.terrace_lat != null) return p
         const raw = p.currentScore ?? 3

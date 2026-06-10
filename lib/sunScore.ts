@@ -120,19 +120,24 @@ export function calculateSunScore(
  * "temps réel" sans recalculer toute la base.
  *
  *   • nuit (score 0)            : inchangé (la météo n'invente pas de soleil)
- *   • cloudCover ≤ 45 % (dégagé/épars) : inchangé — le soleil perce largement
- *   • 45-65 % (nuageux)         : −1
- *   • 65-85 % (très nuageux)    : −2
- *   • > 85 %  (couvert)         : plafonné à 1
+ *   • cloudCover ≤ 55 % (dégagé/épars/mi-nuageux) : inchangé — le soleil perce
+ *   • 55-75 % (nuageux)         : −1
+ *   • 75-90 % (très nuageux)    : −2
+ *   • > 90 %  (vraiment couvert) : plafonné à 1
+ *
+ * Seuils volontairement INDULGENTS : un ciel à moitié couvert laisse passer le
+ * soleil ; on ne « cache » une terrasse que par couverture franche. (Avant :
+ * pénalité dès 45 %, plafond dès 85 % → trop strict, terrasses ensoleillées
+ * masquées par quelques nuages.)
  *
  * cloudCover absent (null/undefined) → on ne touche pas au score.
  */
 export function cloudAdjustedScore(score: number, cloudCover?: number | null): number {
   if (score <= 0) return score
   if (cloudCover == null) return score
-  if (cloudCover > 85) return 1
-  if (cloudCover > 65) return Math.max(1, score - 2)
-  if (cloudCover > 45) return Math.max(1, score - 1)
+  if (cloudCover > 90) return 1
+  if (cloudCover > 75) return Math.max(1, score - 2)
+  if (cloudCover > 55) return Math.max(1, score - 1)
   return score
 }
 

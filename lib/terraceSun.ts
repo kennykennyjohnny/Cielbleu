@@ -18,38 +18,72 @@ import { getSunPosition } from '@/lib/suncalc'
 
 const angDiff = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180)
 
+/** Champs minimaux nécessaires pour orienter une terrasse vers la rue. */
+export interface OpenDirInput {
+  lat: number
+  lng: number
+  terraceLat?: number | null
+  terraceLng?: number | null
+  terraceBearing?: number | null
+}
+
 /**
  * Direction (deg compass, 0=N) vers laquelle la terrasse est « ouverte » (la rue).
+ * SOURCE DE VÉRITÉ unique, réutilisée par le score, le parasol sur la carte ET
+ * l'orientation de la caméra → les trois s'accordent toujours sur « où est la rue ».
+ *
  * Stratégie fiable :
- *   • AXE de la façade = terrace_bearing (précalculé sur les vrais bâtiments) —
+ *   • AXE de la façade = terraceBearing (précalculé sur les vrais bâtiments) —
  *     beaucoup plus stable que le vecteur bar→terrasse seul.
  *   • CÔTÉ rue (laquelle des 2 perpendiculaires) = donné par le vecteur
- *     bar→terrasse s'il est franc (≥ 4 m), sinon le côté le plus au sud.
+ *     bar→terrasse, mais SEULEMENT s'il pointe franchement EN TRAVERS de la
+ *     façade (≥ 4 m ET ≥ 35° de l'axe). Un pin Google décalé LE LONG de la rue
+ *     produit un vecteur ~parallèle à la façade : c'est du bruit, on l'ignore et
+ *     on prend le côté le plus au sud (meilleure expo) — ça évite de coller le
+ *     parasol / la caméra du mauvais côté (dans le bâtiment).
  *   • Pas de bearing → on retombe sur le vecteur, puis sud.
  */
-function openDirectionDeg(p: Place): number {
-  const tLat = p.terrace_lat ?? p.lat
-  const tLng = p.terrace_lng ?? p.lng
+export function openDirectionFrom(o: OpenDirInput): number {
+  const tLat = o.terraceLat ?? o.lat
+  const tLng = o.terraceLng ?? o.lng
 
   // Vecteur bar→terrasse (côté rue) — seulement s'il est assez franc
   let vecDeg: number | null = null
-  const cosLat = Math.cos((p.lat * Math.PI) / 180)
-  const dx = (tLng - p.lng) * cosLat
-  const dy = tLat - p.lat
+  const cosLat = Math.cos((o.lat * Math.PI) / 180)
+  const dx = (tLng - o.lng) * cosLat
+  const dy = tLat - o.lat
   const distM = Math.hypot(dx, dy) * 111_320
   if (distM >= 4) vecDeg = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360
 
-  if (p.terrace_bearing != null) {
-    const n1 = (p.terrace_bearing + 90) % 360
-    const n2 = (p.terrace_bearing + 270) % 360
+  if (o.terraceBearing != null) {
+    const n1 = (o.terraceBearing + 90) % 360
+    const n2 = (o.terraceBearing + 270) % 360
     if (vecDeg != null) {
-      // normale la plus alignée avec le côté rue observé
-      return angDiff(n1, vecDeg) <= angDiff(n2, vecDeg) ? n1 : n2
+      // Le vecteur ne départage que s'il est franchement perpendiculaire à la
+      // façade (sinon il longe la rue → ambigu, on n'y fait pas confiance).
+      const axisDiff = Math.min(
+        angDiff(vecDeg, o.terraceBearing),
+        angDiff(vecDeg, (o.terraceBearing + 180) % 360),
+      )
+      if (axisDiff > 35) {
+        return angDiff(n1, vecDeg) <= angDiff(n2, vecDeg) ? n1 : n2
+      }
     }
     // sinon : côté le plus au sud (meilleure expo par défaut)
     return angDiff(n1, 180) <= angDiff(n2, 180) ? n1 : n2
   }
   return vecDeg ?? 180
+}
+
+/** Variante prenant directement un Place (raccourci interne + carte). */
+export function openDirectionDeg(p: Place): number {
+  return openDirectionFrom({
+    lat: p.lat,
+    lng: p.lng,
+    terraceLat: p.terrace_lat,
+    terraceLng: p.terrace_lng,
+    terraceBearing: p.terrace_bearing,
+  })
 }
 
 export function terraceSunScore(p: Place, date: Date, cloudCover?: number | null): number {
@@ -84,13 +118,19 @@ export function terraceSunScore(p: Place, date: Date, cloudCover?: number | null
   // Rampe crépuscule : soleil très bas (0→3°) → extinction douce vers 0.
   if (altDeg < 3) score *= altDeg / 3
 
-  // Couverture nuageuse — atténuation MULTIPLICATIVE : les nuages baissent la
-  // lumière mais préservent la hiérarchie d'orientation (un coin bien exposé
-  // reste le plus lumineux, même par ciel voilé). Évite d'écraser tout à plat.
-  //   ciel clair (≤25%)  → facteur ~1
-  //   ciel couvert (100%) → facteur ~0.30
-  if (cloudCover != null && cloudCover > 25) {
-    const cloudF = Math.max(0.3, 1 - (cloudCover - 25) / 105)
+  // Couverture nuageuse — atténuation MULTIPLICATIVE et VOLONTAIREMENT INDULGENTE.
+  // Un ciel à moitié nuageux laisse passer largement le soleil sur une terrasse
+  // bien orientée ; quelques nuages passagers ne doivent pas « éteindre » une
+  // belle terrasse d'après-midi. On ne pénalise donc qu'au-delà de 50 %, en
+  // douceur, avec un plancher haut (0,45) pour qu'une terrasse géométriquement au
+  // soleil reste « lumineuse » même par temps voilé. L'atténuation préserve la
+  // hiérarchie d'orientation (le coin le mieux exposé reste le plus lumineux).
+  //   ciel dégagé / épars (≤50%) → facteur 1 (aucune pénalité)
+  //   ciel couvert (100%)        → facteur 0,45
+  // (Avant : pénalité dès 25 %, plancher 0,30 → terrasses au soleil injustement
+  //  éteintes par une couche de nuages partielle.)
+  if (cloudCover != null && cloudCover > 50) {
+    const cloudF = Math.max(0.45, 1 - 0.55 * (cloudCover - 50) / 50)
     score = 1 + (score - 1) * cloudF
   }
 
