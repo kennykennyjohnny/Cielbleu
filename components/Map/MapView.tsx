@@ -355,6 +355,38 @@ function bearingFromBuildingPoly(
   return bestBearing
 }
 
+/**
+ * Centroïde (moyenne des sommets) du polygone d'un bâtiment, en [lng, lat].
+ * Suffisant pour obtenir un point « à l'intérieur / derrière la façade » :
+ * sert à orienter la caméra de façon non ambiguë (terrasse → centroïde =
+ * sens de regard rue → bâtiment). Prend le plus grand anneau d'un MultiPolygon.
+ */
+function polygonCentroid(
+  shape: { type?: string; coordinates?: unknown } | null | undefined,
+): [number, number] | null {
+  if (!shape?.type) return null
+  let ring: number[][] | null = null
+  if (shape.type === 'Polygon') {
+    ring = (shape as { coordinates: number[][][] }).coordinates?.[0] ?? null
+  } else if (shape.type === 'MultiPolygon') {
+    const polys = (shape as { coordinates: number[][][][] }).coordinates
+    let best: number[][] | null = null
+    for (const p of polys ?? []) {
+      const outer = p?.[0]
+      if (outer && (!best || outer.length > best.length)) best = outer
+    }
+    ring = best
+  }
+  if (!ring || ring.length < 3) return null
+  let sx = 0, sy = 0, n = 0
+  // On ignore le dernier point s'il duplique le premier (anneau fermé).
+  const end = (ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1])
+    ? ring.length - 1 : ring.length
+  for (let i = 0; i < end; i++) { sx += ring[i][0]; sy += ring[i][1]; n++ }
+  if (n === 0) return null
+  return [sx / n, sy / n]
+}
+
 function applyStyle(map: mapboxgl.Map) {
   // Le style custom Mapbox a ses propres POIs avec un schéma qu'on ne connaît pas
   // d'avance. Stratégie en 3 étapes :
@@ -965,13 +997,13 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       }
       const isMobile = window.matchMedia('(max-width: 899px)').matches
 
-      // Centre sur la terrasse si dispo (quelques mètres devant le bar),
-      // sinon sur le pin Google Places.
-      const centerLng = focusPlace.terraceLng ?? focusPlace.lng
-      const centerLat = focusPlace.terraceLat ?? focusPlace.lat
+      // Point qu'on veut VOIR au 1er plan : la terrasse (sur le trottoir) si on
+      // la connaît, sinon le pin du lieu.
+      const tLng = focusPlace.terraceLng ?? focusPlace.lng
+      const tLat = focusPlace.terraceLat ?? focusPlace.lat
 
       const M = 111_320
-      const cosC = Math.cos((centerLat * Math.PI) / 180)
+      const cosT = Math.cos((tLat * Math.PI) / 180)
       const padding = {
         top:    20,
         bottom: isMobile ? Math.round(window.innerHeight * 0.52) : 20,
@@ -979,51 +1011,64 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         right:  isMobile ? 20 : 430,
       }
 
-      // ── Orientation caméra : DÉGAGER la terrasse ──────────────────────────
-      // Objectif : regarder la façade DEPUIS LA RUE — terrasse au 1er plan,
-      // immeuble DERRIÈRE — jamais un bâtiment entre l'œil et la terrasse.
-      // `openDeg` = direction « ouverte » (vers la rue). La caméra regarde dans
-      // le sens inverse (rue → façade) ⇒ elle se place côté rue.
-      //
-      // Caméra placée le long de cette direction (camBearing) + léger recentrage
-      // vers la rue pour que la terrasse occupe le 1er plan.
-      const flyWith = (openDeg: number, duration: number, useFlyTo: boolean) => {
-        const camBearing = (openDeg + 180) % 360
-        const oRad = (openDeg * Math.PI) / 180
-        const offM = 6 // m vers la rue (1er plan dégagé)
-        const lookLng = centerLng + (Math.sin(oRad) * offM) / (M * cosC)
-        const lookLat = centerLat + (Math.cos(oRad) * offM) / M
+      // Bearing compass (0=N) du vecteur (aLng,aLat) → (bLng,bLat).
+      const compass = (aLng: number, aLat: number, bLng: number, bLat: number): number => {
+        const dE = (bLng - aLng) * cosT
+        const dN = (bLat - aLat)
+        return ((Math.atan2(dE, dN) * 180) / Math.PI + 360) % 360
+      }
+      const distM = (aLng: number, aLat: number, bLng: number, bLat: number): number =>
+        Math.hypot((bLng - aLng) * cosT, bLat - aLat) * M
+
+      // ── Orientation caméra : on REGARDE de la rue vers le bâtiment ─────────
+      // `lookDeg` = direction du REGARD = rue → façade. La terrasse (au point T)
+      // est au 1er plan, la façade derrière. On recentre légèrement vers le
+      // bâtiment pour cadrer la façade au-dessus de la terrasse.
+      const applyView = (lookDeg: number, duration: number, useFlyTo: boolean) => {
+        const rad = (lookDeg * Math.PI) / 180
+        const offM = 4 // m vers le bâtiment → façade cadrée au-dessus de la terrasse
+        const ctrLng = tLng + (Math.sin(rad) * offM) / (M * cosT)
+        const ctrLat = tLat + (Math.cos(rad) * offM) / M
         const opts: Parameters<typeof map.easeTo>[0] = {
-          center:   [lookLng, lookLat],
-          zoom:     18.6,        // gros plan net mais un cran plus large → moins d'occlusion
-          pitch:    45,          // oblique franc sans écraser : terrasse dégagée
-          bearing:  camBearing,  // façade en face → terrasse au 1er plan
+          center:   [ctrLng, ctrLat],
+          zoom:     18.4,
+          pitch:    58,          // bien oblique → on voit toute la façade + la terrasse
+          bearing:  lookDeg,     // regard rue → façade
           duration,
           essential: true,
           padding,
         }
-        // Verrou : empêcher l'auto-3D (zoomend) d'écraser le pitch/bearing
         suppressAutoPitchRef.current = true
         autoPitchRef.current = true
         if (useFlyTo) map.flyTo({ ...opts, curve: 1.4 })
         else map.easeTo(opts)
       }
 
-      // 1) Orientation IMMÉDIATE depuis l'axe de façade précalculé / le vecteur
-      //    bar→terrasse (réponse instantanée au clic, sans attendre le réseau).
-      const guessDeg = openDirectionFrom({
-        lat: focusPlace.lat,
-        lng: focusPlace.lng,
-        terraceLat: focusPlace.terraceLat,
-        terraceLng: focusPlace.terraceLng,
-        terraceBearing: focusPlace.terraceBearing,
-      })
-      flyWith(guessDeg, 1500, true)
+      // 1) Estimation IMMÉDIATE (sans réseau). Le plus fiable : vecteur
+      //    terrasse → bar. Le pin du bar/entrée est DERRIÈRE la façade par
+      //    rapport à la terrasse posée sur le trottoir → terrasse→bar = le bon
+      //    sens de regard (rue → bâtiment). Si pas de terrasse exploitable, on
+      //    retombe sur l'axe de façade (direction ouverte + 180).
+      let guessLook: number
+      if (focusPlace.terraceLat != null && focusPlace.terraceLng != null
+          && distM(tLng, tLat, focusPlace.lng, focusPlace.lat) >= 3) {
+        guessLook = compass(tLng, tLat, focusPlace.lng, focusPlace.lat)
+      } else {
+        const open = openDirectionFrom({
+          lat: focusPlace.lat, lng: focusPlace.lng,
+          terraceLat: focusPlace.terraceLat, terraceLng: focusPlace.terraceLng,
+          terraceBearing: focusPlace.terraceBearing,
+        })
+        guessLook = (open + 180) % 360
+      }
+      applyView(guessLook, 1500, true)
 
-      // 2) AFFINAGE FIABLE : on récupère le polygone RÉEL du bâtiment (open data
-      //    Paris) et on calcule la normale de façade qui pointe vers la rue.
-      //    C'est la source la plus sûre du « bon côté » : si la première
-      //    estimation arrivait derrière l'immeuble, on corrige en douceur ici.
+      // 2) AFFINAGE LE PLUS FIABLE : centroïde du polygone réel du bâtiment.
+      //    Le centroïde est FORCÉMENT à l'intérieur du bâtiment, donc derrière la
+      //    façade par rapport à la terrasse. « terrasse → centroïde » donne le
+      //    sens de regard correct, SANS ambiguïté de côté (c'était la cause des
+      //    mauvaises orientations : le pin Google peut être d'un côté ou l'autre
+      //    de la façade, pas le centroïde).
       let cancelled = false
       ;(async () => {
         try {
@@ -1032,17 +1077,12 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           })
           if (!r.ok || cancelled) return
           const ctx = await r.json()
-          const shape = ctx?.building?.geo_shape
-          if (!shape || cancelled) return
-          // bearingFromBuildingPoly renvoie le bearing bar → façade. La direction
-          // « ouverte » (vers la rue) est l'opposé.
-          const toFacade = bearingFromBuildingPoly(shape, focusPlace.lat, focusPlace.lng)
-          if (toFacade == null || cancelled) return
-          const openFromPoly = (toFacade + 180) % 360
-          // Ne corrige que si l'écart est significatif (> 25°) → évite un
-          // re-mouvement inutile quand la 1re estimation était déjà bonne.
-          const diff = Math.abs(((openFromPoly - guessDeg + 540) % 360) - 180)
-          if (diff > 25) flyWith(openFromPoly, 900, false)
+          const ctr = polygonCentroid(ctx?.building?.geo_shape)
+          if (!ctr || cancelled) return
+          if (distM(tLng, tLat, ctr[0], ctr[1]) < 5) return // terrasse ~ dans le bâtiment → ambigu, on garde
+          const lookPoly = compass(tLng, tLat, ctr[0], ctr[1])
+          const diff = Math.abs(((lookPoly - guessLook + 540) % 360) - 180)
+          if (diff > 20) applyView(lookPoly, 900, false)
         } catch { /* réseau indispo → on garde l'orientation immédiate */ }
       })()
 

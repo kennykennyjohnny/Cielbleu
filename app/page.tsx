@@ -557,18 +557,20 @@ export default function HomePage() {
       .slice(0, 12)
   }, [allTerraces])
 
-  // Fiche ouverte : UNIQUEMENT des terrasses vraiment ensoleillées (note ≥ 7)
-  // ET strictement mieux exposées que la sélection, à proximité (≤ 450 m).
-  // Pas de remplissage trompeur → si vide, on affiche un message honnête.
-  const SUNNY = 3.5 // score ≥ 3.5 → note ≥ 7 (« ensoleillé »)
+  // Fiche ouverte : les terrasses ENSOLEILLÉES du quartier (note ≥ 6), triées
+  // de la plus ensoleillée à la plus proche. On NE conditionne PLUS au fait
+  // d'être « mieux que la sélection » (avant : ça vidait quasi toujours la liste
+  // → « jamais de reco »). On élargit aussi le rayon à 700 m. Si rien n'est au
+  // soleil (nuit / tout à l'ombre) → liste vide → message honnête.
+  const SUNNY = 3.5 // score ≥ 3.5 → note ≥ 7 (« bien ensoleillé », pour le message)
+  const NEARBY_SUN = 3 // score ≥ 3 → note ≥ 6 (« ensoleillé »)
   const sunnyNearby = useMemo(() => {
     if (!selectedPlace) return []
     const [la, lo] = placeCoord(selectedPlace)
-    const selScore = selectedPlace.currentScore ?? 0
     return allTerraces
       .filter(p => p.id !== selectedPlace.id)
       .map(p => { const [pa, po] = placeCoord(p); return { p, s: p.currentScore ?? 0, d: distanceM(la, lo, pa, po) } })
-      .filter(x => x.d <= 450 && x.s >= SUNNY && x.s >= selScore + 0.5)
+      .filter(x => x.d <= 700 && x.s >= NEARBY_SUN)
       .sort((a, b) => b.s - a.s || a.d - b.d)
       .slice(0, 8)
       .map(x => x.p)
