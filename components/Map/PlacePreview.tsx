@@ -8,6 +8,7 @@ import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 import { cloudAdjustedScore } from '@/lib/sunScore'
 import { sunNote10, noteColor } from '@/lib/sunNote'
+import { terraceScoreAtHour, terraceSunWindow } from '@/lib/terraceSun'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 import type { Place } from '@/types'
@@ -202,10 +203,15 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
   useEffect(() => { loadReviews() }, [loadReviews])
 
   // ── Favorites + votes ─────────────────────────────────────────────────────
-  useEffect(() => {
-    supabase.from('place_like_counts').select('like_count').eq('place_id', place.id).single()
-      .then(({ data }) => { if (data) setLikeCount(data.like_count) })
+  // Compteur public de likes. maybeSingle() : 0 like = pas de ligne dans la vue
+  // → on lit 0 sans erreur 406 dans la console (avant : .single() râlait).
+  const refreshLikeCount = useCallback(async () => {
+    const { data } = await supabase
+      .from('place_like_counts').select('like_count').eq('place_id', place.id).maybeSingle()
+    setLikeCount(data?.like_count ?? 0)
   }, [place.id])
+
+  useEffect(() => { refreshLikeCount() }, [refreshLikeCount])
 
   useEffect(() => {
     if (!userId) { setIsFavorite(false); setFavoriteId(null); return }
@@ -229,12 +235,27 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
   // ── Computed ──────────────────────────────────────────────────────────────
   const { slot, label: hourLabel } = slotFromHour(hour)
-  // rawScore = potentiel ciel clair (base + ombres). score = pondéré météo réelle.
-  const rawScore = scoresThisMonth?.[slot] ?? place.currentScore ?? 3
-  const score = cloudAdjustedScore(rawScore, cloudCover)
-  const dimmedByClouds = score < rawScore
-  const isSunny = score >= 4
-  const sunWindow = useMemo(() => scoresThisMonth ? computeSunWindow(scoresThisMonth) : null, [scoresThisMonth])
+  // SOURCE UNIQUE de la note pour une terrasse : terraceSunScore (live, même
+  // modèle que les bandes de recos et les parasols de la carte). Pour un lieu
+  // sans terrasse géolocalisée (parc…), on retombe sur le score DB mensuel.
+  // → la note affichée ici == la note de la bande sur laquelle on a cliqué.
+  const isTerrace = place.terrace_lat != null && place.terrace_lng != null
+  const clearScore = isTerrace
+    ? terraceScoreAtHour(place, hour, null)
+    : (scoresThisMonth?.[slot] ?? place.currentScore ?? 3)
+  const liveScore = isTerrace
+    ? terraceScoreAtHour(place, hour, cloudCover)
+    : cloudAdjustedScore(clearScore, cloudCover)
+  const note = sunNote10(liveScore)
+  const score = Math.round(liveScore)        // 0–5 — pilote labels/couleurs ci-dessous
+  const dimmedByClouds = liveScore < clearScore - 0.25
+  const isSunny = note >= 6
+  const sunWindow = useMemo(
+    () => isTerrace
+      ? terraceSunWindow(place, cloudCover)
+      : (scoresThisMonth ? computeSunWindow(scoresThisMonth) : null),
+    [isTerrace, place, cloudCover, scoresThisMonth],
+  )
   const ordinal = place.arrondissement === 1 ? 'er' : 'e'
   const todayHours = todayHoursLabel(place.opening_hours as Record<string, unknown> | null | undefined, new Date().getDay())
   const isClosed = todayHours ? /fermé/i.test(todayHours) : false
@@ -277,15 +298,20 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleToggleFavorite = useCallback(async () => {
+    // Like réservé aux comptes : déconnecté → on ouvre la connexion / création
+    // de compte (le compteur reste visible, lui, pour tout le monde).
     if (!userId) { onOpenProfile?.(); return }
     if (isFavorite && favoriteId) {
+      setIsFavorite(false); setFavoriteId(null); setLikeCount(c => Math.max(0, c - 1)) // optimiste
       await supabase.from('favorites').delete().eq('id', favoriteId)
-      setIsFavorite(false); setFavoriteId(null); setLikeCount(c => Math.max(0, c - 1))
     } else {
+      setIsFavorite(true); setLikeCount(c => c + 1) // optimiste
       const { data } = await supabase.from('favorites').insert({ user_id: userId, place_id: place.id }).select('id').single()
-      if (data) { setIsFavorite(true); setFavoriteId(data.id); setLikeCount(c => c + 1) }
+      if (data) setFavoriteId(data.id)
     }
-  }, [userId, isFavorite, favoriteId, place.id, onOpenProfile])
+    // Réconciliation : on relit le compteur réel → fini la dérive de l'optimiste.
+    refreshLikeCount()
+  }, [userId, isFavorite, favoriteId, place.id, onOpenProfile, refreshLikeCount])
 
   const handleShare = useCallback(async () => {
     // Toujours utiliser le domaine actuel (cielbleu.fr, hopleon.fr, preview Vercel…)
@@ -450,7 +476,6 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
               <div style={{ padding: '0 16px 12px' }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8, paddingRight: 40, alignItems: 'center' }}>
                   {place.type !== 'park' && (() => {
-                    const note = sunNote10(place.currentScore ?? score)
                     const col = noteColor(note)
                     return (
                       <span style={{ ...MINI_BADGE, background: `${col}22`, color: col, border: `1.5px solid ${col}`, fontWeight: 800 }}>

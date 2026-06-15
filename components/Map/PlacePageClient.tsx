@@ -10,6 +10,7 @@ import { compressImage } from '@/lib/imageCompress'
 import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 import { cloudAdjustedScore } from '@/lib/sunScore'
 import { sunNote10, noteColor, noteLabel } from '@/lib/sunNote'
+import { terraceScoreAtHour, terraceSunWindow } from '@/lib/terraceSun'
 import { classifyTerrace } from '@/lib/terraceClassify'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import TerraceSunMeter from '@/components/Map/TerraceSunMeter'
@@ -178,13 +179,24 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
   }, [scores])
 
   const { slot } = slotFromHour(hour)
-  // rawScore = potentiel ciel clair (base + ombres). currentScore = pondéré météo.
-  const rawScore = scoreMap[slot] ?? place.currentScore ?? 3
-  const currentScore = cloudAdjustedScore(rawScore, cloudCover)
-  const dimmedByClouds = currentScore < rawScore
-  const isSunny = currentScore >= 4
+  // SOURCE UNIQUE de la note pour une terrasse : terraceSunScore (live, même
+  // modèle que les bandes de recos et la carte) → la note de la fiche == la note
+  // de la bande cliquée. Lieu sans terrasse géolocalisée → score DB mensuel.
+  const isTerrace = place.terrace_lat != null && place.terrace_lng != null
+  const clearScore = isTerrace
+    ? terraceScoreAtHour(place, hour, null)
+    : (scoreMap[slot] ?? place.currentScore ?? 3)
+  const liveScore = isTerrace
+    ? terraceScoreAtHour(place, hour, cloudCover)
+    : cloudAdjustedScore(clearScore, cloudCover)
+  const note = sunNote10(liveScore)
+  const dimmedByClouds = liveScore < clearScore - 0.25
+  const isSunny = note >= 6
 
-  const sunWindow = useMemo(() => computeSunWindow(scores), [scores])
+  const sunWindow = useMemo(
+    () => isTerrace ? terraceSunWindow(place, cloudCover) : computeSunWindow(scores),
+    [isTerrace, place, cloudCover, scores],
+  )
 
   // Statut terrasse (terrace / maybe / none) — pilote le badge « à confirmer »
   // de la jauge de surface. cf. lib/terraceClassify.
@@ -380,16 +392,15 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
   // ── Favorites ────────────────────────────────────────────────────────────────
   const [likeCount, setLikeCount] = useState<number>(0)
 
-  useEffect(() => {
-    let cancelled = false
-    supabase
-      .from('place_like_counts')
-      .select('like_count')
-      .eq('place_id', place.id)
-      .single()
-      .then(({ data }) => { if (!cancelled && data) setLikeCount(data.like_count) })
-    return () => { cancelled = true }
+  // Compteur public de likes. maybeSingle() : 0 like = pas de ligne → on lit 0
+  // proprement (sans erreur 406 console).
+  const refreshLikeCount = useCallback(async () => {
+    const { data } = await supabase
+      .from('place_like_counts').select('like_count').eq('place_id', place.id).maybeSingle()
+    setLikeCount(data?.like_count ?? 0)
   }, [place.id])
+
+  useEffect(() => { refreshLikeCount() }, [refreshLikeCount])
 
   useEffect(() => {
     if (!userId) { setIsFavorite(false); setFavoriteId(null); return }
@@ -400,18 +411,20 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
   }, [userId, place.id])
 
   const handleToggleFavorite = useCallback(async () => {
+    // Like réservé aux comptes : déconnecté → connexion / création de compte.
     if (!userId) { onOpenProfile?.(); return }
     setFavLoading(true)
     if (isFavorite && favoriteId) {
+      setIsFavorite(false); setFavoriteId(null); setLikeCount(c => Math.max(0, c - 1)) // optimiste
       await supabase.from('favorites').delete().eq('id', favoriteId)
-      setIsFavorite(false); setFavoriteId(null)
-      setLikeCount(c => Math.max(0, c - 1))
     } else {
+      setIsFavorite(true); setLikeCount(c => c + 1) // optimiste
       const { data } = await supabase.from('favorites').insert({ user_id: userId, place_id: place.id }).select('id').single()
-      if (data) { setIsFavorite(true); setFavoriteId(data.id); setLikeCount(c => c + 1) }
+      if (data) setFavoriteId(data.id)
     }
+    await refreshLikeCount() // réconciliation : compteur réel
     setFavLoading(false)
-  }, [userId, isFavorite, favoriteId, place.id, onOpenProfile])
+  }, [userId, isFavorite, favoriteId, place.id, onOpenProfile, refreshLikeCount])
 
   return (
     <div style={{ background:'transparent', fontFamily:'var(--font-outfit)', color:'#142033',
@@ -479,7 +492,6 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
         <div style={{ padding:'18px 0 14px' }}>
           {/* Note soleil /10 — réponse directe : au soleil ou pas ? */}
           {place.type !== 'park' && (() => {
-            const note = sunNote10(place.currentScore ?? 0)
             const col = noteColor(note)
             return (
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>

@@ -118,6 +118,13 @@ export function terraceSunScore(p: Place, date: Date, cloudCover?: number | null
   // Rampe crépuscule : soleil très bas (0→3°) → extinction douce vers 0.
   if (altDeg < 3) score *= altDeg / 3
 
+  return clampScoreWithClouds(score, cloudCover)
+}
+
+/** Applique l'atténuation nuageuse + clamp 0–5. Factorisé pour réutilisation. */
+function clampScoreWithClouds(rawScore: number, cloudCover?: number | null): number {
+  let score = rawScore
+
   // Couverture nuageuse — atténuation MULTIPLICATIVE et VOLONTAIREMENT INDULGENTE.
   // Un ciel à moitié nuageux laisse passer largement le soleil sur une terrasse
   // bien orientée ; quelques nuages passagers ne doivent pas « éteindre » une
@@ -135,4 +142,57 @@ export function terraceSunScore(p: Place, date: Date, cloudCover?: number | null
   }
 
   return Math.max(0, Math.min(5, score))
+}
+
+/** Construit une Date à l'heure décimale donnée (aujourd'hui). */
+function dateAtHour(hour: number): Date {
+  const d = new Date()
+  d.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
+  return d
+}
+
+/**
+ * Score soleil live (0–5) d'une terrasse à une heure décimale donnée.
+ * Raccourci pratique pour les composants : même modèle que terraceSunScore,
+ * c'est la SOURCE UNIQUE de la note /10 (bandes de recos ET fiche ouverte) →
+ * la note affichée dans une bande == la note affichée quand on clique. C'était
+ * la cause des « fausses notes » : la fiche dérivait sa note d'un autre calcul.
+ */
+export function terraceScoreAtHour(p: Place, hour: number, cloudCover?: number | null): number {
+  return terraceSunScore(p, dateAtHour(hour), cloudCover)
+}
+
+/**
+ * Fenêtre d'ensoleillement de la journée calculée avec le MÊME modèle live que
+ * la note (terraceSunScore). Renvoie le plus long créneau continu où le score
+ * dépasse `threshold` (défaut 3.5 ≈ note 7, « ensoleillé »). Cohérent avec la
+ * note affichée — fini les « Soleil 14h→18h » contredits par une note basse.
+ */
+export function terraceSunWindow(
+  p: Place,
+  cloudCover?: number | null,
+  threshold = 3.5,
+): { fromSlot: string; toSlot: string } | null {
+  const slots: { slot: string; lit: boolean }[] = []
+  const d = new Date()
+  for (let h = 7; h <= 22; h++) {
+    for (const m of [0, 30]) {
+      d.setHours(h, m, 0, 0)
+      const s = terraceSunScore(p, new Date(d), cloudCover)
+      slots.push({ slot: `${String(h).padStart(2, '0')}:${m === 0 ? '00' : '30'}`, lit: s >= threshold })
+    }
+  }
+  let best = { start: -1, end: -1, len: 0 }
+  let cur = { start: -1, len: 0 }
+  for (let i = 0; i < slots.length; i++) {
+    if (slots[i].lit) {
+      if (cur.start < 0) cur.start = i
+      cur.len++
+      if (cur.len > best.len) best = { start: cur.start, end: i, len: cur.len }
+    } else {
+      cur = { start: -1, len: 0 }
+    }
+  }
+  if (best.len === 0 || best.start < 0) return null
+  return { fromSlot: slots[best.start].slot, toSlot: slots[best.end].slot }
 }
