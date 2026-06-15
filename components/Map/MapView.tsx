@@ -970,51 +970,83 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       const centerLng = focusPlace.terraceLng ?? focusPlace.lng
       const centerLat = focusPlace.terraceLat ?? focusPlace.lat
 
+      const M = 111_320
+      const cosC = Math.cos((centerLat * Math.PI) / 180)
+      const padding = {
+        top:    20,
+        bottom: isMobile ? Math.round(window.innerHeight * 0.52) : 20,
+        left:   20,
+        right:  isMobile ? 20 : 430,
+      }
+
       // ── Orientation caméra : DÉGAGER la terrasse ──────────────────────────
-      // On REGARDE la façade depuis la rue : terrasse au 1er plan, immeuble
-      // DERRIÈRE — jamais un bâtiment entre l'œil et la terrasse.
-      // Direction « ouverte » (vers la rue) = openDirectionFrom : axe de façade
-      // réel + désambiguïsation fiable, IDENTIQUE au score et au parasol. La
-      // caméra regarde dans le sens inverse (rue → façade) ⇒ elle se place côté
-      // rue, l'immeuble passe au fond. (Avant : départage par le vecteur
-      // bar→terrasse seul, qui pouvait inverser le côté → bâtiment devant.)
-      const openDeg = openDirectionFrom({
+      // Objectif : regarder la façade DEPUIS LA RUE — terrasse au 1er plan,
+      // immeuble DERRIÈRE — jamais un bâtiment entre l'œil et la terrasse.
+      // `openDeg` = direction « ouverte » (vers la rue). La caméra regarde dans
+      // le sens inverse (rue → façade) ⇒ elle se place côté rue.
+      //
+      // Caméra placée le long de cette direction (camBearing) + léger recentrage
+      // vers la rue pour que la terrasse occupe le 1er plan.
+      const flyWith = (openDeg: number, duration: number, useFlyTo: boolean) => {
+        const camBearing = (openDeg + 180) % 360
+        const oRad = (openDeg * Math.PI) / 180
+        const offM = 6 // m vers la rue (1er plan dégagé)
+        const lookLng = centerLng + (Math.sin(oRad) * offM) / (M * cosC)
+        const lookLat = centerLat + (Math.cos(oRad) * offM) / M
+        const opts: Parameters<typeof map.easeTo>[0] = {
+          center:   [lookLng, lookLat],
+          zoom:     18.6,        // gros plan net mais un cran plus large → moins d'occlusion
+          pitch:    45,          // oblique franc sans écraser : terrasse dégagée
+          bearing:  camBearing,  // façade en face → terrasse au 1er plan
+          duration,
+          essential: true,
+          padding,
+        }
+        // Verrou : empêcher l'auto-3D (zoomend) d'écraser le pitch/bearing
+        suppressAutoPitchRef.current = true
+        autoPitchRef.current = true
+        if (useFlyTo) map.flyTo({ ...opts, curve: 1.4 })
+        else map.easeTo(opts)
+      }
+
+      // 1) Orientation IMMÉDIATE depuis l'axe de façade précalculé / le vecteur
+      //    bar→terrasse (réponse instantanée au clic, sans attendre le réseau).
+      const guessDeg = openDirectionFrom({
         lat: focusPlace.lat,
         lng: focusPlace.lng,
         terraceLat: focusPlace.terraceLat,
         terraceLng: focusPlace.terraceLng,
         terraceBearing: focusPlace.terraceBearing,
       })
-      const camBearing = (openDeg + 180) % 360
+      flyWith(guessDeg, 1500, true)
 
-      // Léger recentrage vers la rue (≈ 4 m le long de la direction ouverte) :
-      // la terrasse occupe le 1er plan, l'immeuble n'écrase pas le cadre.
-      const oRad = (openDeg * Math.PI) / 180
-      const M = 111_320
-      const cosC = Math.cos((centerLat * Math.PI) / 180)
-      const offM = 4
-      const lookLng = centerLng + (Math.sin(oRad) * offM) / (M * cosC)
-      const lookLat = centerLat + (Math.cos(oRad) * offM) / M
+      // 2) AFFINAGE FIABLE : on récupère le polygone RÉEL du bâtiment (open data
+      //    Paris) et on calcule la normale de façade qui pointe vers la rue.
+      //    C'est la source la plus sûre du « bon côté » : si la première
+      //    estimation arrivait derrière l'immeuble, on corrige en douceur ici.
+      let cancelled = false
+      ;(async () => {
+        try {
+          const r = await fetch(`/api/place-context?lat=${focusPlace.lat}&lng=${focusPlace.lng}`, {
+            signal: AbortSignal.timeout(4500),
+          })
+          if (!r.ok || cancelled) return
+          const ctx = await r.json()
+          const shape = ctx?.building?.geo_shape
+          if (!shape || cancelled) return
+          // bearingFromBuildingPoly renvoie le bearing bar → façade. La direction
+          // « ouverte » (vers la rue) est l'opposé.
+          const toFacade = bearingFromBuildingPoly(shape, focusPlace.lat, focusPlace.lng)
+          if (toFacade == null || cancelled) return
+          const openFromPoly = (toFacade + 180) % 360
+          // Ne corrige que si l'écart est significatif (> 25°) → évite un
+          // re-mouvement inutile quand la 1re estimation était déjà bonne.
+          const diff = Math.abs(((openFromPoly - guessDeg + 540) % 360) - 180)
+          if (diff > 25) flyWith(openFromPoly, 900, false)
+        } catch { /* réseau indispo → on garde l'orientation immédiate */ }
+      })()
 
-      // Verrou : empêcher l'auto-3D (zoomend) d'écraser le pitch/bearing à l'arrivée
-      suppressAutoPitchRef.current = true
-      autoPitchRef.current = true
-
-      map.flyTo({
-        center:   [lookLng, lookLat],
-        zoom:     19.2,          // gros plan net : parasols bien lisibles
-        pitch:    52,            // oblique mais sans écraser : terrasse dégagée
-        bearing:  camBearing,    // façade en face → terrasse au 1er plan
-        duration: 1500,
-        curve:    1.4,
-        essential: true,
-        padding: {
-          top:    20,
-          bottom: isMobile ? Math.round(window.innerHeight * 0.52) : 20,
-          left:   20,
-          right:  isMobile ? 20 : 430,
-        },
-      })
+      return () => { cancelled = true }
     } else {
       // Sortie de focus → on réautorise l'auto-3D
       suppressAutoPitchRef.current = false
