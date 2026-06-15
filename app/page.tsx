@@ -584,26 +584,44 @@ export default function HomePage() {
   // Les TERRASSES sont recalculées LOCALEMENT (terraceSunScore : soleil +
   // orientation + nuages) sans attendre le réseau → réactif au curseur.
   // Petit debounce 90 ms pour throttler le rebuild de la couche carte.
+  //
+  // ⚠️ `places` EST dans les deps (avant : seulement [hour, cloudForHour]).
+  // Sinon, au montage `places` est vide → l'effet sortait tôt et NE RE-TOURNAIT
+  // JAMAIS quand les lieux arrivaient → les terrasses gardaient le score DB (ou
+  // le défaut 3 → note 6) au lieu du score live. Résultat visible : à 22h, soleil
+  // couché, des recos affichaient « 6/10 » / « 9/10 » et la note ne suivait pas
+  // le slider tant qu'on ne le bougeait pas. Garde anti-boucle : on renvoie la
+  // MÊME référence quand rien ne change → pas de re-render, donc pas de boucle
+  // (l'effet se redéclencherait sur sa propre écriture sinon).
   useEffect(() => {
     if (!places.length) return
     const d = new Date()
     d.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
 
     const t = window.setTimeout(() => {
-      setPlaces(prev => prev.map(p =>
-        (p.terrace_lat != null && p.terrace_lng != null)
-          ? { ...p, currentScore: terraceSunScore(p, d, cloudForHour) }
-          : p
-      ))
+      setPlaces(prev => {
+        let changed = false
+        const next = prev.map(p => {
+          if (p.terrace_lat == null || p.terrace_lng == null) return p
+          const s = terraceSunScore(p, d, cloudForHour)
+          if (p.currentScore == null || Math.abs(p.currentScore - s) > 0.01) {
+            changed = true
+            return { ...p, currentScore: s }
+          }
+          return p
+        })
+        return changed ? next : prev
+      })
       // La fiche ouverte suit aussi le curseur en direct
-      setSelectedPlace(prev =>
-        prev && prev.terrace_lat != null && prev.terrace_lng != null
-          ? { ...prev, currentScore: terraceSunScore(prev, d, cloudForHour) }
-          : prev
-      )
+      setSelectedPlace(prev => {
+        if (!prev || prev.terrace_lat == null || prev.terrace_lng == null) return prev
+        const s = terraceSunScore(prev, d, cloudForHour)
+        if (prev.currentScore != null && Math.abs(prev.currentScore - s) <= 0.01) return prev
+        return { ...prev, currentScore: s }
+      })
     }, 90)
     return () => window.clearTimeout(t)
-  }, [hour, cloudForHour]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hour, cloudForHour, places]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Scores des lieux SANS terrasse géolocalisée (DB précalculée) ──────────
   // Séparé et plus lent (réseau) — n'impacte pas la réactivité des terrasses.

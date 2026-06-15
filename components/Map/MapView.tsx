@@ -856,7 +856,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     })
 
     // ── Auto-3D : bascule en vue pitchée quand l'utilisateur zoome ──────────
-    // Zoom ≥ 16 → pitch 48° automatique (bâtiments 3D, ombres visibles)
+    // Zoom ≥ 16 → pitch 42° automatique (bâtiments 3D légers, vue plus aérienne)
     // Zoom <  14 → retour pitch 0° (vue aérienne, lisibilité globale)
     // Suspendu pendant une séquence de focus (suppressAutoPitchRef) pour ne pas
     // réécraser le pitch/bearing choisi en arrivant sur une terrasse.
@@ -865,7 +865,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       const z = map.getZoom()
       if (z >= 16 && !autoPitchRef.current) {
         autoPitchRef.current = true
-        map.easeTo({ pitch: 48, duration: 900, easing: t => t * (2 - t) })
+        map.easeTo({ pitch: 42, duration: 900, easing: t => t * (2 - t) })
       } else if (z < 14 && autoPitchRef.current) {
         autoPitchRef.current = false
         map.easeTo({ pitch: 0, duration: 600 })
@@ -1031,8 +1031,8 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         const ctrLat = tLat + (Math.cos(rad) * offM) / M
         const opts: Parameters<typeof map.easeTo>[0] = {
           center:   [ctrLng, ctrLat],
-          zoom:     18.4,
-          pitch:    58,          // bien oblique → on voit toute la façade + la terrasse
+          zoom:     18.3,
+          pitch:    42,          // vue plus aérienne (moins horizontale) → terrasses bien visibles, peu d'occlusion
           bearing:  lookDeg,     // regard rue → façade
           duration,
           essential: true,
