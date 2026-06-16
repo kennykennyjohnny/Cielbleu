@@ -9,6 +9,7 @@ import { hourToSlot, formatHourLabel } from '@/lib/hourSlot'
 import { cloudAdjustedScore } from '@/lib/sunScore'
 import { sunNote10, noteColor } from '@/lib/sunNote'
 import { terraceScoreAtHour, terraceSunWindow } from '@/lib/terraceSun'
+import { classifyTerrace } from '@/lib/terraceClassify'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 import type { Place } from '@/types'
@@ -488,13 +489,21 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                       ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
                     </span>
                   )}
-                  {place.has_terrace !== false && (
-                    <span style={{ ...MINI_BADGE, background: 'rgba(79,143,101,0.10)', color: '#3d8554' }}>● Terrasse</span>
-                  )}
+                  {/* Catégorie du lieu (Bar / Restaurant / Café / Parc) + arrondissement */}
                   <span style={MINI_BADGE}>
                     {TYPE_LABEL[place.type] ?? place.type}
                     {place.arrondissement != null && ` · ${place.arrondissement}${ordinal}`}
                   </span>
+                  {/* Statut terrasse — poussé à DROITE : oui / à confirmer / non */}
+                  {(() => {
+                    if (place.type === 'park') {
+                      return <span style={{ ...MINI_BADGE, marginLeft: 'auto', background: 'rgba(79,143,101,0.12)', color: '#3d8554' }}>🌳 Espace vert</span>
+                    }
+                    const st = classifyTerrace(place)
+                    if (st === 'terrace') return <span style={{ ...MINI_BADGE, marginLeft: 'auto', background: 'rgba(79,143,101,0.12)', color: '#3d8554' }}>✓ Terrasse</span>
+                    if (st === 'maybe')   return <span style={{ ...MINI_BADGE, marginLeft: 'auto', background: 'rgba(141,153,174,0.14)', color: '#5b6776' }}>Terrasse à confirmer</span>
+                    return <span style={{ ...MINI_BADGE, marginLeft: 'auto', background: 'rgba(141,153,174,0.14)', color: '#5b6776' }}>Sans terrasse</span>
+                  })()}
                 </div>
                 <h2 style={{ margin: 0, fontFamily: 'var(--font-playfair)', fontWeight: 700, fontSize: 'clamp(20px,6vw,26px)', lineHeight: 1.05, letterSpacing: '-0.03em', color: '#0b1f3a', paddingRight: 44 }}>
                   {place.name}

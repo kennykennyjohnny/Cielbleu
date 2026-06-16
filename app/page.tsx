@@ -570,7 +570,7 @@ export default function HomePage() {
     return allTerraces
       .filter(p => p.id !== selectedPlace.id)
       .map(p => { const [pa, po] = placeCoord(p); return { p, s: p.currentScore ?? 0, d: distanceM(la, lo, pa, po) } })
-      .filter(x => x.d <= 700 && x.s >= NEARBY_SUN)
+      .filter(x => x.d <= 400 && x.s >= NEARBY_SUN) // quartier resserré (≈ 5 min à pied)
       .sort((a, b) => b.s - a.s || a.d - b.d)
       .slice(0, 8)
       .map(x => x.p)
@@ -1332,6 +1332,29 @@ export default function HomePage() {
                   noteOf={recoNote}
                   compact
                 />
+              </div>
+            )}
+
+            {/* Aucune terrasse au soleil (nuit / tout à l'ombre) → message honnête
+                plutôt qu'une bande vide ou de fausses notes. */}
+            {!searchQuery.trim() && !loading && sunnyTop.length === 0 && (
+              <div className="px-3 pt-3">
+                <div
+                  className="flex items-center gap-2.5"
+                  style={{
+                    background: 'rgba(141,153,174,0.10)',
+                    border: '1px solid rgba(141,153,174,0.22)',
+                    borderRadius: 13, padding: '10px 12px',
+                  }}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>🌥️</span>
+                  <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 12.5, fontWeight: 700, color: '#5b6776', lineHeight: 1.3 }}>
+                    Toutes les terrasses sont à l’ombre pour l’instant.{' '}
+                    <span style={{ color: 'rgba(31,58,95,0.55)', fontWeight: 600 }}>
+                      Changez l’heure avec le curseur ou ajustez les filtres.
+                    </span>
+                  </span>
+                </div>
               </div>
             )}
 
