@@ -522,17 +522,22 @@ export default function PlacePageClient({ place, scores, hour, onClose, userId, 
                 {cloudCover != null && cloudCover > 85 ? '☁️' : '🌥️'} Soleil voilé{cloudCover != null ? ` · ${Math.round(cloudCover)}% nuages` : ''}
               </span>
             )}
-            <span style={{ ...MINI_BADGE, background:'rgba(79,143,101,0.10)', color:'#3d8554', display:'inline-flex', alignItems:'center', gap:5 }}>
+            {/* Catégorie du lieu (Bar / Restaurant / Café / Parc) + arrondissement */}
+            <span style={{ ...MINI_BADGE, display:'inline-flex', alignItems:'center', gap:5 }}>
               {place.type === 'park'
                 ? <><Trees size={12} strokeWidth={2.2} aria-hidden="true" /> Parc</>
-                : '● Terrasse'}
+                : (TYPE_LABEL[place.type] ?? place.type)}
+              {place.arrondissement != null && ` ${place.arrondissement}${ordinal}`}
             </span>
-            {(place.type !== 'park' || place.arrondissement != null) && (
-              <span style={{ ...MINI_BADGE }}>
-                {place.type !== 'park' && (TYPE_LABEL[place.type] ?? place.type)}
-                {place.type !== 'park' && place.arrondissement != null && ' \u00B7 '}
-                {place.arrondissement != null && `${place.arrondissement}${ordinal}`}
-              </span>
+            {/* Statut terrasse — poussé à DROITE : oui / à confirmer / non */}
+            {place.type === 'park' ? (
+              <span style={{ ...MINI_BADGE, marginLeft:'auto', background:'rgba(79,143,101,0.12)', color:'#3d8554' }}>🌳 Espace vert</span>
+            ) : terraceStatus === 'terrace' ? (
+              <span style={{ ...MINI_BADGE, marginLeft:'auto', background:'rgba(79,143,101,0.12)', color:'#3d8554' }}>✓ Terrasse</span>
+            ) : terraceStatus === 'maybe' ? (
+              <span style={{ ...MINI_BADGE, marginLeft:'auto', background:'rgba(141,153,174,0.14)', color:'#5b6776' }}>Terrasse à confirmer</span>
+            ) : (
+              <span style={{ ...MINI_BADGE, marginLeft:'auto', background:'rgba(141,153,174,0.14)', color:'#5b6776' }}>Sans terrasse</span>
             )}
           </div>
 

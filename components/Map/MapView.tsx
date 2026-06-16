@@ -143,65 +143,103 @@ function drawParasol(canopy: string, canopyDark: string): { width: number; heigh
   ctx.scale(PIN_SCALE, PIN_SCALE)
 
   const CX = W / 2
-  const topY = 14          // sommet du parasol
-  const rimY = 30          // bord bas de la toile
-  const baseY = 47         // pied
-  const half = 17          // demi-largeur de la toile
+  const apexY = 12         // sommet de la toile
+  const rimY = 31          // bord bas de la toile
+  const baseY = 49         // pied du mât
+  const half = 18          // demi-largeur de la toile
+  const N = 6              // panneaux (rayures alternées)
+  const seg = (half * 2) / N
 
   // Ombre douce au sol
   ctx.save()
-  ctx.fillStyle = 'rgba(31,58,95,0.18)'
+  ctx.fillStyle = 'rgba(31,58,95,0.16)'
   ctx.beginPath()
-  ctx.ellipse(CX, baseY + 1.5, 7, 2.4, 0, 0, Math.PI * 2)
+  ctx.ellipse(CX, baseY + 1, 7, 2.3, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 
-  // Mât
+  // Mât (fin, chaud, légèrement détaché de la toile)
   ctx.save()
-  ctx.strokeStyle = '#6B5638'
-  ctx.lineWidth = 1.8
+  ctx.strokeStyle = '#7A6748'
+  ctx.lineWidth = 1.7
   ctx.lineCap = 'round'
   ctx.beginPath()
-  ctx.moveTo(CX, topY + 1)
+  ctx.moveTo(CX, apexY + 3)
   ctx.lineTo(CX, baseY)
   ctx.stroke()
   ctx.restore()
 
-  // Toile : dôme + bord festonné (3 arcs)
+  // Contour de la toile : dôme + bord festonné (N vagues) — réutilisé pour clip & stroke
+  const traceCanopy = () => {
+    ctx.beginPath()
+    ctx.moveTo(CX - half, rimY)
+    ctx.quadraticCurveTo(CX - half, apexY + 3, CX, apexY)     // dôme gauche → apex
+    ctx.quadraticCurveTo(CX + half, apexY + 3, CX + half, rimY) // apex → dôme droit
+    for (let i = 0; i < N; i++) {                               // feston bas (droite → gauche)
+      const x1 = CX + half - i * seg
+      const x0 = CX + half - (i + 1) * seg
+      ctx.quadraticCurveTo((x0 + x1) / 2, rimY + 4.4, x0, rimY)
+    }
+    ctx.closePath()
+  }
+
+  // Panneaux rayés alternés (clip sur la toile)
   ctx.save()
-  ctx.beginPath()
-  ctx.moveTo(CX - half, rimY)
-  // côté gauche du dôme
-  ctx.quadraticCurveTo(CX - half, topY + 2, CX, topY)
-  ctx.quadraticCurveTo(CX + half, topY + 2, CX + half, rimY)
-  // feston bas (3 vagues de droite à gauche)
-  const seg = (half * 2) / 3
-  ctx.quadraticCurveTo(CX + half - seg / 2, rimY + 4, CX + half - seg, rimY)
-  ctx.quadraticCurveTo(CX + half - seg * 1.5, rimY + 4, CX + half - seg * 2, rimY)
-  ctx.quadraticCurveTo(CX - half + seg / 2, rimY + 4, CX - half, rimY)
-  ctx.closePath()
-  // dégradé léger pour le volume
-  const g = ctx.createLinearGradient(0, topY, 0, rimY + 4)
-  g.addColorStop(0, canopy)
-  g.addColorStop(1, canopyDark)
+  traceCanopy()
+  ctx.clip()
+  for (let i = 0; i < N; i++) {
+    const xL = CX - half + i * seg
+    const xR = xL + seg
+    ctx.beginPath()
+    ctx.moveTo(CX, apexY)
+    ctx.lineTo(xL, rimY + 6)
+    ctx.lineTo(xR, rimY + 6)
+    ctx.closePath()
+    ctx.fillStyle = i % 2 === 0 ? canopy : canopyDark
+    ctx.fill()
+  }
+  // Lueur de volume au sommet
+  const g = ctx.createLinearGradient(0, apexY, 0, rimY + 4)
+  g.addColorStop(0, 'rgba(255,255,255,0.40)')
+  g.addColorStop(0.55, 'rgba(255,255,255,0)')
   ctx.fillStyle = g
-  ctx.fill()
-  // contour blanc fin pour détacher de la carte
+  ctx.fillRect(0, 0, W, H)
+  ctx.restore()
+
+  // Nervures (liserés blancs entre panneaux)
+  ctx.save()
+  ctx.strokeStyle = 'rgba(255,255,255,0.70)'
+  ctx.lineWidth = 0.7
+  ctx.lineCap = 'round'
+  for (let i = 1; i < N; i++) {
+    const x = CX - half + i * seg
+    ctx.beginPath()
+    ctx.moveTo(CX, apexY + 0.5)
+    ctx.lineTo(x, rimY + 1.5)
+    ctx.stroke()
+  }
+  ctx.restore()
+
+  // Contour blanc net pour détacher de la carte
+  ctx.save()
+  traceCanopy()
   ctx.strokeStyle = 'rgba(255,255,255,0.95)'
   ctx.lineWidth = 1.4
   ctx.lineJoin = 'round'
   ctx.stroke()
-  // nervures
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)'
-  ctx.lineWidth = 0.8
+  ctx.restore()
+
+  // Pointe + pommeau au sommet
+  ctx.save()
+  ctx.strokeStyle = '#7A6748'
+  ctx.lineWidth = 1.4
+  ctx.lineCap = 'round'
   ctx.beginPath()
-  ctx.moveTo(CX, topY); ctx.lineTo(CX, rimY)
-  ctx.moveTo(CX, topY + 1); ctx.lineTo(CX - half + 2, rimY)
-  ctx.moveTo(CX, topY + 1); ctx.lineTo(CX + half - 2, rimY)
+  ctx.moveTo(CX, apexY)
+  ctx.lineTo(CX, apexY - 3)
   ctx.stroke()
-  // pommeau
   ctx.fillStyle = canopyDark
-  ctx.beginPath(); ctx.arc(CX, topY, 1.6, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(CX, apexY - 3, 1.5, 0, Math.PI * 2); ctx.fill()
   ctx.restore()
 
   return {
@@ -480,6 +518,10 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   const selectedRingRef = useRef<mapboxgl.Marker | null>(null)
   const onAmeniteRef = useRef(onAmeniteSelect)
   onAmeniteRef.current = onAmeniteSelect
+  // Lieu mis en avant — lu par la boucle d'animation des parasols pour se mettre
+  // en pause quand une fiche est ouverte (le highlight pilote alors la lueur).
+  const highlightRef = useRef(highlightPlaceId)
+  highlightRef.current = highlightPlaceId
 
   // GeoJSON mis à jour dès que places change
   const geojson = useMemo((): GeoJSON.FeatureCollection => ({
@@ -1213,6 +1255,41 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       .setLngLat([place.lng, place.lat])
       .addTo(map)
   }, [highlightPlaceId]) // eslint-disable-line
+
+  // ── Animation : lueur ensoleillée qui « respire » sous les parasols ─────
+  // Donne vie aux terrasses au soleil (comme la pulsation du pin sélectionné),
+  // mais en lueur chaude plutôt qu'en cercle dur. On module l'opacité ET le
+  // rayon de la couche `terraces-glow` via une sinusoïde lente.
+  // Garde-fous perf : actif seulement zoom ≥ 15 (parasols visibles), throttle
+  // ~18 fps, en pause si l'onglet est caché OU si une fiche est ouverte (le
+  // highlight pilote alors la lueur). rAF nettoyé au démontage.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    let raf = 0
+    let last = 0
+    let stopped = false
+    const tick = (t: number) => {
+      if (stopped) return
+      raf = requestAnimationFrame(tick)
+      if (t - last < 55) return
+      last = t
+      if (typeof document !== 'undefined' && document.hidden) return
+      if (highlightRef.current) return
+      if (!map.getLayer('terraces-glow')) return
+      if (map.getZoom() < 15) return
+      const s = (Math.sin(t / 1500) + 1) / 2 // 0…1, période ~9,4 s
+      const top = 0.30 + 0.18 * s
+      try {
+        map.setPaintProperty('terraces-glow', 'circle-opacity',
+          ['interpolate', ['linear'], ['zoom'], 15, 0, 16, top * 0.75, 19, top])
+        map.setPaintProperty('terraces-glow', 'circle-radius',
+          ['interpolate', ['linear'], ['zoom'], 15, 10 + 2 * s, 17, 20 + 4 * s, 19, 34 + 7 * s])
+      } catch { /* couche pas prête → ignoré */ }
+    }
+    raf = requestAnimationFrame(tick)
+    return () => { stopped = true; cancelAnimationFrame(raf) }
+  }, [])
 
   // ── Soleil + ombres réalistes : suit `sunHour` heure par heure ────────
   // On utilise lat/lng du cinematicFocus (ou Paris par défaut) pour la
