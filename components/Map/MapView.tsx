@@ -22,18 +22,6 @@ const SOLEIL = '#FFBE0B'   // jaune marque — icône de catégorie tracée sur 
 const CIEL = '#3A86FF'     // bleu — fontaines à boire (point d'eau)
 const VERT = '#52B788'     // vert — sanisettes (toilettes publiques)
 
-// Opacité par défaut des pins de lieux : les lieux AVEC terrasse (terr==1)
-// s'estompent en zoom rapproché (≥15.6) pour laisser le PARASOL — placé à
-// l'emplacement exact de la terrasse — bien visible, sans pin par-dessus.
-// Les lieux sans terrasse restent pleins. Réutilisé à la création de la couche
-// ET au reset du highlight (sinon le reset à 1 réafficherait les pins).
-const PINS_OPACITY_DEFAULT: unknown = [
-  'case',
-  ['==', ['get', 'terr'], 1],
-  ['interpolate', ['linear'], ['zoom'], 15, 1, 15.6, 0],
-  1,
-]
-
 // ── Pins par catégorie ────────────────────────────────────────────────────────
 // On N'AFFICHE PLUS de note/score sur les pins : les scores étaient biaisés et
 // trompeurs. Chaque pin = cercle navy + bordure blanche + l'icône de la catégorie
@@ -537,17 +525,12 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   highlightRef.current = highlightPlaceId
 
   // GeoJSON mis à jour dès que places change
-  // `terr` = 1 si le lieu a une terrasse géolocalisée → son pin s'estompe en
-  // zoom rapproché pour laisser le parasol (à l'emplacement exact) bien visible.
   const geojson = useMemo((): GeoJSON.FeatureCollection => ({
     type: 'FeatureCollection',
     features: places.map((p) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-      properties: {
-        id: p.id, name: p.name, type: p.type,
-        terr: (p.terrace_lat != null && p.terrace_lng != null) ? 1 : 0,
-      },
+      properties: { id: p.id, name: p.name, type: p.type },
     })),
   }), [places])
 
@@ -729,9 +712,6 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'icon-ignore-placement': true,
           'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.40, 14, 0.56, 16, 0.68, 18, 0.82],
         },
-        // Le pin d'un lieu AVEC terrasse s'efface en zoom rapproché → le parasol
-        // (placé à l'emplacement exact) reste seul et bien visible.
-        paint: { 'icon-opacity': PINS_OPACITY_DEFAULT as never },
       })
 
       // ── Terrasses = parasols de café ───────────────────────────────────────
@@ -1219,9 +1199,7 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (map.getLayer('terraces-glow')) map.setPaintProperty('terraces-glow', 'circle-opacity',
           ['case', ['==', ['get', 'id'], highlightPlaceId], 0.5, 0.1])
       } else {
-        // Reset : on REMET l'expression par défaut (et non 1 plat), sinon les
-        // pins des terrasses réapparaîtraient par-dessus les parasols en zoom.
-        map.setPaintProperty('places-pins', 'icon-opacity', PINS_OPACITY_DEFAULT as never)
+        map.setPaintProperty('places-pins', 'icon-opacity', 1)
         if (map.getLayer('clusters'))        map.setPaintProperty('clusters', 'circle-opacity', 1)
         if (map.getLayer('clusters-shadow')) map.setPaintProperty('clusters-shadow', 'circle-opacity', 1)
         if (map.getLayer('cluster-count'))   map.setPaintProperty('cluster-count', 'text-opacity', 1)
