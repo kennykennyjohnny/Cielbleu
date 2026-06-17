@@ -485,7 +485,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                     )
                   })()}
                   {isSunny && sunWindow && (
-                    <span style={{ ...MINI_BADGE, background: '#fff1b8', color: '#5c3d00' }}>
+                    <span style={{ ...MINI_BADGE, background: '#FFF6DE', color: '#1F3A5F', border: '1px solid rgba(237,193,69,0.45)' }}>
                       ☀ Soleil {fmtSlotStart(sunWindow.fromSlot)} → {fmtSlotEnd(sunWindow.toSlot)}
                     </span>
                   )}
@@ -583,25 +583,29 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
             <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', minHeight: 0 }}>
               <div style={{ padding: '14px 16px 120px' }}>
 
-                {/* ── SUN BLOCK : pictogramme + fenêtre soleil ── */}
+                {/* ── SUN BLOCK : pictogramme + fenêtre soleil ──
+                     Palette DA v2 (navy + gold + cream), PLUS DE MARRON : le texte
+                     brun (#3d2800/#5c3d00/#8a5a00) donnait un bandeau « marron » sur
+                     mobile, absent du desktop. On garde un fond gold doux quand c'est
+                     ensoleillé, mais tout le texte est en navy. */}
                 <div style={{
                   borderRadius: 20, padding: '14px 16px', marginBottom: 14,
-                  background: score >= 4 ? '#FFF1B8' : score >= 3 ? 'rgba(255,190,11,0.10)' : 'rgba(141,153,174,0.10)',
-                  border: `1px solid ${score >= 4 ? 'rgba(237,193,69,0.40)' : 'rgba(141,153,174,0.18)'}`,
+                  background: score >= 4 ? '#FFF6DE' : score >= 3 ? 'rgba(237,193,69,0.10)' : 'rgba(31,58,95,0.05)',
+                  border: `1px solid ${score >= 4 ? 'rgba(237,193,69,0.45)' : 'rgba(31,58,95,0.10)'}`,
                   display: 'flex', alignItems: 'center', gap: 14,
                 }}>
                   <div style={{ fontSize: 38, lineHeight: 1, flexShrink: 0 }} aria-hidden="true">
                     {score >= 4 ? '☀️' : score === 3 ? '🌤️' : score === 2 ? '⛅' : score === 1 ? '☁️' : '🌙'}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 10, fontWeight: 900, letterSpacing: '0.20em', textTransform: 'uppercase', color: score >= 4 ? '#5c3d00' : '#6f7a8a' }}>
+                    <p style={{ margin: 0, fontSize: 10, fontWeight: 900, letterSpacing: '0.20em', textTransform: 'uppercase', color: score >= 4 ? '#b8860b' : '#6f7a8a' }}>
                       {isNow ? 'Maintenant' : `À ${hourLabel}`}
                     </p>
-                    <p style={{ margin: '3px 0 0', fontSize: 15, fontWeight: 800, color: score >= 4 ? '#3d2800' : score >= 3 ? '#8a5a00' : '#4a5568', lineHeight: 1.25 }}>
+                    <p style={{ margin: '3px 0 0', fontSize: 15, fontWeight: 800, color: '#1F3A5F', lineHeight: 1.25 }}>
                       {SCORE_LABEL[score] ?? '—'}
                     </p>
                     {sunWindow ? (
-                      <p style={{ margin: '4px 0 0', fontSize: 12, color: score >= 4 ? '#5c3d00' : '#6f7a8a', fontWeight: 600 }}>
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6f7a8a', fontWeight: 600 }}>
                         Soleil de {fmtSlotStart(sunWindow.fromSlot)} à {fmtSlotEnd(sunWindow.toSlot)}
                       </p>
                     ) : (

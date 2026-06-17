@@ -132,58 +132,64 @@ function drawCategoryPin(type: string): { width: number; height: number; data: U
 }
 
 // ── Parasol de terrasse ──────────────────────────────────────────────────
-// Petit parasol de café parisien, posé sur le trottoir, pour marquer la
-// terrasse. Teinté selon l'ensoleillement : doré chaud au soleil, gris-bleu
-// à l'ombre. Dessiné au canvas (net en retina via PIN_SCALE), ancré sur le pied.
+// Marqueur-parasol élancé (toile haut perchée + mât effilé en pointe). Teinté
+// selon l'ensoleillement : doré chaud au soleil, gris-bleu à l'ombre. Dessiné
+// au canvas (net en retina via PIN_SCALE), ancré sur la pointe du mât → la toile
+// flotte au-dessus du point, le pin du lieu se loge au pied (pas de chevauchement).
 function drawParasol(canopy: string, canopyDark: string): { width: number; height: number; data: Uint8Array } {
-  const W = 56, H = 56
+  // Marqueur-parasol ÉLANCÉ (façon « pin ») : grande toile en haut + mât effilé
+  // qui descend en pointe jusqu'au sol (= l'ancre). La toile flotte donc bien
+  // AU-DESSUS du point → plus de chevauchement pénible avec le pin du lieu, qui
+  // se retrouve au pied du mât. Canvas plus haut que large.
+  const W = 50, H = 70
   const canvas = document.createElement('canvas')
   canvas.width = W * PIN_SCALE; canvas.height = H * PIN_SCALE
   const ctx = canvas.getContext('2d')!
   ctx.scale(PIN_SCALE, PIN_SCALE)
 
   const CX = W / 2
-  const apexY = 11         // sommet de la toile
-  const rimY = 30          // bord bas de la toile
-  const baseY = 50         // pied du mât
-  const half = 19          // demi-largeur de la toile
-  const SC = 5             // festons du bord bas
+  const apexY = 9          // sommet de la toile
+  const rimY = 27          // bord bas de la toile
+  const tipY = 66          // pointe du mât (= ancre 'bottom')
+  const half = 21          // demi-largeur de la toile (bien marquée)
+  const SC = 6             // festons du bord bas
   const seg = (half * 2) / SC
 
-  // Ombre douce au sol (le parasol « pose » sur le trottoir)
+  // Ombre douce au sol, sous la pointe
   ctx.save()
-  ctx.fillStyle = 'rgba(31,58,95,0.16)'
+  ctx.fillStyle = 'rgba(31,58,95,0.18)'
   ctx.beginPath()
-  ctx.ellipse(CX, baseY + 0.5, 6.5, 2.1, 0, 0, Math.PI * 2)
+  ctx.ellipse(CX, tipY + 1.5, 5.5, 1.8, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 
-  // Mât fin et chaud
+  // Mât effilé (trapèze fin) terminé en pointe — lit comme la tige d'un pin
   ctx.save()
-  ctx.strokeStyle = '#8A7456'
-  ctx.lineWidth = 1.5
-  ctx.lineCap = 'round'
+  ctx.fillStyle = '#8A7456'
   ctx.beginPath()
-  ctx.moveTo(CX, rimY - 1)
-  ctx.lineTo(CX, baseY)
-  ctx.stroke()
+  ctx.moveTo(CX - 1.5, rimY)
+  ctx.lineTo(CX + 1.5, rimY)
+  ctx.lineTo(CX + 0.5, tipY)
+  ctx.lineTo(CX - 0.5, tipY)
+  ctx.closePath()
+  ctx.fill()
   ctx.restore()
 
-  // Contour de la toile : dôme galbé + bord festonné — réutilisé pour fill/clip/stroke
+  // Contour de la toile : grand dôme galbé + bord festonné — réutilisé fill/clip/stroke
   const traceCanopy = () => {
     ctx.beginPath()
     ctx.moveTo(CX - half, rimY)
-    ctx.quadraticCurveTo(CX - half * 0.92, apexY + 1.5, CX, apexY)      // dôme gauche → apex
-    ctx.quadraticCurveTo(CX + half * 0.92, apexY + 1.5, CX + half, rimY) // apex → dôme droit
+    ctx.quadraticCurveTo(CX - half * 0.9, apexY + 1.5, CX, apexY)        // dôme gauche → apex
+    ctx.quadraticCurveTo(CX + half * 0.9, apexY + 1.5, CX + half, rimY)  // apex → dôme droit
     for (let i = 0; i < SC; i++) {                                       // festons (droite → gauche)
       const x1 = CX + half - i * seg
       const x0 = CX + half - (i + 1) * seg
-      ctx.quadraticCurveTo((x0 + x1) / 2, rimY + 3.4, x0, rimY)
+      ctx.quadraticCurveTo((x0 + x1) / 2, rimY + 3.6, x0, rimY)
     }
     ctx.closePath()
   }
 
-  // Toile pleine — dégradé vertical doux pour le volume (clair en haut)
+  // Toile pleine — dégradé vertical doux (clair en haut) + reflet
   ctx.save()
   traceCanopy()
   const g = ctx.createLinearGradient(0, apexY, 0, rimY + 3)
@@ -191,56 +197,46 @@ function drawParasol(canopy: string, canopyDark: string): { width: number; heigh
   g.addColorStop(1, canopyDark)
   ctx.fillStyle = g
   ctx.fill()
-  // Reflet doux en haut à gauche (donne du relief sans surcharger)
   ctx.clip()
-  const sheen = ctx.createRadialGradient(CX - 6, apexY + 2, 1, CX - 6, apexY + 2, 17)
-  sheen.addColorStop(0, 'rgba(255,255,255,0.40)')
+  const sheen = ctx.createRadialGradient(CX - 7, apexY + 2, 1, CX - 7, apexY + 2, 19)
+  sheen.addColorStop(0, 'rgba(255,255,255,0.42)')
   sheen.addColorStop(1, 'rgba(255,255,255,0)')
   ctx.fillStyle = sheen
   ctx.fillRect(0, 0, W, H)
   ctx.restore()
 
-  // Ombre interne sous le bord (profondeur de la toile)
+  // Nervures discrètes (structure de la toile)
   ctx.save()
-  ctx.strokeStyle = 'rgba(20,32,51,0.10)'
-  ctx.lineWidth = 1.8
-  ctx.beginPath()
-  ctx.moveTo(CX - half + 1.5, rimY - 0.6)
-  ctx.quadraticCurveTo(CX, rimY + 1.6, CX + half - 1.5, rimY - 0.6)
-  ctx.stroke()
-  ctx.restore()
-
-  // Deux nervures discrètes (structure de la toile)
-  ctx.save()
-  ctx.strokeStyle = 'rgba(255,255,255,0.42)'
-  ctx.lineWidth = 0.7
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)'
+  ctx.lineWidth = 0.8
   ctx.lineCap = 'round'
   ctx.beginPath()
-  ctx.moveTo(CX, apexY + 1); ctx.lineTo(CX - half * 0.52, rimY)
-  ctx.moveTo(CX, apexY + 1); ctx.lineTo(CX + half * 0.52, rimY)
+  ctx.moveTo(CX, apexY + 1); ctx.lineTo(CX - half * 0.55, rimY)
+  ctx.moveTo(CX, apexY + 1); ctx.lineTo(CX, rimY)
+  ctx.moveTo(CX, apexY + 1); ctx.lineTo(CX + half * 0.55, rimY)
   ctx.stroke()
   ctx.restore()
 
-  // Contour blanc net — détache joliment le parasol de la carte
+  // Contour blanc net — détache joliment de la carte (toile + amorce du mât)
   ctx.save()
   traceCanopy()
   ctx.strokeStyle = 'rgba(255,255,255,0.96)'
-  ctx.lineWidth = 1.4
+  ctx.lineWidth = 1.6
   ctx.lineJoin = 'round'
   ctx.stroke()
   ctx.restore()
 
-  // Pointe + petit pommeau au sommet
+  // Pointe + pommeau au sommet
   ctx.save()
   ctx.strokeStyle = '#8A7456'
-  ctx.lineWidth = 1.3
+  ctx.lineWidth = 1.4
   ctx.lineCap = 'round'
   ctx.beginPath()
   ctx.moveTo(CX, apexY)
-  ctx.lineTo(CX, apexY - 2.6)
+  ctx.lineTo(CX, apexY - 3)
   ctx.stroke()
   ctx.fillStyle = canopyDark
-  ctx.beginPath(); ctx.arc(CX, apexY - 3, 1.4, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(CX, apexY - 3.4, 1.5, 0, Math.PI * 2); ctx.fill()
   ctx.restore()
 
   return {
@@ -749,9 +745,9 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
           'icon-size': ['interpolate', ['linear'], ['zoom'],
-            15, ['*', 0.52, ['coalesce', ['get', 'sz'], 1]],
-            17, ['*', 0.84, ['coalesce', ['get', 'sz'], 1]],
-            19, ['*', 1.15, ['coalesce', ['get', 'sz'], 1]],
+            15, ['*', 0.60, ['coalesce', ['get', 'sz'], 1]],
+            17, ['*', 0.98, ['coalesce', ['get', 'sz'], 1]],
+            19, ['*', 1.32, ['coalesce', ['get', 'sz'], 1]],
           ],
         },
       } as Parameters<typeof map.addLayer>[0])
