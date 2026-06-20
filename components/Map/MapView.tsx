@@ -238,46 +238,37 @@ function drawParasol(canopy: string, canopyDark: string): { width: number; heigh
   }
 }
 
-// Construit les features parasol d'une terrasse à partir des DONNÉES PARIS :
-//   • position = emplacement réel de la terrasse (terrace_lat/lng, open data)
-//   • taille   = surface réelle (longueur × largeur)
-//   • NOMBRE   = ∝ longueur → les grandes terrasses affichent une RANGÉE de
-//     parasols le long de la façade (axe terrace_bearing). Plus c'est grand,
-//     plus il y a de parasols : lecture immédiate de l'ampleur de la terrasse.
-function parasolFeatures(p: Place): GeoJSON.Feature[] {
-  const L = p.terrace_longueur ?? 6
-  const Wd = p.terrace_largeur ?? 3
-  const area = L * Wd
-  let sz = Math.max(0.78, Math.min(1.4, 0.72 + Math.sqrt(area) / 13))
-  const tLat = p.terrace_lat as number
-  const tLng = p.terrace_lng as number
+// Feature du parasol d'une terrasse, à partir des DONNÉES PARIS :
+//   • taille    = surface réelle (longueur × largeur) — petite vs grande terrasse
+//   • position  = emplacement RÉEL de la terrasse (terrace_lat/lng, open data)
+//     MAIS « clampé » : si ce point est trop loin du lieu (≥ 38 m → appariement
+//     open-data douteux), on le ramène à 9 m du pin dans la direction de la
+//     terrasse. Évite les parasols qui apparaissent « à côté » / dans la mauvaise
+//     rue tout en restant attaché au bon lieu. UN seul parasol par terrasse.
+function parasolFeature(p: Place): GeoJSON.Feature {
+  const area = (p.terrace_longueur ?? 6) * (p.terrace_largeur ?? 3)
+  const sz = Math.max(0.82, Math.min(1.32, 0.74 + Math.sqrt(area) / 14))
   const s = p.currentScore ?? 3
-  const mk = (lng: number, lat: number): GeoJSON.Feature => ({
+
+  const M = 111_320
+  const cosLat = Math.cos((p.lat * Math.PI) / 180)
+  const dE = ((p.terrace_lng as number) - p.lng) * M * cosLat
+  const dN = ((p.terrace_lat as number) - p.lat) * M
+  const d = Math.hypot(dE, dN)
+
+  let lng = p.terrace_lng as number
+  let lat = p.terrace_lat as number
+  if (d > 38 && d > 0.001) {
+    const k = 9 / d // ramène à 9 m du pin, même direction
+    lng = p.lng + (dE * k) / (M * cosLat)
+    lat = p.lat + (dN * k) / M
+  }
+
+  return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [lng, lat] },
     properties: { id: p.id, s, sz },
-  })
-
-  // Sans axe de façade → un seul parasol au point terrasse.
-  const N = p.terrace_bearing == null ? 1 : (L > 13 ? 3 : L > 6.5 ? 2 : 1)
-  if (N === 1) return [mk(tLng, tLat)]
-
-  sz *= 0.9 // légèrement plus petits en rangée
-  const M = 111_320
-  const cosLat = Math.cos((tLat * Math.PI) / 180)
-  const brad = ((p.terrace_bearing as number) * Math.PI) / 180
-  const ux = Math.sin(brad) // le long de la façade (Est)
-  const uy = Math.cos(brad) // le long de la façade (Nord)
-  const spacing = Math.min(5.5, L / N)
-  const out: GeoJSON.Feature[] = []
-  for (let i = 0; i < N; i++) {
-    const t = (i - (N - 1) / 2) * spacing
-    out.push(mk(
-      tLng + (ux * t) / (M * cosLat),
-      tLat + (uy * t) / M,
-    ))
   }
-  return out
 }
 
 // ── Style CielBleu ─────────────────────────────────────────────────────────
@@ -549,10 +540,6 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
   const selectedRingRef = useRef<mapboxgl.Marker | null>(null)
   const onAmeniteRef = useRef(onAmeniteSelect)
   onAmeniteRef.current = onAmeniteSelect
-  // Lieu mis en avant — lu par la boucle d'animation des parasols pour se mettre
-  // en pause quand une fiche est ouverte (le highlight pilote alors la lueur).
-  const highlightRef = useRef(highlightPlaceId)
-  highlightRef.current = highlightPlaceId
 
   // GeoJSON mis à jour dès que places change
   const geojson = useMemo((): GeoJSON.FeatureCollection => ({
@@ -572,13 +559,13 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     [places],
   )
 
-  // Placement 100 % piloté par les DONNÉES PARIS (cf. parasolFeatures) :
+  // Placement 100 % piloté par les DONNÉES PARIS (cf. parasolFeature) :
   // emplacement réel de la terrasse, taille ∝ surface, rangée ∝ longueur. Le
   // parasol est un objet DISTINCT du pin du lieu (qui reste à l'entrée Google),
   // mais ils se lisent ensemble : « ce lieu, et sa terrasse posée là, au soleil ».
   const terraceDotsGeojson = useMemo((): GeoJSON.FeatureCollection => ({
     type: 'FeatureCollection',
-    features: terracePlaces.flatMap(parasolFeatures),
+    features: terracePlaces.map(parasolFeature),
   }), [terracePlaces])
 
   // Refs accessibles depuis la closure de l'init effect (deps=[]) :
@@ -770,27 +757,6 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
             15, ['*', 0.54, ['coalesce', ['get', 'sz'], 1]],
             17, ['*', 0.86, ['coalesce', ['get', 'sz'], 1]],
             19, ['*', 1.16, ['coalesce', ['get', 'sz'], 1]],
-          ],
-        },
-      } as Parameters<typeof map.addLayer>[0])
-
-      // ── Parasol de la terrasse SÉLECTIONNÉE (rebond doux) ───────────────────
-      // Source à 1 feature alimentée à la sélection ; dessinée par-dessus, un peu
-      // plus grande, et animée par un léger REBOND vertical (icon-translate) →
-      // remplace l'anneau circulaire de sélection (jugé maladroit). Pas de cercle.
-      map.addSource('sel-terrace', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-      map.addLayer({
-        id: 'sel-terrace-parasol', type: 'symbol', source: 'sel-terrace',
-        ...slotTop,
-        layout: {
-          'icon-image': ['step', ['get', 's'], 'parasol-shade', 2, 'parasol-mid', 3, 'parasol-bright', 4, 'parasol-sun'],
-          'icon-anchor': 'bottom',
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-          'icon-size': ['interpolate', ['linear'], ['zoom'],
-            15, ['*', 0.66, ['coalesce', ['get', 'sz'], 1]],
-            17, ['*', 1.02, ['coalesce', ['get', 'sz'], 1]],
-            19, ['*', 1.34, ['coalesce', ['get', 'sz'], 1]],
           ],
         },
       } as Parameters<typeof map.addLayer>[0])
@@ -1232,11 +1198,10 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (map.getLayer('cluster-count'))   map.setPaintProperty('cluster-count', 'text-opacity', 0.55)
         if (map.getLayer('fontaines-layer')) map.setPaintProperty('fontaines-layer', 'icon-opacity', 0.55)
         if (map.getLayer('sanisettes-layer')) map.setPaintProperty('sanisettes-layer', 'icon-opacity', 0.55)
-        // Le parasol sélectionné est MASQUÉ ici (opacité 0) → il est rejoué plus
-        // grand et REBONDISSANT par la couche 'sel-terrace-parasol'. Les autres
-        // s'estompent.
+        // Le parasol du lieu choisi reste net (pas d'animation), les autres
+        // s'estompent. Sa lueur reste un peu plus marquée.
         if (map.getLayer('terraces-parasol')) map.setPaintProperty('terraces-parasol', 'icon-opacity',
-          ['case', ['==', ['get', 'id'], highlightPlaceId], 0, 0.30])
+          ['case', ['==', ['get', 'id'], highlightPlaceId], 1, 0.30])
         if (map.getLayer('terraces-glow')) map.setPaintProperty('terraces-glow', 'circle-opacity',
           ['case', ['==', ['get', 'id'], highlightPlaceId], 0.42, 0.08])
       } else {
@@ -1262,55 +1227,14 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         selSrc.setData(fc)
       }
 
-      // Source du parasol SÉLECTIONNÉ (rebondissant). Renseignée seulement si le
-      // lieu choisi a une terrasse ; vidée sinon (et à la déselection).
-      const selTerrSrc = map.getSource('sel-terrace') as mapboxgl.GeoJSONSource | undefined
-      if (selTerrSrc) {
-        const hasTerr = !!(place && place.terrace_lat != null && place.terrace_lng != null)
-        selTerrSrc.setData(
-          hasTerr && place
-            ? { type: 'FeatureCollection', features: parasolFeatures(place) }
-            : { type: 'FeatureCollection', features: [] },
-        )
-      }
     }
     if (map.getLayer('places-pins')) applyFocus()
     else map.once('style.load', applyFocus)
-    // Plus d'anneau circulaire (jugé maladroit) : la sélection est signalée par
-    // le parasol qui REBONDIT (couche 'sel-terrace-parasol' + boucle d'anim).
+    // Pas d'animation de sélection (anneau ET rebond jugés maladroits) : la
+    // sélection est signalée par le recadrage caméra + les autres parasols qui
+    // s'estompent + la lueur du parasol choisi.
   }, [highlightPlaceId]) // eslint-disable-line
 
-  // ── Animation : REBOND du parasol sélectionné ───────────────────────────
-  // Remplace l'anneau circulaire (jugé maladroit). Quand une terrasse est
-  // sélectionnée, son parasol (couche dédiée 'sel-terrace-parasol') fait un
-  // léger va-et-vient vertical via icon-translate → vivant, doux, pas un cercle.
-  // Pas de fiche sélectionnée → rien ne s'anime (économe). rAF nettoyé au démontage.
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    let raf = 0
-    let last = 0
-    let stopped = false
-    const tick = (t: number) => {
-      if (stopped) return
-      raf = requestAnimationFrame(tick)
-      if (t - last < 33) return // ~30 fps pour un rebond fluide
-      last = t
-      if (typeof document !== 'undefined' && document.hidden) return
-      if (!highlightRef.current) return
-      if (!map.getLayer('sel-terrace-parasol')) return
-      // Rebond doux : ease-out à la montée, retombée plus lente (≈ balle).
-      const period = 1100
-      const u = (t % period) / period          // 0…1
-      const bounce = Math.abs(Math.sin(u * Math.PI)) // 0→1→0, doux
-      const dy = -10 * bounce                   // px vers le haut (icon-translate)
-      try {
-        map.setPaintProperty('sel-terrace-parasol', 'icon-translate', [0, dy])
-      } catch { /* couche pas prête → ignoré */ }
-    }
-    raf = requestAnimationFrame(tick)
-    return () => { stopped = true; cancelAnimationFrame(raf) }
-  }, [])
 
   // ── Soleil + ombres réalistes : suit `sunHour` heure par heure ────────
   // On utilise lat/lng du cinematicFocus (ou Paris par défaut) pour la
