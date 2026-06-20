@@ -141,17 +141,17 @@ function drawParasol(canopy: string, canopyDark: string): { width: number; heigh
   // qui descend en pointe jusqu'au sol (= l'ancre). La toile flotte donc bien
   // AU-DESSUS du point → plus de chevauchement pénible avec le pin du lieu, qui
   // se retrouve au pied du mât. Canvas plus haut que large.
-  const W = 50, H = 70
+  const W = 52, H = 54
   const canvas = document.createElement('canvas')
   canvas.width = W * PIN_SCALE; canvas.height = H * PIN_SCALE
   const ctx = canvas.getContext('2d')!
   ctx.scale(PIN_SCALE, PIN_SCALE)
 
   const CX = W / 2
-  const apexY = 9          // sommet de la toile
-  const rimY = 27          // bord bas de la toile
-  const tipY = 66          // pointe du mât (= ancre 'bottom')
-  const half = 21          // demi-largeur de la toile (bien marquée)
+  const apexY = 8          // sommet de la toile
+  const rimY = 26          // bord bas de la toile
+  const tipY = 50          // pointe du mât (= ancre 'bottom') — mât court, parasol ramassé
+  const half = 22          // demi-largeur de la toile (bien marquée)
   const SC = 6             // festons du bord bas
   const seg = (half * 2) / SC
 
@@ -745,9 +745,9 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
           'icon-size': ['interpolate', ['linear'], ['zoom'],
-            15, ['*', 0.60, ['coalesce', ['get', 'sz'], 1]],
-            17, ['*', 0.98, ['coalesce', ['get', 'sz'], 1]],
-            19, ['*', 1.32, ['coalesce', ['get', 'sz'], 1]],
+            15, ['*', 0.54, ['coalesce', ['get', 'sz'], 1]],
+            17, ['*', 0.86, ['coalesce', ['get', 'sz'], 1]],
+            19, ['*', 1.16, ['coalesce', ['get', 'sz'], 1]],
           ],
         },
       } as Parameters<typeof map.addLayer>[0])
@@ -1228,19 +1228,24 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     // Solution : wrapper sans animation (que Mapbox peut transformer librement) +
     // anneau enfant qui porte l'animation.
     const wrapper = document.createElement('div')
-    wrapper.style.cssText = 'width:58px;height:58px;pointer-events:none'
+    wrapper.style.cssText = 'width:60px;height:60px;pointer-events:none'
     const ring = document.createElement('div')
     ring.style.cssText = [
-      'width:58px', 'height:58px', 'border-radius:50%',
+      'width:60px', 'height:60px', 'border-radius:50%',
       'border:3px solid rgba(255,255,255,0.92)',
-      'box-shadow:0 0 0 2.5px rgba(237,193,69,0.85), 0 0 18px rgba(237,193,69,0.40)',
-      'animation:pin-selected-pulse 1.7s ease-out infinite',
+      'box-shadow:0 0 0 2.5px rgba(237,193,69,0.90), 0 0 20px rgba(237,193,69,0.50)',
+      'animation:pin-selected-pulse 1.6s ease-out infinite',
       'pointer-events:none',
     ].join(';')
     wrapper.appendChild(ring)
 
+    // Anneau pulsant SUR LA TERRASSE (point terrasse si connu) → la terrasse
+    // sélectionnée « s'anime » bien autour de son parasol, pas seulement sur
+    // l'entrée du bar.
+    const ringLng = place.terrace_lng ?? place.lng
+    const ringLat = place.terrace_lat ?? place.lat
     selectedRingRef.current = new mapboxgl.Marker({ element: wrapper, anchor: 'center' })
-      .setLngLat([place.lng, place.lat])
+      .setLngLat([ringLng, ringLat])
       .addTo(map)
   }, [highlightPlaceId]) // eslint-disable-line
 
@@ -1263,12 +1268,25 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       if (t - last < 55) return
       last = t
       if (typeof document !== 'undefined' && document.hidden) return
-      if (highlightRef.current) return
       if (!map.getLayer('terraces-glow')) return
-      if (map.getZoom() < 15) return
-      const s = (Math.sin(t / 1500) + 1) / 2 // 0…1, période ~9,4 s
-      const top = 0.30 + 0.18 * s
+      const hl = highlightRef.current
       try {
+        if (hl) {
+          // Terrasse SÉLECTIONNÉE : sa lueur PULSE nettement (animation de
+          // sélection), les autres s'effacent. Période rapide (~2,6 s).
+          const s = (Math.sin(t / 420) + 1) / 2
+          map.setPaintProperty('terraces-glow', 'circle-opacity',
+            ['case', ['==', ['get', 'id'], hl], 0.30 + 0.50 * s, 0.06])
+          map.setPaintProperty('terraces-glow', 'circle-radius',
+            ['case', ['==', ['get', 'id'], hl],
+              ['interpolate', ['linear'], ['zoom'], 15, 16 + 8 * s, 19, 40 + 16 * s],
+              ['interpolate', ['linear'], ['zoom'], 15, 8, 19, 22]])
+          return
+        }
+        if (map.getZoom() < 15) return
+        // Lueur ambiante qui « respire » sur les terrasses ensoleillées.
+        const s = (Math.sin(t / 1500) + 1) / 2 // 0…1, période ~9,4 s
+        const top = 0.30 + 0.18 * s
         map.setPaintProperty('terraces-glow', 'circle-opacity',
           ['interpolate', ['linear'], ['zoom'], 15, 0, 16, top * 0.75, 19, top])
         map.setPaintProperty('terraces-glow', 'circle-radius',

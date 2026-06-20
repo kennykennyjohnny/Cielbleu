@@ -590,8 +590,9 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                      ensoleillé, mais tout le texte est en navy. */}
                 <div style={{
                   borderRadius: 20, padding: '14px 16px', marginBottom: 14,
-                  background: score >= 4 ? '#FFF6DE' : score >= 3 ? 'rgba(237,193,69,0.10)' : 'rgba(31,58,95,0.05)',
-                  border: `1px solid ${score >= 4 ? 'rgba(237,193,69,0.45)' : 'rgba(31,58,95,0.10)'}`,
+                  // Fonds BEIGE chauds (palette cream/limestone) — gardés ; texte navy.
+                  background: score >= 4 ? '#FFF1B8' : score >= 3 ? '#FBF3DD' : '#F3ECDD',
+                  border: `1px solid ${score >= 4 ? 'rgba(237,193,69,0.40)' : 'rgba(31,58,95,0.08)'}`,
                   display: 'flex', alignItems: 'center', gap: 14,
                 }}>
                   <div style={{ fontSize: 38, lineHeight: 1, flexShrink: 0 }} aria-hidden="true">
