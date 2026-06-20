@@ -757,6 +757,9 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
             19, ['*', 1.22, ['coalesce', ['get', 'sz'], 1]],
           ],
         },
+        // icon-translate (animé) en repère ÉCRAN → balancement vertical franc et
+        // constant quels que soient le pitch / le bearing de la carte.
+        paint: { 'icon-translate-anchor': 'viewport' },
       } as Parameters<typeof map.addLayer>[0])
 
       // ── Fontaines à boire — static asset public/geo/fontaines.geojson ───────
@@ -882,6 +885,16 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       if (placesSource && geojsonRef.current.features.length > 0) {
         placesSource.setData(geojsonRef.current)
       }
+
+      // ── Parasol TOUJOURS au-dessus de tout ──────────────────────────────────
+      // On force l'ordre final : halo puis parasol tout en haut de la pile, even
+      // au-dessus de 'selected-pin' (ajouté plus haut). Garantit que le pin du
+      // lieu (normal OU sélectionné) reste DERRIÈRE le parasol et ne le cache
+      // jamais. moveLayer() sans beforeId = remonte au sommet.
+      try {
+        if (map.getLayer('terraces-glow')) map.moveLayer('terraces-glow')
+        if (map.getLayer('terraces-parasol')) map.moveLayer('terraces-parasol')
+      } catch { /* noop */ }
     })
 
     // Clic fond → déselection
@@ -1252,8 +1265,10 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       if (typeof document !== 'undefined' && document.hidden) return
       if (!map.getLayer('terraces-parasol')) return
       if (map.getZoom() < 15) return
-      const y = Math.sin(t / 1650) * 1.7   // ±1,7 px (haut/bas)
-      const x = Math.sin(t / 2350) * 0.9   // ±0,9 px, période différente → drift organique
+      // Balancement « brise » bien visible : bob vertical net + léger drift latéral
+      // déphasé (mouvement organique, ni cercle ni rebond sec).
+      const y = Math.sin(t / 1300) * 4.5   // ±4,5 px (haut/bas)
+      const x = Math.sin(t / 1900) * 2.2   // ±2,2 px, période différente → drift organique
       try { map.setPaintProperty('terraces-parasol', 'icon-translate', [x, y]) } catch { /* noop */ }
     }
     raf = requestAnimationFrame(tick)
