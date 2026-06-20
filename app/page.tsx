@@ -810,7 +810,7 @@ export default function HomePage() {
         ref={headerRef}
         className="absolute top-0 inset-x-0 z-20"
         style={{
-          background: 'rgba(255,248,234,0.97)',
+          background: 'rgba(252,249,243,0.99)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
           borderBottom: '1px solid rgba(31,58,95,0.07)',
@@ -1075,7 +1075,7 @@ export default function HomePage() {
         >
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,252,243,0.98)',
+            background: 'rgba(254,252,248,0.99)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             border: '1.5px solid rgba(237,193,69,0.42)',
@@ -1197,7 +1197,7 @@ export default function HomePage() {
         <div className="absolute inset-x-0 z-10 pointer-events-none flex justify-center px-6"
           style={{ top: isDesktop ? 'calc(max(env(safe-area-inset-top,0px),10px) + 68px)' : 'calc(max(env(safe-area-inset-top,0px),10px) + 120px)' }}>
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-outfit text-xs font-bold"
-            style={{ background: 'rgba(255,248,234,0.97)', border: '1.5px solid rgba(31,58,95,0.12)',
+            style={{ background: 'rgba(252,249,243,0.99)', border: '1.5px solid rgba(31,58,95,0.12)',
               boxShadow: '0 4px 16px rgba(31,58,95,0.08)', color: '#1F3A5F' }}>
             {activeFilters.includes('fontaine') && <span>💧</span>}
             {activeFilters.includes('sanisette') && <span>🚺</span>}
@@ -1217,7 +1217,7 @@ export default function HomePage() {
               width: '100%',
               maxWidth: 480,
               pointerEvents: 'auto',
-              background: 'rgba(255,248,234,0.97)',
+              background: 'rgba(252,249,243,0.99)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',
               border: '1.5px solid rgba(31,58,95,0.10)',
@@ -1441,7 +1441,7 @@ export default function HomePage() {
           className="active:scale-[0.88] transition-transform"
           style={{
             width: 42, height: 42, borderRadius: '50%',
-            background: 'rgba(255,252,243,0.97)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+            background: 'rgba(254,252,248,0.99)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
             border: '1.5px solid rgba(31,58,95,0.12)', boxShadow: '0 4px 16px rgba(31,58,95,0.14)',
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
@@ -1455,7 +1455,7 @@ export default function HomePage() {
           className="active:scale-[0.88] transition-transform"
           style={{
             width: 42, height: 42, borderRadius: '50%',
-            background: 'rgba(255,252,243,0.97)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+            background: 'rgba(254,252,248,0.99)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
             border: '1.5px solid rgba(31,58,95,0.12)', boxShadow: '0 4px 16px rgba(31,58,95,0.14)',
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
@@ -1472,7 +1472,7 @@ export default function HomePage() {
             top: headerH,
             height: `calc(100dvh - ${headerH}px)`,
             width: 420,
-            background: 'rgba(255,252,243,0.97)',
+            background: 'rgba(254,252,248,0.99)',
             backdropFilter: 'blur(22px)',
             borderLeft: '1.5px solid rgba(31,58,95,0.10)',
             boxShadow: '-16px 0 40px rgba(31,58,95,0.12)',
@@ -1492,7 +1492,7 @@ export default function HomePage() {
           className="absolute bottom-0 inset-x-0 z-40"
           style={{
             height: '90dvh',
-            background: 'rgba(255,252,243,0.97)',
+            background: 'rgba(254,252,248,0.99)',
             backdropFilter: 'blur(22px)',
             borderTopLeftRadius: 22, borderTopRightRadius: 22,
             borderTop: '1.5px solid rgba(31,58,95,0.10)',
@@ -1522,7 +1522,7 @@ export default function HomePage() {
             top: headerH,
             height: `calc(100dvh - ${headerH}px)`,
             width: 420,
-            background: 'rgba(255,252,243,0.97)',
+            background: 'rgba(254,252,248,0.99)',
             backdropFilter: 'blur(22px)',
             borderLeft: '1.5px solid rgba(31,58,95,0.10)',
             boxShadow: '-16px 0 40px rgba(31,58,95,0.12)',
@@ -1543,7 +1543,7 @@ export default function HomePage() {
           className="absolute bottom-0 inset-x-0 z-30"
           style={{
             height: '62vh',
-            background: 'rgba(255,252,243,0.97)',
+            background: 'rgba(254,252,248,0.99)',
             backdropFilter: 'blur(22px)',
             borderTopLeftRadius: 22, borderTopRightRadius: 22,
             borderTop: '1.5px solid rgba(31,58,95,0.10)',
@@ -1575,7 +1575,7 @@ export default function HomePage() {
             height: `calc(100dvh - ${headerH}px)`,
             width: 420,
             display: 'flex', flexDirection: 'column',
-            background: 'rgba(255,252,243,0.97)',
+            background: 'rgba(254,252,248,0.99)',
             backdropFilter: 'blur(22px)',
             borderLeft: '1px solid rgba(20,32,51,0.10)',
             boxShadow: '-18px 0 48px rgba(11,31,58,0.18)',
