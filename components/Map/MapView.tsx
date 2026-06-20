@@ -513,6 +513,9 @@ interface Props {
   // Recentre la carte sur une adresse/rue géocodée (recherche). Le `nonce`
   // garantit qu'un nouveau choix re-déclenche le flyTo même au même endroit.
   flyToTarget?: { lng: number; lat: number; zoom: number; nonce: number } | null
+  // Zoom caméra sur un point d'eau / sanisette sélectionné (comme une fiche lieu),
+  // avec padding pour ne pas le cacher sous la card. `nonce` re-déclenche.
+  focusPoint?: { lng: number; lat: number; nonce: number } | null
   // true = affiche fontaines/sanisettes même dézoomé + highlight
   showFontaines?: boolean
   showSanisettes?: boolean
@@ -522,7 +525,7 @@ interface Props {
   geolocateNonce?: number
 }
 
-export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, flyToTarget, showFontaines, showSanisettes, onAmeniteSelect, highlightPlaceId, geolocateNonce }: Props) {
+export default function MapView({ places, onPlaceSelect, initialCenter, initialZoom, cinematicFocus, focusPlace, sunHour, homeView, flyToTarget, focusPoint, showFontaines, showSanisettes, onAmeniteSelect, highlightPlaceId, geolocateNonce }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<mapboxgl.Map | null>(null)
   const placesRef     = useRef<Place[]>(places)
@@ -1184,6 +1187,31 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       padding:  { top: 0, bottom: 0, left: 0, right: 0 },
     })
   }, [flyToTarget]) // eslint-disable-line
+
+  // ── Zoom caméra sur un point d'eau / sanisette sélectionné ──────────────
+  // Comme une fiche lieu : on plonge sur le point. Padding bas (mobile) / droite
+  // (desktop) pour que le point reste visible AU-DESSUS de la card.
+  useEffect(() => {
+    if (!focusPoint) return
+    const map = mapRef.current
+    if (!map) return
+    returnCameraRef.current = null
+    const isMobile = window.matchMedia('(max-width: 899px)').matches
+    map.flyTo({
+      center:   [focusPoint.lng, focusPoint.lat],
+      zoom:     18,
+      pitch:    0,
+      bearing:  0,
+      duration: 1200,
+      essential: true,
+      padding: {
+        top:    20,
+        bottom: isMobile ? Math.round(window.innerHeight * 0.6) : 20,
+        left:   20,
+        right:  isMobile ? 20 : 430,
+      },
+    })
+  }, [focusPoint?.nonce]) // eslint-disable-line
 
   // ── Anneau animé + mise en avant du pin sélectionné ────────────────
   useEffect(() => {

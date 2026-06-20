@@ -71,6 +71,8 @@ export default function HomePage() {
   // ── Recherche d'adresses / rues (géocodage Mapbox) ─────────────────────
   const [geoResults, setGeoResults] = useState<GeoResult[]>([])
   const [flyToTarget, setFlyToTarget] = useState<{ lng: number; lat: number; zoom: number; nonce: number } | null>(null)
+  // Zoom caméra sur un point d'eau / sanisette sélectionné (comme une fiche lieu)
+  const [focusPoint, setFocusPoint] = useState<{ lng: number; lat: number; nonce: number } | null>(null)
 
   // ── Lieu sélectionné (inline, sans navigation) ─────────────────────────
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
@@ -689,7 +691,11 @@ export default function HomePage() {
 
   const handleAmeniteSelect = useCallback((amenite: AmeniteInfo | null) => {
     setSelectedAmenite(amenite)
-    if (amenite) setSelectedPlace(null)  // ferme le panel lieu si open
+    if (amenite) {
+      setSelectedPlace(null)  // ferme le panel lieu si open
+      // Zoom caméra sur le point d'eau, comme pour une fiche lieu.
+      setFocusPoint({ lng: amenite.lng, lat: amenite.lat, nonce: Date.now() })
+    }
   }, [])
 
   /** Depuis le profil : ouvrir la fiche d'un lieu par son ID */
@@ -795,6 +801,7 @@ export default function HomePage() {
           sunHour={hour}
           homeView={homeViewCount}
           flyToTarget={flyToTarget}
+          focusPoint={focusPoint}
           showFontaines={activeFilters.includes('fontaine')}
           showSanisettes={activeFilters.includes('sanisette')}
           onAmeniteSelect={handleAmeniteSelect}
@@ -1188,20 +1195,6 @@ export default function HomePage() {
             <p className="text-xs text-text-soft font-outfit mt-1">
               Désactive un filtre ou modifie ta recherche.
             </p>
-          </div>
-        </div>
-      )}
-
-      {/* Message guidé quand filtre eau/WC actif sans autre filtre */}
-      {!loading && activeFilters.some(f => f === 'fontaine' || f === 'sanisette') && displayedPlaces.length === 0 && (
-        <div className="absolute inset-x-0 z-10 pointer-events-none flex justify-center px-6"
-          style={{ top: isDesktop ? 'calc(max(env(safe-area-inset-top,0px),10px) + 68px)' : 'calc(max(env(safe-area-inset-top,0px),10px) + 120px)' }}>
-          <div className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-outfit text-xs font-bold"
-            style={{ background: 'rgba(252,249,243,0.99)', border: '1.5px solid rgba(31,58,95,0.12)',
-              boxShadow: '0 4px 16px rgba(31,58,95,0.08)', color: '#1F3A5F' }}>
-            {activeFilters.includes('fontaine') && <span>💧</span>}
-            {activeFilters.includes('sanisette') && <span>🚺</span>}
-            <span>Zoome pour voir les points d&apos;eau et sanitaires</span>
           </div>
         </div>
       )}
