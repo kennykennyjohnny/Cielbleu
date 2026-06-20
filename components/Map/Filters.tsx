@@ -6,12 +6,12 @@ import { Sun, Beer, UtensilsCrossed, Trees, Droplet, Toilet, Armchair, type Luci
 // Café et Ouvert retirés (trop instables)
 const FILTERS: { id: FilterType; label: string; icon: LucideIcon }[] = [
   { id: 'terrace',    label: 'Terrasse',  icon: Armchair },
+  { id: 'fontaine',   label: 'Eau',       icon: Droplet },
+  { id: 'sanisette',  label: 'WC',        icon: Toilet },
   { id: 'sun',        label: 'Au soleil', icon: Sun },
   { id: 'bar',        label: 'Bars',      icon: Beer },
   { id: 'restaurant', label: 'Restos',    icon: UtensilsCrossed },
   { id: 'park',       label: 'Parcs',     icon: Trees },
-  { id: 'fontaine',   label: 'Eau',       icon: Droplet },
-  { id: 'sanisette',  label: 'WC',        icon: Toilet },
 ]
 
 function activeStyle(id: FilterType): React.CSSProperties {
