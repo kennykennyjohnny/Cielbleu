@@ -432,7 +432,7 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
         <div className="mx-auto w-full sm:max-w-md sm:mb-3 sm:px-3">
           <div
             className="rounded-t-[28px] sm:rounded-[28px] shadow-[0_-12px_40px_rgba(27,40,56,0.22)] flex flex-col overflow-hidden"
-            style={{ height: '92dvh', background: 'rgba(255,252,243,0.97)', backdropFilter: 'blur(18px)' }}
+            style={{ height: '92dvh', background: 'rgba(254,252,248,0.99)', backdropFilter: 'blur(18px)' }}
           >
 
             {/* ── Reco « mieux exposées à proximité » épinglée tout en haut ── */}
@@ -590,9 +590,9 @@ export default function PlacePreview({ place, hour, onClose, userId = null, onOp
                      ensoleillé, mais tout le texte est en navy. */}
                 <div style={{
                   borderRadius: 20, padding: '14px 16px', marginBottom: 14,
-                  // Fonds BEIGE chauds (palette cream/limestone) — gardés ; texte navy.
-                  background: score >= 4 ? '#FFF1B8' : score >= 3 ? '#FBF3DD' : '#F3ECDD',
-                  border: `1px solid ${score >= 4 ? 'rgba(237,193,69,0.40)' : 'rgba(31,58,95,0.08)'}`,
+                  // Fonds BEIGE CLAIR (pas marron) ; texte navy.
+                  background: score >= 4 ? '#FDF4CE' : score >= 3 ? '#FBF6E6' : '#F7F4ED',
+                  border: `1px solid ${score >= 4 ? 'rgba(237,193,69,0.40)' : 'rgba(31,58,95,0.07)'}`,
                   display: 'flex', alignItems: 'center', gap: 14,
                 }}>
                   <div style={{ fontSize: 38, lineHeight: 1, flexShrink: 0 }} aria-hidden="true">
