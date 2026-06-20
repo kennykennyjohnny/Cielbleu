@@ -144,10 +144,10 @@ function drawParasol(canopy: string, canopyDark: string): { width: number; heigh
   ctx.scale(PIN_SCALE, PIN_SCALE)
 
   const CX = W / 2
-  const apexY = 8          // sommet de la toile
-  const rimY = 26          // bord bas de la toile
+  const apexY = 7          // sommet de la toile
+  const rimY = 27          // bord bas de la toile (dôme bien galbé)
   const baseY = 49         // pied (= proche de l'ancre 'bottom', posé au sol)
-  const half = 22          // demi-largeur de la toile
+  const half = 23          // demi-largeur de la toile (large = parasol bien lisible)
   const SC = 5             // festons du bord bas
   const seg = (half * 2) / SC
 
@@ -724,15 +724,14 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       // trottoir à l'emplacement réel de la terrasse, teinté selon le soleil.
       //   • halo doux sous le parasol = lueur ensoleillée (subtil)
       //   • icône parasol : doré (soleil) / ambre (mitigé) / gris (ombre)
-      // slot:'top' → au-dessus des bâtiments 3D. Apparaît au zoom ≥ 15.
+      // SANS slot → ajoutées tout en haut de la pile, donc DEVANT les bâtiments
+      // 3D ET devant les pins (lisibilité : le parasol n'est jamais caché).
+      // Apparaît au zoom ≥ 15.
       map.addSource('terraces-pts', { type: 'geojson', data: terraceDotsGeojsonRef.current })
 
-      const slotTop = { slot: 'top' } as object
-
-      // Halo doux uniquement pour les terrasses bien ensoleillées (s ≥ 3.5)
+      // Halo doux uniquement pour les terrasses bien ensoleillées (s ≥ 3)
       map.addLayer({
         id: 'terraces-glow', type: 'circle', source: 'terraces-pts',
-        ...slotTop,
         minzoom: 15,
         filter: ['>=', ['get', 's'], 3],
         paint: {
@@ -746,7 +745,6 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       // Parasols
       map.addLayer({
         id: 'terraces-parasol', type: 'symbol', source: 'terraces-pts',
-        ...slotTop,
         minzoom: 15,
         layout: {
           'icon-image': ['step', ['get', 's'], 'parasol-shade', 2, 'parasol-mid', 3, 'parasol-bright', 4, 'parasol-sun'],
@@ -754,9 +752,9 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
           'icon-size': ['interpolate', ['linear'], ['zoom'],
-            15, ['*', 0.54, ['coalesce', ['get', 'sz'], 1]],
-            17, ['*', 0.86, ['coalesce', ['get', 'sz'], 1]],
-            19, ['*', 1.16, ['coalesce', ['get', 'sz'], 1]],
+            15, ['*', 0.58, ['coalesce', ['get', 'sz'], 1]],
+            17, ['*', 0.92, ['coalesce', ['get', 'sz'], 1]],
+            19, ['*', 1.22, ['coalesce', ['get', 'sz'], 1]],
           ],
         },
       } as Parameters<typeof map.addLayer>[0])
@@ -1235,6 +1233,32 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     // s'estompent + la lueur du parasol choisi.
   }, [highlightPlaceId]) // eslint-disable-line
 
+  // ── Animation : flottement « brise » des parasols ───────────────────────
+  // Léger va-et-vient organique (X et Y déphasés → pas un cercle, pas un rebond
+  // sec) appliqué à toute la couche parasols via icon-translate (PAINT = peu
+  // coûteux, pas de re-layout). Donne de la vie sans gadget. Actif zoom ≥ 15,
+  // en pause onglet caché, throttle ~20 fps. rAF nettoyé au démontage.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    let raf = 0
+    let last = 0
+    let stopped = false
+    const tick = (t: number) => {
+      if (stopped) return
+      raf = requestAnimationFrame(tick)
+      if (t - last < 50) return
+      last = t
+      if (typeof document !== 'undefined' && document.hidden) return
+      if (!map.getLayer('terraces-parasol')) return
+      if (map.getZoom() < 15) return
+      const y = Math.sin(t / 1650) * 1.7   // ±1,7 px (haut/bas)
+      const x = Math.sin(t / 2350) * 0.9   // ±0,9 px, période différente → drift organique
+      try { map.setPaintProperty('terraces-parasol', 'icon-translate', [x, y]) } catch { /* noop */ }
+    }
+    raf = requestAnimationFrame(tick)
+    return () => { stopped = true; cancelAnimationFrame(raf) }
+  }, [])
 
   // ── Soleil + ombres réalistes : suit `sunHour` heure par heure ────────
   // On utilise lat/lng du cinematicFocus (ou Paris par défaut) pour la
