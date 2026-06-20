@@ -1536,6 +1536,7 @@ export default function HomePage() {
             onClose={() => setSelectedAmenite(null)}
             userId={userId}
             onOpenProfile={() => { setShowProfile(true); setSelectedAmenite(null) }}
+            onSelectAmenite={handleAmeniteSelect}
           />
         </aside>
       )}
@@ -1551,6 +1552,7 @@ export default function HomePage() {
             onClose={() => setSelectedAmenite(null)}
             userId={userId}
             onOpenProfile={() => { setShowProfile(true); setSelectedAmenite(null) }}
+            onSelectAmenite={handleAmeniteSelect}
             bare
           />
         </MobileSheet>

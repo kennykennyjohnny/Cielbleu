@@ -1205,8 +1205,10 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       duration: 1200,
       essential: true,
       padding: {
+        // Card d'eau ouverte en « aperçu » (≈ 280 px) → on garde juste ce qu'il
+        // faut en bas pour que le point reste visible au-dessus de la card.
         top:    20,
-        bottom: isMobile ? Math.round(window.innerHeight * 0.6) : 20,
+        bottom: isMobile ? Math.min(300, Math.round(window.innerHeight * 0.4)) : 20,
         left:   20,
         right:  isMobile ? 20 : 430,
       },
