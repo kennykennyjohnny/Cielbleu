@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { ArrowLeft, Navigation } from 'lucide-react'
+import { ArrowLeft, Navigation, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { openMaps, webMapsUrl, type MapTarget, type MapMode } from '@/lib/maps'
 import type { AmeniteInfo } from '@/types'
@@ -17,6 +17,71 @@ interface Props {
   onClose: () => void
   userId?: string | null
   onOpenProfile?: () => void
+  /** Mode « feuille mobile » : on n'affiche PAS l'en-tête, le titre ni la barre
+   *  d'action (ils sont rendus dans le peek de MobileSheet via <AmenitePeek/>). */
+  bare?: boolean
+}
+
+/** Infos d'affichage dérivées d'un point d'eau / sanisette (titre, statut…). */
+function ameniteMeta(amenite: AmeniteInfo) {
+  const p = amenite.props
+  const isFontaine = amenite.type === 'fontaine'
+  const title = isFontaine ? 'Fontaine à boire' : 'Sanisette'
+  const emoji = isFontaine ? '💧' : '🚻'
+  const status = isFontaine
+    ? (p.dispo === 'OUI' ? 'Disponible' : 'Indisponible')
+    : (String(p.statut ?? '') === 'En service' ? 'En service' : 'Hors service')
+  const statusOk = status === 'Disponible' || status === 'En service'
+  const adresse = !isFontaine && p.adresse ? String(p.adresse) : null
+  return { isFontaine, title, emoji, status, statusOk, adresse }
+}
+
+/**
+ * AmenitePeek — en-tête compact (statut + titre + adresse + boutons) destiné au
+ * peek de MobileSheet : toujours visible, donc « Y aller » accessible direct.
+ */
+export function AmenitePeek({ amenite, onClose }: { amenite: AmeniteInfo; onClose: () => void }) {
+  const { title, emoji, status, statusOk, adresse, isFontaine } = ameniteMeta(amenite)
+  const mapTarget: MapTarget = { lat: amenite.lat, lng: amenite.lng }
+  const onMapClick = (mode: MapMode) => (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return
+    e.preventDefault(); openMaps(mapTarget, mode)
+  }
+  return (
+    <div style={{ padding: '0 16px 12px', position: 'relative' }}>
+      <button onClick={onClose} aria-label="Fermer"
+        style={{ position: 'absolute', top: -2, right: 12, width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(20,32,51,0.08)', color: '#0b1f3a', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'manipulation' }}>
+        <X size={15} strokeWidth={2.5} />
+      </button>
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999,
+        background: statusOk ? (isFontaine ? 'rgba(58,134,255,0.12)' : 'rgba(52,168,83,0.12)') : 'rgba(224,82,82,0.12)',
+        color: statusOk ? (isFontaine ? '#3A86FF' : '#34A853') : '#E05252',
+        border: `1px solid ${statusOk ? (isFontaine ? 'rgba(58,134,255,0.25)' : 'rgba(52,168,83,0.25)') : '#E0525230'}`,
+        fontSize: 12, fontWeight: 800,
+      }}>
+        <span style={{ fontSize: 14 }}>{emoji}</span>{status}
+      </span>
+      <h2 style={{ margin: '8px 0 0', fontFamily: 'var(--font-playfair)', fontWeight: 700, fontSize: 'clamp(20px,6vw,26px)', lineHeight: 1.05, letterSpacing: '-0.03em', color: '#0b1f3a', paddingRight: 40 }}>
+        {title}
+      </h2>
+      {adresse && (
+        <p style={{ margin: '4px 0 0', color: '#6f7a8a', fontSize: 13, fontWeight: 500, lineHeight: 1.3 }}>{adresse}</p>
+      )}
+      {/* Boutons : Y aller (itinéraire appli nav) + Maps (fiche/lieu) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 48px', gap: 8, marginTop: 12 }}>
+        <a href={webMapsUrl(mapTarget, 'directions')} target="_blank" rel="noopener noreferrer" onClick={onMapClick('directions')}
+          style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 13, textDecoration: 'none', fontFamily: 'var(--font-outfit)', fontWeight: 900, fontSize: 14, background: '#EDC145', color: '#1F3A5F', boxShadow: '0 6px 16px rgba(237,193,69,0.32)' }}>
+          <Navigation size={15} strokeWidth={2.5} /> Y aller
+        </a>
+        <a href={webMapsUrl(mapTarget, 'view')} target="_blank" rel="noopener noreferrer" onClick={onMapClick('view')}
+          aria-label="Voir sur Google Maps" title="Voir sur Google Maps"
+          style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 13, background: '#1F3A5F', border: 'none', fontSize: 18, textDecoration: 'none' }}>
+          🗺️
+        </a>
+      </div>
+    </div>
+  )
 }
 
 const CHIP_STYLE = (color: string): React.CSSProperties => ({
@@ -27,7 +92,7 @@ const CHIP_STYLE = (color: string): React.CSSProperties => ({
   lineHeight: 1.3,
 })
 
-export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProfile }: Props) {
+export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProfile, bare = false }: Props) {
   const [svError, setSvError] = useState(false)
   const [reviews, setReviews] = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null; user_id?: string | null }[]>([])
   const [commentText, setCommentText] = useState('')
@@ -125,7 +190,8 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
   return (
     <div style={{ background: 'transparent', fontFamily: 'var(--font-outfit)', color: '#142033' }}>
 
-      {/* ── HEADER ── */}
+      {/* ── HEADER ── (masqué en mode feuille mobile : géré par le peek) */}
+      {!bare && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px 14px' }}>
         <button onClick={onClose} aria-label="Fermer"
           style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
@@ -149,35 +215,40 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
           <span>{status}</span>
         </div>
       </div>
+      )}
 
       {/* ── SCROLLABLE BODY ── */}
-      <div style={{ padding: '0 14px', paddingBottom: 'max(calc(88px + env(safe-area-inset-bottom,0px)), 100px)' }}>
+      <div style={{ padding: bare ? '4px 16px 0' : '0 14px', paddingBottom: bare ? 24 : 'max(calc(88px + env(safe-area-inset-bottom,0px)), 100px)' }}>
 
-        {/* ── TITRE + ADRESSE ── */}
+        {/* ── TITRE + ADRESSE ── (titre masqué en mode feuille : dans le peek) */}
         <div style={{ paddingBottom: 16 }}>
-          <h1 style={{
-            margin: 0, fontFamily: 'var(--font-fraunces)', fontWeight: 700,
-            fontSize: 'clamp(26px,8vw,34px)', lineHeight: 0.95, letterSpacing: '-0.05em',
-            color: '#0b1f3a',
-          }}>
-            {title}
-          </h1>
-          {adresse && (
+          {!bare && (
+            <h1 style={{
+              margin: 0, fontFamily: 'var(--font-fraunces)', fontWeight: 700,
+              fontSize: 'clamp(26px,8vw,34px)', lineHeight: 0.95, letterSpacing: '-0.05em',
+              color: '#0b1f3a',
+            }}>
+              {title}
+            </h1>
+          )}
+          {!bare && adresse && (
             <p style={{ margin: '9px 0 0', color: '#6f7a8a', fontSize: 13.5, fontWeight: 500, lineHeight: 1.38 }}>
               {adresse}
             </p>
           )}
 
           {/* Chips info */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-            {potable && (
-              <span style={CHIP_STYLE(potable === 'Eau potable' ? '#3A86FF' : '#E05252')}>
-                💧 {potable}
-              </span>
-            )}
-            {pmr && <span style={CHIP_STYLE('#7B61FF')}>♿ {pmr}</span>}
-            {model && <span style={CHIP_STYLE('#8D99AE')}>{model}</span>}
-          </div>
+          {(potable || pmr || model) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: bare ? 0 : 12 }}>
+              {potable && (
+                <span style={CHIP_STYLE(potable === 'Eau potable' ? '#3A86FF' : '#E05252')}>
+                  💧 {potable}
+                </span>
+              )}
+              {pmr && <span style={CHIP_STYLE('#7B61FF')}>♿ {pmr}</span>}
+              {model && <span style={CHIP_STYLE('#8D99AE')}>{model}</span>}
+            </div>
+          )}
         </div>
 
         {/* ── HORAIRES (sanisette) ── */}
@@ -356,18 +427,19 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
         </div>
       </div>
 
-      {/* ── ACTION BAR STICKY — DA v2 ── */}
+      {/* ── ACTION BAR STICKY — DA v2 ── (masquée en mode feuille : dans le peek) */}
+      {!bare && (
       <div style={{ position: 'sticky', bottom: 0, zIndex: 40,
         paddingBottom: 'max(env(safe-area-inset-bottom,0px),12px)' }}>
         <div style={{
           display: 'grid', gridTemplateColumns: '1fr 48px', gap: 8,
           margin: '0 12px', padding: '12px 12px 14px',
-          background: 'rgba(255,248,236,0.96)', backdropFilter: 'blur(18px)',
+          background: 'rgba(254,252,248,0.99)', backdropFilter: 'blur(18px)',
           borderRadius: '24px 24px 0 0',
           borderTop: '1px solid rgba(31,58,95,0.10)',
           boxShadow: '0 -4px 24px rgba(31,58,95,0.10)',
         }}>
-          {/* Itinéraire Google Maps — fonctionne sur iOS/Android/desktop */}
+          {/* Itinéraire — ouvre l'appli de navigation (Google Maps / Plans) */}
           <a
             href={webMapsUrl(mapTarget, 'directions')}
             target="_blank" rel="noopener noreferrer"
@@ -402,6 +474,7 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
           </a>
         </div>
       </div>
+      )}
     </div>
   )
 }

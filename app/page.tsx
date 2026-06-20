@@ -10,7 +10,8 @@ import { cloudAdjustedScore } from '@/lib/sunScore'
 import Filters from '@/components/Map/Filters'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import PlacePageClient from '@/components/Map/PlacePageClient'
-import FicheAmenitePanel from '@/components/Map/FicheAmenitePanel'
+import FicheAmenitePanel, { AmenitePeek } from '@/components/Map/FicheAmenitePanel'
+import MobileSheet from '@/components/Map/MobileSheet'
 import ProfilePanel from '@/components/Map/ProfilePanel'
 import { owmIconToEmoji } from '@/lib/weather'
 import { isOpenAt } from '@/lib/openingHours'
@@ -1532,31 +1533,19 @@ export default function HomePage() {
       )}
 
       {selectedAmenite && !isDesktop && (
-        <section
-          className="absolute bottom-0 inset-x-0 z-30"
-          style={{
-            height: '62vh',
-            background: 'rgba(254,252,248,0.99)',
-            backdropFilter: 'blur(22px)',
-            borderTopLeftRadius: 22, borderTopRightRadius: 22,
-            borderTop: '1.5px solid rgba(31,58,95,0.10)',
-            boxShadow: '0 -12px 36px rgba(31,58,95,0.14)',
-            overflow: 'hidden',
-          }}
-          role="dialog" aria-label="Détails du point d'intérêt"
+        <MobileSheet
+          ariaLabel="Détails du point d'intérêt"
+          onClose={() => setSelectedAmenite(null)}
+          peek={<AmenitePeek amenite={selectedAmenite} onClose={() => setSelectedAmenite(null)} />}
         >
-          <div className="flex items-center justify-center" style={{ height: 22 }}>
-            <span style={{ width: 44, height: 5, borderRadius: 999, background: 'rgba(20,32,51,0.18)', display: 'block' }} />
-          </div>
-          <div className="overflow-y-auto" style={{ height: 'calc(100% - 22px)' }}>
-            <FicheAmenitePanel
-              amenite={selectedAmenite}
-              onClose={() => setSelectedAmenite(null)}
-              userId={userId}
-              onOpenProfile={() => { setShowProfile(true); setSelectedAmenite(null) }}
-            />
-          </div>
-        </section>
+          <FicheAmenitePanel
+            amenite={selectedAmenite}
+            onClose={() => setSelectedAmenite(null)}
+            userId={userId}
+            onOpenProfile={() => { setShowProfile(true); setSelectedAmenite(null) }}
+            bare
+          />
+        </MobileSheet>
       )}
 
       {/* ─── Panel lieu sélectionné (desktop : côté droit, mobile : bottom sheet) ─── */}
