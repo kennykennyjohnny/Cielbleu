@@ -34,7 +34,9 @@ export default function MobileSheet({ onClose, peek, children, ariaLabel }: Prop
     const mid = Math.min(Math.max(lo + 280, sheetH * 0.62), hi)
     return [lo, mid, hi]
   })()
-  const DEFAULT = 1
+  // Ouverture au palier « aperçu » (le plus bas) → la feuille prend peu de place,
+  // la carte reste bien visible. L'utilisateur glisse vers le haut pour les détails.
+  const DEFAULT = 0
 
   const [transformY, setTransformY] = useState('translateY(100%)')
   const levelRef = useRef(DEFAULT)
@@ -57,8 +59,12 @@ export default function MobileSheet({ onClose, peek, children, ariaLabel }: Prop
     return () => ro.disconnect()
   }, [])
 
-  // Animation d'entrée (vers le palier milieu).
+  // Animation d'entrée vers le palier par défaut. Se met à jour tant que
+  // l'utilisateur n'a pas glissé (pour suivre la hauteur de peek mesurée) ; une
+  // fois qu'il a interagi, on ne réinitialise plus le palier.
+  const interactedRef = useRef(false)
   useEffect(() => {
+    if (interactedRef.current) return
     const id = requestAnimationFrame(() => setTransformY(tyFor(DEFAULT)))
     return () => cancelAnimationFrame(id)
   }, [tyFor])
@@ -83,6 +89,7 @@ export default function MobileSheet({ onClose, peek, children, ariaLabel }: Prop
     const dy = e.touches[0].clientY - drag.current.startY
     if (!drag.current.dragging && Math.abs(dy) < 6) return
     drag.current.dragging = true
+    interactedRef.current = true
     drag.current.currentY = dy
     sheetRef.current.style.transition = 'none'
     const base = sheetH - levels[levelRef.current]
