@@ -652,9 +652,17 @@ export default function HomePage() {
   }, [hour]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleFilter = useCallback((filter: FilterType) => {
-    setActiveFilters((prev) =>
-      prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]
-    )
+    setActiveFilters((prev) => {
+      const has = prev.includes(filter)
+      let next = has ? prev.filter((f) => f !== filter) : [...prev, filter]
+      // En ACTIVANT un filtre eau/WC, on désactive « terrasse » automatiquement
+      // (la carte se concentre sur les points d'eau / sanisettes). On peut
+      // réactiver « terrasse » manuellement ensuite pour voir les deux.
+      if (!has && (filter === 'fontaine' || filter === 'sanisette')) {
+        next = next.filter((f) => f !== 'terrace')
+      }
+      return next
+    })
   }, [])
 
   const handlePlaceSelect = useCallback(async (place: Place | null) => {
