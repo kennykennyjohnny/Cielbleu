@@ -132,102 +132,103 @@ function drawCategoryPin(type: string): { width: number; height: number; data: U
 }
 
 // ── Parasol de terrasse ──────────────────────────────────────────────────
-// Marqueur-parasol élancé (toile haut perchée + mât effilé en pointe). Teinté
-// selon l'ensoleillement : doré chaud au soleil, gris-bleu à l'ombre. Dessiné
-// au canvas (net en retina via PIN_SCALE), ancré sur la pointe du mât → la toile
-// flotte au-dessus du point, le pin du lieu se loge au pied (pas de chevauchement).
+// Parasol de café POSÉ sur la terrasse (objet distinct du pin du lieu, mais qui
+// fonctionne avec lui). Teinté selon l'ensoleillement. Dessiné au canvas (net en
+// retina via PIN_SCALE), ancré sur le pied → posé au sol à l'emplacement réel de
+// la terrasse (donnée open data Ville de Paris).
 function drawParasol(canopy: string, canopyDark: string): { width: number; height: number; data: Uint8Array } {
-  // Parasol NET et iconique (2 tons : toile claire + dessous plus foncé), mât
-  // effilé qui descend rejoindre le pin du lieu → l'ensemble pin+parasol lit
-  // comme un seul marqueur « ce restaurant a une terrasse au soleil ».
-  const W = 50, H = 56
+  const W = 54, H = 52
   const canvas = document.createElement('canvas')
   canvas.width = W * PIN_SCALE; canvas.height = H * PIN_SCALE
   const ctx = canvas.getContext('2d')!
   ctx.scale(PIN_SCALE, PIN_SCALE)
 
   const CX = W / 2
-  const apexY = 7          // sommet de la toile
-  const rimY = 24          // bord bas de la toile
-  const tipY = 53          // pointe du mât (= ancre 'bottom', se pose sur le pin)
-  const half = 21          // demi-largeur de la toile
-  const SC = 4             // festons (peu nombreux = plus net)
+  const apexY = 8          // sommet de la toile
+  const rimY = 26          // bord bas de la toile
+  const baseY = 49         // pied (= proche de l'ancre 'bottom', posé au sol)
+  const half = 22          // demi-largeur de la toile
+  const SC = 5             // festons du bord bas
   const seg = (half * 2) / SC
 
-  // Ombre douce au sol, sous la pointe
+  // Ombre portée au sol — douce, ancre le parasol sur le trottoir
   ctx.save()
-  ctx.fillStyle = 'rgba(31,58,95,0.20)'
+  ctx.fillStyle = 'rgba(31,58,95,0.16)'
   ctx.beginPath()
-  ctx.ellipse(CX, tipY + 1.5, 5, 1.7, 0, 0, Math.PI * 2)
+  ctx.ellipse(CX, baseY + 1.5, 6.5, 2.1, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 
-  // Mât effilé (rejoint le pin)
+  // Mât + petit pied
   ctx.save()
-  ctx.fillStyle = '#8A7456'
-  ctx.beginPath()
-  ctx.moveTo(CX - 1.6, rimY)
-  ctx.lineTo(CX + 1.6, rimY)
-  ctx.lineTo(CX + 0.6, tipY)
-  ctx.lineTo(CX - 0.6, tipY)
-  ctx.closePath()
-  ctx.fill()
+  ctx.strokeStyle = '#8A7456'
+  ctx.lineWidth = 1.7
+  ctx.lineCap = 'round'
+  ctx.beginPath(); ctx.moveTo(CX, rimY); ctx.lineTo(CX, baseY); ctx.stroke()
+  ctx.lineWidth = 2.6
+  ctx.beginPath(); ctx.moveTo(CX - 2.6, baseY); ctx.lineTo(CX + 2.6, baseY); ctx.stroke()
   ctx.restore()
 
-  // Contour de la toile : dôme galbé + bord festonné (réutilisé fill/clip/stroke)
+  // Contour de la toile : dôme galbé (un peu aplati) + bord festonné régulier
   const traceCanopy = () => {
     ctx.beginPath()
     ctx.moveTo(CX - half, rimY)
-    ctx.quadraticCurveTo(CX - half, apexY + 2, CX, apexY)          // dôme gauche → apex
-    ctx.quadraticCurveTo(CX + half, apexY + 2, CX + half, rimY)    // apex → dôme droit
+    ctx.quadraticCurveTo(CX - half, apexY + 1, CX, apexY)          // dôme gauche → apex
+    ctx.quadraticCurveTo(CX + half, apexY + 1, CX + half, rimY)    // apex → dôme droit
     for (let i = 0; i < SC; i++) {                                 // festons (droite → gauche)
       const x1 = CX + half - i * seg
       const x0 = CX + half - (i + 1) * seg
-      ctx.quadraticCurveTo((x0 + x1) / 2, rimY + 4, x0, rimY)
+      ctx.quadraticCurveTo((x0 + x1) / 2, rimY + 3.8, x0, rimY)
     }
     ctx.closePath()
   }
 
-  // Toile : aplat clair + DESSOUS plus foncé (2 tons) + reflet — net, sans nervures
+  // Toile : aplat clair + DESSOUS plus foncé (2 tons) + reflet doux
   ctx.save()
   traceCanopy()
   ctx.fillStyle = canopy
   ctx.fill()
   ctx.clip()
-  // Dessous foncé (tiers bas)
-  const under = ctx.createLinearGradient(0, apexY + (rimY - apexY) * 0.5, 0, rimY + 4)
+  const under = ctx.createLinearGradient(0, apexY + (rimY - apexY) * 0.55, 0, rimY + 4)
   under.addColorStop(0, 'rgba(0,0,0,0)')
   under.addColorStop(1, canopyDark)
   ctx.fillStyle = under
   ctx.fillRect(0, 0, W, H)
-  // Reflet haut-gauche
-  const sheen = ctx.createRadialGradient(CX - 7, apexY + 3, 1, CX - 7, apexY + 3, 18)
-  sheen.addColorStop(0, 'rgba(255,255,255,0.45)')
+  const sheen = ctx.createRadialGradient(CX - 8, apexY + 3, 1, CX - 8, apexY + 3, 17)
+  sheen.addColorStop(0, 'rgba(255,255,255,0.42)')
   sheen.addColorStop(1, 'rgba(255,255,255,0)')
   ctx.fillStyle = sheen
   ctx.fillRect(0, 0, W, H)
+  ctx.restore()
+
+  // Coutures fines des panneaux (très discrètes) — donne de la structure sans charger
+  ctx.save()
+  ctx.strokeStyle = 'rgba(255,255,255,0.28)'
+  ctx.lineWidth = 0.6
+  ctx.lineCap = 'round'
+  for (let i = 1; i < SC; i++) {
+    const x = CX - half + i * seg
+    ctx.beginPath(); ctx.moveTo(CX, apexY + 1); ctx.lineTo(x, rimY); ctx.stroke()
+  }
   ctx.restore()
 
   // Contour blanc net
   ctx.save()
   traceCanopy()
   ctx.strokeStyle = 'rgba(255,255,255,0.97)'
-  ctx.lineWidth = 1.7
+  ctx.lineWidth = 1.5
   ctx.lineJoin = 'round'
   ctx.stroke()
   ctx.restore()
 
-  // Pointe + pommeau
+  // Pommeau au sommet
   ctx.save()
   ctx.strokeStyle = '#8A7456'
   ctx.lineWidth = 1.4
   ctx.lineCap = 'round'
-  ctx.beginPath()
-  ctx.moveTo(CX, apexY)
-  ctx.lineTo(CX, apexY - 3)
-  ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(CX, apexY); ctx.lineTo(CX, apexY - 2.8); ctx.stroke()
   ctx.fillStyle = canopyDark
-  ctx.beginPath(); ctx.arc(CX, apexY - 3.4, 1.5, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(CX, apexY - 3.2, 1.4, 0, Math.PI * 2); ctx.fill()
   ctx.restore()
 
   return {
@@ -235,6 +236,48 @@ function drawParasol(canopy: string, canopyDark: string): { width: number; heigh
     height: canvas.height,
     data: new Uint8Array(ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer),
   }
+}
+
+// Construit les features parasol d'une terrasse à partir des DONNÉES PARIS :
+//   • position = emplacement réel de la terrasse (terrace_lat/lng, open data)
+//   • taille   = surface réelle (longueur × largeur)
+//   • NOMBRE   = ∝ longueur → les grandes terrasses affichent une RANGÉE de
+//     parasols le long de la façade (axe terrace_bearing). Plus c'est grand,
+//     plus il y a de parasols : lecture immédiate de l'ampleur de la terrasse.
+function parasolFeatures(p: Place): GeoJSON.Feature[] {
+  const L = p.terrace_longueur ?? 6
+  const Wd = p.terrace_largeur ?? 3
+  const area = L * Wd
+  let sz = Math.max(0.78, Math.min(1.4, 0.72 + Math.sqrt(area) / 13))
+  const tLat = p.terrace_lat as number
+  const tLng = p.terrace_lng as number
+  const s = p.currentScore ?? 3
+  const mk = (lng: number, lat: number): GeoJSON.Feature => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [lng, lat] },
+    properties: { id: p.id, s, sz },
+  })
+
+  // Sans axe de façade → un seul parasol au point terrasse.
+  const N = p.terrace_bearing == null ? 1 : (L > 13 ? 3 : L > 6.5 ? 2 : 1)
+  if (N === 1) return [mk(tLng, tLat)]
+
+  sz *= 0.9 // légèrement plus petits en rangée
+  const M = 111_320
+  const cosLat = Math.cos((tLat * Math.PI) / 180)
+  const brad = ((p.terrace_bearing as number) * Math.PI) / 180
+  const ux = Math.sin(brad) // le long de la façade (Est)
+  const uy = Math.cos(brad) // le long de la façade (Nord)
+  const spacing = Math.min(5.5, L / N)
+  const out: GeoJSON.Feature[] = []
+  for (let i = 0; i < N; i++) {
+    const t = (i - (N - 1) / 2) * spacing
+    out.push(mk(
+      tLng + (ux * t) / (M * cosLat),
+      tLat + (uy * t) / M,
+    ))
+  }
+  return out
 }
 
 // ── Style CielBleu ─────────────────────────────────────────────────────────
@@ -529,24 +572,13 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     [places],
   )
 
+  // Placement 100 % piloté par les DONNÉES PARIS (cf. parasolFeatures) :
+  // emplacement réel de la terrasse, taille ∝ surface, rangée ∝ longueur. Le
+  // parasol est un objet DISTINCT du pin du lieu (qui reste à l'entrée Google),
+  // mais ils se lisent ensemble : « ce lieu, et sa terrasse posée là, au soleil ».
   const terraceDotsGeojson = useMemo((): GeoJSON.FeatureCollection => ({
     type: 'FeatureCollection',
-    features: terracePlaces.map(p => {
-      const area = (p.terrace_longueur ?? 6) * (p.terrace_largeur ?? 3)
-      // Facteur de taille du parasol selon la surface réelle (petite 0.8 → grande 1.35)
-      const sz = Math.max(0.8, Math.min(1.35, 0.7 + Math.sqrt(area) / 14))
-
-      // Position = LE POINT DU LIEU (pin Google), pas le point terrasse Open Data.
-      // Le parasol « pousse » ainsi DEPUIS le pin du restaurant → clairement
-      // rattaché au bon lieu (avant : posé au point terrasse, parfois loin du pin,
-      // il paraissait orphelin). Le parasol est ancré 'bottom' : son pied tombe
-      // sur le pin, sa toile s'élève au-dessus → ils forment un seul marqueur.
-      return {
-        type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
-        properties: { id: p.id, name: p.name, s: p.currentScore ?? 3, r: Math.max(3, Math.min(10, Math.sqrt(area))), sz },
-      }
-    }),
+    features: terracePlaces.flatMap(parasolFeatures),
   }), [terracePlaces])
 
   // Refs accessibles depuis la closure de l'init effect (deps=[]) :
@@ -1235,20 +1267,11 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       const selTerrSrc = map.getSource('sel-terrace') as mapboxgl.GeoJSONSource | undefined
       if (selTerrSrc) {
         const hasTerr = !!(place && place.terrace_lat != null && place.terrace_lng != null)
-        if (hasTerr && place) {
-          const area = (place.terrace_longueur ?? 6) * (place.terrace_largeur ?? 3)
-          const sz = Math.max(0.8, Math.min(1.35, 0.7 + Math.sqrt(area) / 14))
-          selTerrSrc.setData({
-            type: 'FeatureCollection',
-            features: [{
-              type: 'Feature',
-              geometry: { type: 'Point', coordinates: [place.lng, place.lat] },
-              properties: { id: place.id, s: place.currentScore ?? 3, sz },
-            }],
-          })
-        } else {
-          selTerrSrc.setData({ type: 'FeatureCollection', features: [] })
-        }
+        selTerrSrc.setData(
+          hasTerr && place
+            ? { type: 'FeatureCollection', features: parasolFeatures(place) }
+            : { type: 'FeatureCollection', features: [] },
+        )
       }
     }
     if (map.getLayer('places-pins')) applyFocus()
