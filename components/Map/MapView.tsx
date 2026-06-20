@@ -137,96 +137,87 @@ function drawCategoryPin(type: string): { width: number; height: number; data: U
 // au canvas (net en retina via PIN_SCALE), ancré sur la pointe du mât → la toile
 // flotte au-dessus du point, le pin du lieu se loge au pied (pas de chevauchement).
 function drawParasol(canopy: string, canopyDark: string): { width: number; height: number; data: Uint8Array } {
-  // Marqueur-parasol ÉLANCÉ (façon « pin ») : grande toile en haut + mât effilé
-  // qui descend en pointe jusqu'au sol (= l'ancre). La toile flotte donc bien
-  // AU-DESSUS du point → plus de chevauchement pénible avec le pin du lieu, qui
-  // se retrouve au pied du mât. Canvas plus haut que large.
-  const W = 52, H = 54
+  // Parasol NET et iconique (2 tons : toile claire + dessous plus foncé), mât
+  // effilé qui descend rejoindre le pin du lieu → l'ensemble pin+parasol lit
+  // comme un seul marqueur « ce restaurant a une terrasse au soleil ».
+  const W = 50, H = 56
   const canvas = document.createElement('canvas')
   canvas.width = W * PIN_SCALE; canvas.height = H * PIN_SCALE
   const ctx = canvas.getContext('2d')!
   ctx.scale(PIN_SCALE, PIN_SCALE)
 
   const CX = W / 2
-  const apexY = 8          // sommet de la toile
-  const rimY = 26          // bord bas de la toile
-  const tipY = 50          // pointe du mât (= ancre 'bottom') — mât court, parasol ramassé
-  const half = 22          // demi-largeur de la toile (bien marquée)
-  const SC = 6             // festons du bord bas
+  const apexY = 7          // sommet de la toile
+  const rimY = 24          // bord bas de la toile
+  const tipY = 53          // pointe du mât (= ancre 'bottom', se pose sur le pin)
+  const half = 21          // demi-largeur de la toile
+  const SC = 4             // festons (peu nombreux = plus net)
   const seg = (half * 2) / SC
 
   // Ombre douce au sol, sous la pointe
   ctx.save()
-  ctx.fillStyle = 'rgba(31,58,95,0.18)'
+  ctx.fillStyle = 'rgba(31,58,95,0.20)'
   ctx.beginPath()
-  ctx.ellipse(CX, tipY + 1.5, 5.5, 1.8, 0, 0, Math.PI * 2)
+  ctx.ellipse(CX, tipY + 1.5, 5, 1.7, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 
-  // Mât effilé (trapèze fin) terminé en pointe — lit comme la tige d'un pin
+  // Mât effilé (rejoint le pin)
   ctx.save()
   ctx.fillStyle = '#8A7456'
   ctx.beginPath()
-  ctx.moveTo(CX - 1.5, rimY)
-  ctx.lineTo(CX + 1.5, rimY)
-  ctx.lineTo(CX + 0.5, tipY)
-  ctx.lineTo(CX - 0.5, tipY)
+  ctx.moveTo(CX - 1.6, rimY)
+  ctx.lineTo(CX + 1.6, rimY)
+  ctx.lineTo(CX + 0.6, tipY)
+  ctx.lineTo(CX - 0.6, tipY)
   ctx.closePath()
   ctx.fill()
   ctx.restore()
 
-  // Contour de la toile : grand dôme galbé + bord festonné — réutilisé fill/clip/stroke
+  // Contour de la toile : dôme galbé + bord festonné (réutilisé fill/clip/stroke)
   const traceCanopy = () => {
     ctx.beginPath()
     ctx.moveTo(CX - half, rimY)
-    ctx.quadraticCurveTo(CX - half * 0.9, apexY + 1.5, CX, apexY)        // dôme gauche → apex
-    ctx.quadraticCurveTo(CX + half * 0.9, apexY + 1.5, CX + half, rimY)  // apex → dôme droit
-    for (let i = 0; i < SC; i++) {                                       // festons (droite → gauche)
+    ctx.quadraticCurveTo(CX - half, apexY + 2, CX, apexY)          // dôme gauche → apex
+    ctx.quadraticCurveTo(CX + half, apexY + 2, CX + half, rimY)    // apex → dôme droit
+    for (let i = 0; i < SC; i++) {                                 // festons (droite → gauche)
       const x1 = CX + half - i * seg
       const x0 = CX + half - (i + 1) * seg
-      ctx.quadraticCurveTo((x0 + x1) / 2, rimY + 3.6, x0, rimY)
+      ctx.quadraticCurveTo((x0 + x1) / 2, rimY + 4, x0, rimY)
     }
     ctx.closePath()
   }
 
-  // Toile pleine — dégradé vertical doux (clair en haut) + reflet
+  // Toile : aplat clair + DESSOUS plus foncé (2 tons) + reflet — net, sans nervures
   ctx.save()
   traceCanopy()
-  const g = ctx.createLinearGradient(0, apexY, 0, rimY + 3)
-  g.addColorStop(0, canopy)
-  g.addColorStop(1, canopyDark)
-  ctx.fillStyle = g
+  ctx.fillStyle = canopy
   ctx.fill()
   ctx.clip()
-  const sheen = ctx.createRadialGradient(CX - 7, apexY + 2, 1, CX - 7, apexY + 2, 19)
-  sheen.addColorStop(0, 'rgba(255,255,255,0.42)')
+  // Dessous foncé (tiers bas)
+  const under = ctx.createLinearGradient(0, apexY + (rimY - apexY) * 0.5, 0, rimY + 4)
+  under.addColorStop(0, 'rgba(0,0,0,0)')
+  under.addColorStop(1, canopyDark)
+  ctx.fillStyle = under
+  ctx.fillRect(0, 0, W, H)
+  // Reflet haut-gauche
+  const sheen = ctx.createRadialGradient(CX - 7, apexY + 3, 1, CX - 7, apexY + 3, 18)
+  sheen.addColorStop(0, 'rgba(255,255,255,0.45)')
   sheen.addColorStop(1, 'rgba(255,255,255,0)')
   ctx.fillStyle = sheen
   ctx.fillRect(0, 0, W, H)
   ctx.restore()
 
-  // Nervures discrètes (structure de la toile)
-  ctx.save()
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)'
-  ctx.lineWidth = 0.8
-  ctx.lineCap = 'round'
-  ctx.beginPath()
-  ctx.moveTo(CX, apexY + 1); ctx.lineTo(CX - half * 0.55, rimY)
-  ctx.moveTo(CX, apexY + 1); ctx.lineTo(CX, rimY)
-  ctx.moveTo(CX, apexY + 1); ctx.lineTo(CX + half * 0.55, rimY)
-  ctx.stroke()
-  ctx.restore()
-
-  // Contour blanc net — détache joliment de la carte (toile + amorce du mât)
+  // Contour blanc net
   ctx.save()
   traceCanopy()
-  ctx.strokeStyle = 'rgba(255,255,255,0.96)'
-  ctx.lineWidth = 1.6
+  ctx.strokeStyle = 'rgba(255,255,255,0.97)'
+  ctx.lineWidth = 1.7
   ctx.lineJoin = 'round'
   ctx.stroke()
   ctx.restore()
 
-  // Pointe + pommeau au sommet
+  // Pointe + pommeau
   ctx.save()
   ctx.strokeStyle = '#8A7456'
   ctx.lineWidth = 1.4
@@ -545,15 +536,14 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
       // Facteur de taille du parasol selon la surface réelle (petite 0.8 → grande 1.35)
       const sz = Math.max(0.8, Math.min(1.35, 0.7 + Math.sqrt(area) / 14))
 
-      // Position = LE point terrasse officiel de la Ville de Paris, tel quel.
-      // C'est l'emplacement autorisé de la terrasse (sur le trottoir, jamais dans
-      // un bâtiment ni sur la chaussée). On ne « pousse » PLUS dans une direction
-      // estimée : ça pouvait, selon le décalage du pin Google, envoyer le parasol
-      // DANS l'immeuble. Le chevauchement avec le pin du lieu est réglé autrement
-      // (le pin du lieu s'estompe en zoom rapproché, cf. places-pins icon-opacity).
+      // Position = LE POINT DU LIEU (pin Google), pas le point terrasse Open Data.
+      // Le parasol « pousse » ainsi DEPUIS le pin du restaurant → clairement
+      // rattaché au bon lieu (avant : posé au point terrasse, parfois loin du pin,
+      // il paraissait orphelin). Le parasol est ancré 'bottom' : son pied tombe
+      // sur le pin, sa toile s'élève au-dessus → ils forment un seul marqueur.
       return {
         type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: [p.terrace_lng!, p.terrace_lat!] },
+        geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
         properties: { id: p.id, name: p.name, s: p.currentScore ?? 3, r: Math.max(3, Math.min(10, Math.sqrt(area))), sz },
       }
     }),
@@ -748,6 +738,27 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
             15, ['*', 0.54, ['coalesce', ['get', 'sz'], 1]],
             17, ['*', 0.86, ['coalesce', ['get', 'sz'], 1]],
             19, ['*', 1.16, ['coalesce', ['get', 'sz'], 1]],
+          ],
+        },
+      } as Parameters<typeof map.addLayer>[0])
+
+      // ── Parasol de la terrasse SÉLECTIONNÉE (rebond doux) ───────────────────
+      // Source à 1 feature alimentée à la sélection ; dessinée par-dessus, un peu
+      // plus grande, et animée par un léger REBOND vertical (icon-translate) →
+      // remplace l'anneau circulaire de sélection (jugé maladroit). Pas de cercle.
+      map.addSource('sel-terrace', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: 'sel-terrace-parasol', type: 'symbol', source: 'sel-terrace',
+        ...slotTop,
+        layout: {
+          'icon-image': ['step', ['get', 's'], 'parasol-shade', 2, 'parasol-mid', 3, 'parasol-bright', 4, 'parasol-sun'],
+          'icon-anchor': 'bottom',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-size': ['interpolate', ['linear'], ['zoom'],
+            15, ['*', 0.66, ['coalesce', ['get', 'sz'], 1]],
+            17, ['*', 1.02, ['coalesce', ['get', 'sz'], 1]],
+            19, ['*', 1.34, ['coalesce', ['get', 'sz'], 1]],
           ],
         },
       } as Parameters<typeof map.addLayer>[0])
@@ -1189,11 +1200,13 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
         if (map.getLayer('cluster-count'))   map.setPaintProperty('cluster-count', 'text-opacity', 0.55)
         if (map.getLayer('fontaines-layer')) map.setPaintProperty('fontaines-layer', 'icon-opacity', 0.55)
         if (map.getLayer('sanisettes-layer')) map.setPaintProperty('sanisettes-layer', 'icon-opacity', 0.55)
-        // Le parasol du lieu choisi reste net, les autres s'estompent
+        // Le parasol sélectionné est MASQUÉ ici (opacité 0) → il est rejoué plus
+        // grand et REBONDISSANT par la couche 'sel-terrace-parasol'. Les autres
+        // s'estompent.
         if (map.getLayer('terraces-parasol')) map.setPaintProperty('terraces-parasol', 'icon-opacity',
-          ['case', ['==', ['get', 'id'], highlightPlaceId], 1, 0.30])
+          ['case', ['==', ['get', 'id'], highlightPlaceId], 0, 0.30])
         if (map.getLayer('terraces-glow')) map.setPaintProperty('terraces-glow', 'circle-opacity',
-          ['case', ['==', ['get', 'id'], highlightPlaceId], 0.5, 0.1])
+          ['case', ['==', ['get', 'id'], highlightPlaceId], 0.42, 0.08])
       } else {
         map.setPaintProperty('places-pins', 'icon-opacity', 1)
         if (map.getLayer('clusters'))        map.setPaintProperty('clusters', 'circle-opacity', 1)
@@ -1216,46 +1229,39 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
           : { type: 'FeatureCollection', features: [] }
         selSrc.setData(fc)
       }
+
+      // Source du parasol SÉLECTIONNÉ (rebondissant). Renseignée seulement si le
+      // lieu choisi a une terrasse ; vidée sinon (et à la déselection).
+      const selTerrSrc = map.getSource('sel-terrace') as mapboxgl.GeoJSONSource | undefined
+      if (selTerrSrc) {
+        const hasTerr = !!(place && place.terrace_lat != null && place.terrace_lng != null)
+        if (hasTerr && place) {
+          const area = (place.terrace_longueur ?? 6) * (place.terrace_largeur ?? 3)
+          const sz = Math.max(0.8, Math.min(1.35, 0.7 + Math.sqrt(area) / 14))
+          selTerrSrc.setData({
+            type: 'FeatureCollection',
+            features: [{
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [place.lng, place.lat] },
+              properties: { id: place.id, s: place.currentScore ?? 3, sz },
+            }],
+          })
+        } else {
+          selTerrSrc.setData({ type: 'FeatureCollection', features: [] })
+        }
+      }
     }
     if (map.getLayer('places-pins')) applyFocus()
     else map.once('style.load', applyFocus)
-
-    if (!place) return
-
-    // Anneau pulsant — IMPORTANT: Mapbox écrase `element.style.transform` pour positionner
-    // le marqueur. Si l'animation CSS applique aussi `transform: scale()` sur le même
-    // élément, l'animation gagne dans la cascade CSS et le pin se retrouve en haut-gauche.
-    // Solution : wrapper sans animation (que Mapbox peut transformer librement) +
-    // anneau enfant qui porte l'animation.
-    const wrapper = document.createElement('div')
-    wrapper.style.cssText = 'width:60px;height:60px;pointer-events:none'
-    const ring = document.createElement('div')
-    ring.style.cssText = [
-      'width:60px', 'height:60px', 'border-radius:50%',
-      'border:3px solid rgba(255,255,255,0.92)',
-      'box-shadow:0 0 0 2.5px rgba(237,193,69,0.90), 0 0 20px rgba(237,193,69,0.50)',
-      'animation:pin-selected-pulse 1.6s ease-out infinite',
-      'pointer-events:none',
-    ].join(';')
-    wrapper.appendChild(ring)
-
-    // Anneau pulsant SUR LA TERRASSE (point terrasse si connu) → la terrasse
-    // sélectionnée « s'anime » bien autour de son parasol, pas seulement sur
-    // l'entrée du bar.
-    const ringLng = place.terrace_lng ?? place.lng
-    const ringLat = place.terrace_lat ?? place.lat
-    selectedRingRef.current = new mapboxgl.Marker({ element: wrapper, anchor: 'center' })
-      .setLngLat([ringLng, ringLat])
-      .addTo(map)
+    // Plus d'anneau circulaire (jugé maladroit) : la sélection est signalée par
+    // le parasol qui REBONDIT (couche 'sel-terrace-parasol' + boucle d'anim).
   }, [highlightPlaceId]) // eslint-disable-line
 
-  // ── Animation : lueur ensoleillée qui « respire » sous les parasols ─────
-  // Donne vie aux terrasses au soleil (comme la pulsation du pin sélectionné),
-  // mais en lueur chaude plutôt qu'en cercle dur. On module l'opacité ET le
-  // rayon de la couche `terraces-glow` via une sinusoïde lente.
-  // Garde-fous perf : actif seulement zoom ≥ 15 (parasols visibles), throttle
-  // ~18 fps, en pause si l'onglet est caché OU si une fiche est ouverte (le
-  // highlight pilote alors la lueur). rAF nettoyé au démontage.
+  // ── Animation : REBOND du parasol sélectionné ───────────────────────────
+  // Remplace l'anneau circulaire (jugé maladroit). Quand une terrasse est
+  // sélectionnée, son parasol (couche dédiée 'sel-terrace-parasol') fait un
+  // léger va-et-vient vertical via icon-translate → vivant, doux, pas un cercle.
+  // Pas de fiche sélectionnée → rien ne s'anime (économe). rAF nettoyé au démontage.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -1265,32 +1271,18 @@ export default function MapView({ places, onPlaceSelect, initialCenter, initialZ
     const tick = (t: number) => {
       if (stopped) return
       raf = requestAnimationFrame(tick)
-      if (t - last < 55) return
+      if (t - last < 33) return // ~30 fps pour un rebond fluide
       last = t
       if (typeof document !== 'undefined' && document.hidden) return
-      if (!map.getLayer('terraces-glow')) return
-      const hl = highlightRef.current
+      if (!highlightRef.current) return
+      if (!map.getLayer('sel-terrace-parasol')) return
+      // Rebond doux : ease-out à la montée, retombée plus lente (≈ balle).
+      const period = 1100
+      const u = (t % period) / period          // 0…1
+      const bounce = Math.abs(Math.sin(u * Math.PI)) // 0→1→0, doux
+      const dy = -10 * bounce                   // px vers le haut (icon-translate)
       try {
-        if (hl) {
-          // Terrasse SÉLECTIONNÉE : sa lueur PULSE nettement (animation de
-          // sélection), les autres s'effacent. Période rapide (~2,6 s).
-          const s = (Math.sin(t / 420) + 1) / 2
-          map.setPaintProperty('terraces-glow', 'circle-opacity',
-            ['case', ['==', ['get', 'id'], hl], 0.30 + 0.50 * s, 0.06])
-          map.setPaintProperty('terraces-glow', 'circle-radius',
-            ['case', ['==', ['get', 'id'], hl],
-              ['interpolate', ['linear'], ['zoom'], 15, 16 + 8 * s, 19, 40 + 16 * s],
-              ['interpolate', ['linear'], ['zoom'], 15, 8, 19, 22]])
-          return
-        }
-        if (map.getZoom() < 15) return
-        // Lueur ambiante qui « respire » sur les terrasses ensoleillées.
-        const s = (Math.sin(t / 1500) + 1) / 2 // 0…1, période ~9,4 s
-        const top = 0.30 + 0.18 * s
-        map.setPaintProperty('terraces-glow', 'circle-opacity',
-          ['interpolate', ['linear'], ['zoom'], 15, 0, 16, top * 0.75, 19, top])
-        map.setPaintProperty('terraces-glow', 'circle-radius',
-          ['interpolate', ['linear'], ['zoom'], 15, 10 + 2 * s, 17, 20 + 4 * s, 19, 34 + 7 * s])
+        map.setPaintProperty('sel-terrace-parasol', 'icon-translate', [0, dy])
       } catch { /* couche pas prête → ignoré */ }
     }
     raf = requestAnimationFrame(tick)
