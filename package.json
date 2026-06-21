@@ -11,7 +11,12 @@
     "import:places": "tsx scripts/importPlaces.ts",
     "add:place": "tsx scripts/addPlace.ts",
     "buildings:process": "node --max-old-space-size=4096 -r tsx/cjs scripts/processBuildings.ts",
-    "scores:compute": "tsx scripts/computeScores.ts"
+    "scores:compute": "tsx scripts/computeScores.ts",
+    "video:studio": "remotion studio remotion/index.ts",
+    "video:canicule": "remotion render remotion/index.ts Canicule out/canicule.mp4",
+    "video:eau": "remotion render remotion/index.ts PointsDeau out/points-deau.mp4",
+    "video:ombre": "remotion render remotion/index.ts Ombre out/ombre.mp4",
+    "video:all": "npm run video:canicule && npm run video:eau && npm run video:ombre"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -27,6 +32,8 @@
     "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
+    "@remotion/cli": "^4.0.481",
+    "@remotion/google-fonts": "^4.0.481",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "^22.9.0",
@@ -36,6 +43,7 @@
     "dotenv": "^16.4.5",
     "eslint": "^9.14.0",
     "eslint-config-next": "^15.1.0",
+    "remotion": "^4.0.481",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
