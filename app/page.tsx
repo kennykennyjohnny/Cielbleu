@@ -10,7 +10,7 @@ import { cloudAdjustedScore } from '@/lib/sunScore'
 import Filters from '@/components/Map/Filters'
 import SunSlotBubbles from '@/components/Map/SunSlotBubbles'
 import PlacePageClient from '@/components/Map/PlacePageClient'
-import FicheAmenitePanel, { AmenitePeek } from '@/components/Map/FicheAmenitePanel'
+import FicheAmenitePanel, { AmenitePeek, AmeniteNearby } from '@/components/Map/FicheAmenitePanel'
 import MobileSheet from '@/components/Map/MobileSheet'
 import ProfilePanel from '@/components/Map/ProfilePanel'
 import { owmIconToEmoji } from '@/lib/weather'
@@ -1531,12 +1531,13 @@ export default function HomePage() {
           }}
           role="complementary" aria-label="Détails du point d'intérêt"
         >
+          {/* Recos « à proximité » épinglées en haut du panneau */}
+          <AmeniteNearby amenite={selectedAmenite} onSelect={handleAmeniteSelect} />
           <FicheAmenitePanel
             amenite={selectedAmenite}
             onClose={() => setSelectedAmenite(null)}
             userId={userId}
             onOpenProfile={() => { setShowProfile(true); setSelectedAmenite(null) }}
-            onSelectAmenite={handleAmeniteSelect}
           />
         </aside>
       )}
@@ -1545,6 +1546,7 @@ export default function HomePage() {
         <MobileSheet
           ariaLabel="Détails du point d'intérêt"
           onClose={() => setSelectedAmenite(null)}
+          topBar={<AmeniteNearby amenite={selectedAmenite} onSelect={handleAmeniteSelect} />}
           peek={<AmenitePeek amenite={selectedAmenite} onClose={() => setSelectedAmenite(null)} />}
         >
           <FicheAmenitePanel
@@ -1552,7 +1554,6 @@ export default function HomePage() {
             onClose={() => setSelectedAmenite(null)}
             userId={userId}
             onOpenProfile={() => { setShowProfile(true); setSelectedAmenite(null) }}
-            onSelectAmenite={handleAmeniteSelect}
             bare
           />
         </MobileSheet>

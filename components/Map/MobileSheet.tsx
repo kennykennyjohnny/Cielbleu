@@ -15,14 +15,16 @@ import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
 
 interface Props {
   onClose: () => void
+  /** Bande ÉPINGLÉE tout en haut de la feuille (au-dessus du peek), ex. recos. */
+  topBar?: ReactNode
   peek: ReactNode
   children: ReactNode
   ariaLabel?: string
 }
 
-export default function MobileSheet({ onClose, peek, children, ariaLabel }: Props) {
+export default function MobileSheet({ onClose, topBar, peek, children, ariaLabel }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null)
-  const peekRef = useRef<HTMLDivElement>(null)
+  const topRef = useRef<HTMLDivElement>(null)
   const drag = useRef({ startY: 0, currentY: 0, dragging: false, t0: 0 })
 
   // Hauteur du panneau (92 dvh) en px, et paliers « hauteur visible depuis le bas ».
@@ -50,12 +52,12 @@ export default function MobileSheet({ onClose, peek, children, ariaLabel }: Prop
     return () => window.removeEventListener('resize', update)
   }, [])
   useEffect(() => {
-    if (!peekRef.current) return
+    if (!topRef.current) return
     const ro = new ResizeObserver(() => {
-      if (peekRef.current) setPeekH(peekRef.current.offsetHeight)
+      if (topRef.current) setPeekH(topRef.current.offsetHeight)
     })
-    ro.observe(peekRef.current)
-    setPeekH(peekRef.current.offsetHeight)
+    ro.observe(topRef.current)
+    setPeekH(topRef.current.offsetHeight)
     return () => ro.disconnect()
   }, [])
 
@@ -121,18 +123,23 @@ export default function MobileSheet({ onClose, peek, children, ariaLabel }: Prop
         className="rounded-t-[28px] flex flex-col overflow-hidden"
         style={{ height: '92dvh', background: 'rgba(254,252,248,0.99)', backdropFilter: 'blur(18px)', boxShadow: '0 -12px 40px rgba(27,40,56,0.22)' }}
       >
-        {/* ── PEEK (zone de drag, toujours visible) ── */}
-        <div
-          ref={peekRef}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          style={{ flexShrink: 0, touchAction: 'none', userSelect: 'none', cursor: 'grab' }}
-        >
-          <div className="flex items-center justify-center pt-3 pb-2" aria-hidden="true">
-            <div style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(11,31,58,0.18)' }} />
+        {/* ── HAUT FIXE (toujours visible) = topBar épinglé + peek (zone de drag) ── */}
+        <div ref={topRef} style={{ flexShrink: 0 }}>
+          {/* topBar ÉPINGLÉ au-dessus de la card (recos…), non draggable.
+              Le composant gère lui-même sa bordure (et peut ne rien rendre). */}
+          {topBar}
+          {/* peek : poignée + en-tête, zone de drag */}
+          <div
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            style={{ touchAction: 'none', userSelect: 'none', cursor: 'grab' }}
+          >
+            <div className="flex items-center justify-center pt-3 pb-2" aria-hidden="true">
+              <div style={{ width: 40, height: 4, borderRadius: 999, background: 'rgba(11,31,58,0.18)' }} />
+            </div>
+            {peek}
           </div>
-          {peek}
         </div>
 
         {/* ── CONTENU SCROLLABLE ── */}
