@@ -21,8 +21,6 @@ interface Props {
   /** Mode « feuille mobile » : on n'affiche PAS l'en-tête, le titre ni la barre
    *  d'action (ils sont rendus dans le peek de MobileSheet via <AmenitePeek/>). */
   bare?: boolean
-  /** Sélectionner un autre point (depuis les recos « à proximité »). */
-  onSelectAmenite?: (a: AmeniteInfo) => void
 }
 
 /** Infos d'affichage dérivées d'un point d'eau / sanisette (titre, statut…). */
@@ -95,10 +93,65 @@ const CHIP_STYLE = (color: string): React.CSSProperties => ({
   lineHeight: 1.3,
 })
 
-export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProfile, bare = false, onSelectAmenite }: Props) {
-  const [svError, setSvError] = useState(false)
-  // Points du même type (eau OU WC) les plus proches — recos « à proximité ».
+/**
+ * AmeniteNearby — bande des points du MÊME type les plus proches (par distance),
+ * destinée à être ÉPINGLÉE AU-DESSUS de la card (comme les recos des bars), et
+ * non dans le contenu scrollable. Clic → sélectionne le point.
+ */
+export function AmeniteNearby({ amenite, onSelect }: { amenite: AmeniteInfo; onSelect: (a: AmeniteInfo) => void }) {
+  const { emoji, isFontaine } = ameniteMeta(amenite)
   const [nearby, setNearby] = useState<{ a: AmeniteInfo; dist: number }[]>([])
+  useEffect(() => {
+    let cancelled = false
+    setNearby([])
+    fetch(`/api/place-context?lat=${amenite.lat}&lng=${amenite.lng}`, { signal: AbortSignal.timeout(6000) })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((ctx) => {
+        if (cancelled || !ctx) return
+        const list = (amenite.type === 'fontaine' ? ctx.fontaines : ctx.sanisettes) as Record<string, unknown>[] | undefined
+        const items = (list ?? [])
+          .map((rec) => {
+            const g = rec.geo_point_2d as { lat?: number; lon?: number } | undefined
+            if (!g || typeof g.lat !== 'number' || typeof g.lon !== 'number') return null
+            const dist = distanceM(amenite.lat, amenite.lng, g.lat, g.lon)
+            return { a: { type: amenite.type, props: rec, lat: g.lat, lng: g.lon } as AmeniteInfo, dist }
+          })
+          .filter((x): x is { a: AmeniteInfo; dist: number } => x !== null && x.dist > 8)
+          .sort((x, y) => x.dist - y.dist)
+          .slice(0, 6)
+        setNearby(items)
+      })
+      .catch(() => { /* réseau indispo → pas de recos */ })
+    return () => { cancelled = true }
+  }, [amenite.lat, amenite.lng, amenite.type])
+
+  if (nearby.length === 0) return null
+  return (
+    <div style={{ padding: '8px 14px 9px', borderBottom: '1px solid rgba(31,58,95,0.08)' }}>
+      <p style={{ margin: '0 0 7px', fontSize: 10.5, fontWeight: 800, color: '#8D99AE', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span aria-hidden="true">{emoji}</span> {isFontaine ? 'Fontaines à proximité' : 'Sanisettes à proximité'}
+      </p>
+      <div className="flex gap-2 overflow-x-auto scrollbar-none" style={{ paddingBottom: 2 }}>
+        {nearby.map((n, i) => (
+          <button
+            key={i}
+            onClick={() => onSelect(n.a)}
+            className="shrink-0 inline-flex items-center active:scale-[0.96] transition-transform"
+            style={{ gap: 6, height: 32, paddingLeft: 9, paddingRight: 12, borderRadius: 999, background: '#fff', border: '1px solid rgba(31,58,95,0.12)', boxShadow: '0 2px 8px rgba(31,58,95,0.07)', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 13 }} aria-hidden="true">{emoji}</span>
+            <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 12.5, fontWeight: 800, color: '#1F3A5F' }}>
+              {n.dist < 1000 ? `${Math.round(n.dist)} m` : `${(n.dist / 1000).toFixed(1)} km`}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProfile, bare = false }: Props) {
+  const [svError, setSvError] = useState(false)
   const [reviews, setReviews] = useState<{ id: string; comment: string | null; created_at: string; display_name?: string | null; user_id?: string | null }[]>([])
   const [commentText, setCommentText] = useState('')
   const [commentSending, setCommentSending] = useState(false)
@@ -148,31 +201,6 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
     setCommentText('')
     loadReviews()
   }, [amenite.lat, amenite.lng, loadReviews])
-
-  // ── Points du même type les plus proches (open data Paris via place-context) ──
-  useEffect(() => {
-    let cancelled = false
-    setNearby([])
-    fetch(`/api/place-context?lat=${amenite.lat}&lng=${amenite.lng}`, { signal: AbortSignal.timeout(6000) })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((ctx) => {
-        if (cancelled || !ctx) return
-        const list = (amenite.type === 'fontaine' ? ctx.fontaines : ctx.sanisettes) as Record<string, unknown>[] | undefined
-        const items = (list ?? [])
-          .map((rec) => {
-            const g = rec.geo_point_2d as { lat?: number; lon?: number } | undefined
-            if (!g || typeof g.lat !== 'number' || typeof g.lon !== 'number') return null
-            const dist = distanceM(amenite.lat, amenite.lng, g.lat, g.lon)
-            return { a: { type: amenite.type, props: rec, lat: g.lat, lng: g.lon } as AmeniteInfo, dist }
-          })
-          .filter((x): x is { a: AmeniteInfo; dist: number } => x !== null && x.dist > 8) // exclut le point courant
-          .sort((x, y) => x.dist - y.dist)
-          .slice(0, 6)
-        setNearby(items)
-      })
-      .catch(() => { /* réseau indispo → pas de recos */ })
-    return () => { cancelled = true }
-  }, [amenite.lat, amenite.lng, amenite.type])
 
   async function handleCommentSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -280,35 +308,6 @@ export default function FicheAmenitePanel({ amenite, onClose, userId, onOpenProf
             </div>
           )}
         </div>
-
-        {/* ── À PROXIMITÉ : mêmes points les plus proches (basé distance) ── */}
-        {onSelectAmenite && nearby.length > 0 && (
-          <div style={{ marginBottom: 14 }}>
-            <p style={{ margin: '0 0 8px', fontSize: 10.5, fontWeight: 800, color: '#8D99AE',
-              letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-              {isFontaine ? 'Fontaines à proximité' : 'Sanisettes à proximité'}
-            </p>
-            <div className="flex gap-2 overflow-x-auto scrollbar-none" style={{ paddingBottom: 2 }}>
-              {nearby.map((n, i) => (
-                <button
-                  key={i}
-                  onClick={() => onSelectAmenite(n.a)}
-                  className="shrink-0 inline-flex items-center active:scale-[0.96] transition-transform"
-                  style={{
-                    gap: 6, height: 34, paddingLeft: 9, paddingRight: 12, borderRadius: 999,
-                    background: '#fff', border: '1px solid rgba(31,58,95,0.12)',
-                    boxShadow: '0 2px 8px rgba(31,58,95,0.07)', cursor: 'pointer',
-                  }}
-                >
-                  <span style={{ fontSize: 14 }}>{emoji}</span>
-                  <span style={{ fontFamily: 'var(--font-outfit)', fontSize: 12.5, fontWeight: 800, color: '#1F3A5F' }}>
-                    {n.dist < 1000 ? `${Math.round(n.dist)} m` : `${(n.dist / 1000).toFixed(1)} km`}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* ── HORAIRES (sanisette) ── */}
         {horaire && (
