@@ -15,8 +15,8 @@
     "video:studio": "remotion studio remotion/index.ts",
     "video:canicule": "remotion render remotion/index.ts Canicule out/canicule.mp4",
     "video:eau": "remotion render remotion/index.ts PointsDeau out/points-deau.mp4",
-    "video:ombre": "remotion render remotion/index.ts Ombre out/ombre.mp4",
-    "video:all": "npm run video:canicule && npm run video:eau && npm run video:ombre"
+    "video:fours": "remotion render remotion/index.ts Fours out/fours.mp4",
+    "video:all": "npm run video:canicule && npm run video:eau && npm run video:fours"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
