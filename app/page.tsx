@@ -147,7 +147,7 @@ export default function HomePage() {
 
   // ── Météo ────────────────────────────────────────────────────────────────
   interface WeatherResponse {
-    current: { temp: number; icon: string; description: string } | null
+    current: { temp: number; icon: string; description: string; cloudCover?: number } | null
     forecast: WeatherForecastEntry[]
   }
   const [weather, setWeather] = useState<WeatherResponse | null>(null)
@@ -171,17 +171,26 @@ export default function HomePage() {
       .catch(() => null)
   }, [])
 
-  // Entrée de prévision la plus proche de l'heure du slider
+  // Météo affichée au header pour l'heure du slider.
+  // ⚠️ Quand le slider est sur « maintenant », on montre la météo OBSERVÉE
+  // (`current`) et NON une prévision : une prévision 3 h peut dire « nuageux »
+  // alors qu'il fait grand soleil à l'instant. Sinon (heure future/passée), on
+  // prend la prévision la plus proche EN TEMPS RÉEL (via `dt`, pas l'heure-du-jour
+  // modulo qui pouvait choisir le mauvais créneau / le lendemain).
   const weatherForHour = useMemo(() => {
     if (!weather) return null
     const { current, forecast } = weather
+    const now = new Date()
+    const nowH = now.getHours() + now.getMinutes() / 60
+    if (current && Math.abs(hour - nowH) < 1) return current
     if (!forecast?.length) return current
-    // Utilise le champ `hour` (heure locale Paris 0-23) directement
-    const targetH = Math.round(hour)
+    const target = new Date()
+    target.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
+    const targetTs = target.getTime() / 1000
     let best = forecast[0]
-    let bestDiff = Math.abs((best.hour ?? 0) - targetH)
+    let bestDiff = Infinity
     for (const entry of forecast) {
-      const diff = Math.abs((entry.hour ?? 0) - targetH)
+      const diff = Math.abs((entry.dt ?? 0) - targetTs)
       if (diff < bestDiff) { best = entry; bestDiff = diff }
     }
     return best
@@ -193,19 +202,28 @@ export default function HomePage() {
   // fasse chuter brutalement TOUS les scores — la couverture varie en douceur,
   // comme le ressenti réel d'un après-midi « soleil et nuages ».
   const cloudForHour = useMemo<number | null>(() => {
-    // Quantifié à l'heure pleine : la valeur reste STABLE entre les ticks
-    // sous-horaires du slider → `displayedPlaces` (7000+ lieux) ne se recalcule
-    // pas à chaque frame pendant le drag (même fréquence qu'avant, + le lissage).
-    const qh = Math.round(hour)
+    // Slider sur « maintenant » → couverture nuageuse OBSERVÉE (cohérent avec le
+    // header, qui montre alors la météo réelle, pas une prévision 3 h).
+    const now = new Date()
+    const nowH = now.getHours() + now.getMinutes() / 60
+    if (weather?.current && Math.abs(hour - nowH) < 1 && typeof weather.current.cloudCover === 'number') {
+      return weather.current.cloudCover
+    }
+    // Sinon : moyenne pondérée des 2 créneaux de prévision qui encadrent l'heure,
+    // sélectionnés par TEMPS RÉEL (dt). Quantifié à l'heure pleine → stable
+    // pendant le drag (displayedPlaces ne se recalcule pas à chaque frame).
     const list = weather?.forecast
     if (list && list.length > 0) {
+      const target = new Date()
+      target.setHours(Math.round(hour), 0, 0, 0)
+      const targetTs = target.getTime() / 1000
       const sorted = [...list].sort(
-        (a, b) => Math.abs((a.hour ?? 0) - qh) - Math.abs((b.hour ?? 0) - qh),
+        (a, b) => Math.abs((a.dt ?? 0) - targetTs) - Math.abs((b.dt ?? 0) - targetTs),
       )
       const a = sorted[0]
       const b = sorted[1] ?? a
-      const da = Math.abs((a.hour ?? 0) - qh)
-      const db = Math.abs((b.hour ?? 0) - qh)
+      const da = Math.abs((a.dt ?? 0) - targetTs)
+      const db = Math.abs((b.dt ?? 0) - targetTs)
       const wTot = da + db
       // Le créneau le plus proche pèse le plus (poids ∝ distance de l'autre).
       const blended = wTot === 0 ? a.cloudCover : (a.cloudCover * db + b.cloudCover * da) / wTot
