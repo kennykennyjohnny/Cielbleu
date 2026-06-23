@@ -24,8 +24,8 @@ export const COLORS = {
   ink:    '#142033',
 }
 
-// Marque (faciles à changer pour HopSoleil si besoin).
-export const BRAND = 'CielBleu'
+// Marque.
+export const BRAND = 'HopSoleil'
 export const URL = 'cielbleu.fr'
 
 // Format Instagram (Reels / Stories) — 9:16.

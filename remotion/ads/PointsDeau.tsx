@@ -1,73 +1,113 @@
 import React from 'react'
-import { AbsoluteFill, Sequence, spring, useCurrentFrame, useVideoConfig } from 'remotion'
+import { AbsoluteFill, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion'
 import { BRICOLAGE, COLORS, OUTFIT } from '../lib/theme'
 import { Drop, Pin } from '../components/Shapes'
-import { Cta, Reveal } from '../components/Ui'
+import { Center, Float, GoldHalo, Kinetic, LightSweep } from '../components/Motion'
+import { Cta } from '../components/Ui'
 
-/** Épingle « eau » qui tombe du haut avec un petit rebond. */
-const DropPin: React.FC<{ delay: number; x: number; y: number; s?: number }> = ({ delay, x, y, s = 1 }) => {
+/** Goutte qui tombe puis splashe (onde bleue) au point donné, à `land`. */
+const Splash: React.FC<{ land: number; x: number; y: number; size?: number }> = ({ land, x, y, size = 46 }) => {
+  const frame = useCurrentFrame()
+  const fall = interpolate(frame, [land - 16, land], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
+  const dropY = interpolate(fall, [0, 1], [-440, 0])
+  const t = frame - land
+  const r = t >= 0 ? interpolate(t, [0, 30], [6, 110], { extrapolateRight: 'clamp' }) : 0
+  const ro = t >= 0 ? interpolate(t, [0, 4, 30], [0, 0.7, 0]) : 0
+  return (
+    <>
+      {frame < land && fall > 0 && (
+        <div style={{ position: 'absolute', left: x - size / 2, top: y + dropY - size / 2 }}>
+          <Drop size={size} color={COLORS.ciel} />
+        </div>
+      )}
+      {t >= 0 && (
+        <div style={{ position: 'absolute', left: x - r, top: y - r, width: r * 2, height: r * 2, borderRadius: '50%', border: `4px solid rgba(78,163,255,${ro.toFixed(3)})` }} />
+      )}
+      {t >= 0 && (
+        <div style={{ position: 'absolute', left: x - 8, top: y - 8, width: 16, height: 16, borderRadius: '50%', background: COLORS.ciel, opacity: interpolate(t, [0, 24], [1, 0.35], { extrapolateRight: 'clamp' }) }} />
+      )}
+    </>
+  )
+}
+
+const Counter: React.FC<{ to: number; a: number; b: number }> = ({ to, a, b }) => {
+  const frame = useCurrentFrame()
+  const v = Math.round(interpolate(frame, [a, b], [0, to], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }))
+  return <>{v.toLocaleString('fr-FR')}</>
+}
+
+const NearPin: React.FC<{ at: number }> = ({ at }) => {
   const frame = useCurrentFrame()
   const { fps } = useVideoConfig()
-  const drop = spring({ frame: frame - delay, fps, config: { damping: 11, mass: 0.8 } })
-  const ty = (1 - drop) * -520
+  const s = spring({ frame: frame - at, fps, config: { damping: 10, mass: 0.7 } })
+  if (frame < at) return null
   return (
-    <div style={{ position: 'absolute', left: x, top: y, transform: `translateY(${ty}px) scale(${s})`, opacity: drop > 0.02 ? 1 : 0 }}>
-      <Pin size={120} color={COLORS.ciel}>
-        <Drop size={52} color={COLORS.cielDeep} />
-      </Pin>
+    <div style={{ position: 'absolute', left: 0, top: 980, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, transform: `scale(${interpolate(s, [0, 1], [0.4, 1])})` }}>
+      <Pin size={150} color={COLORS.ciel}><Drop size={64} color={COLORS.cielDeep} /></Pin>
+      <div style={{ padding: '20px 40px', borderRadius: 999, background: COLORS.gold, color: COLORS.navy, fontFamily: BRICOLAGE, fontWeight: 800, fontSize: 64 }}>
+        Le plus proche : 200 m
+      </div>
     </div>
   )
 }
 
 export const PointsDeau: React.FC = () => {
   return (
-    <AbsoluteFill style={{ background: `linear-gradient(165deg, ${COLORS.ciel} 0%, ${COLORS.cielDeep} 100%)`, fontFamily: OUTFIT }}>
-      {/* ── Scène A : la soif ── */}
-      <Sequence durationInFrames={104}>
-        <AbsoluteFill style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 30, padding: 80 }}>
-          <Reveal delay={2}>
-            <Drop size={260} color={COLORS.white} />
-          </Reveal>
-          <Reveal delay={12}>
-            <div style={{ fontFamily: BRICOLAGE, fontWeight: 800, fontSize: 150, color: COLORS.white, letterSpacing: '-0.03em' }}>
-              Soif ?
+    <AbsoluteFill style={{ background: 'linear-gradient(165deg,#244A7A 0%,#1F3A5F 100%)', fontFamily: BRICOLAGE }}>
+      <GoldHalo intensity={0.5} />
+
+      {/* ─── Beat 1 : la punchline qui pique ─── */}
+      <Sequence durationInFrames={76}>
+        <Center gap={38}>
+          <Float amp={12} speed={32}><Drop size={230} color={COLORS.white} /></Float>
+          <Kinetic text="Tu payes ta flotte 4 €." size={120} color={COLORS.white} />
+        </Center>
+      </Sequence>
+
+      {/* ─── Beat 2 : la vérité ─── */}
+      <Sequence from={76} durationInFrames={70}>
+        <Center gap={20}>
+          <Kinetic text="Une fontaine gratuite" size={118} color={COLORS.white} />
+          <Kinetic text="à 30 mètres." size={140} color={COLORS.gold} delay={12} />
+        </Center>
+      </Sequence>
+
+      {/* ─── Beat 3 : la carte (gouttes → compteur → le plus proche) ─── */}
+      <Sequence from={146} durationInFrames={74}>
+        <AbsoluteFill>
+          {/* grille de rues */}
+          {[260, 520, 780, 1280, 1540].map((yy) => (
+            <div key={`h${yy}`} style={{ position: 'absolute', left: 0, top: yy, width: '100%', height: 10, background: 'rgba(255,255,255,0.06)' }} />
+          ))}
+          {[180, 470, 760, 980].map((xx) => (
+            <div key={`v${xx}`} style={{ position: 'absolute', top: 0, left: xx, height: '100%', width: 10, background: 'rgba(255,255,255,0.06)' }} />
+          ))}
+          {/* compteur */}
+          <div style={{ position: 'absolute', top: 150, left: 0, width: '100%', textAlign: 'center' }}>
+            <div style={{ fontFamily: BRICOLAGE, fontWeight: 800, fontSize: 190, color: COLORS.gold, lineHeight: 1 }}>
+              <Counter to={1200} a={6} b={56} />
             </div>
-          </Reveal>
-          <Reveal delay={22} style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: BRICOLAGE, fontWeight: 800, fontSize: 76, color: COLORS.navy, lineHeight: 1.05 }}>
-              1 200 fontaines<br />gratuites à Paris
+            <div style={{ fontFamily: OUTFIT, fontWeight: 800, fontSize: 60, color: COLORS.white, letterSpacing: '0.02em' }}>
+              fontaines gratuites
             </div>
-          </Reveal>
+          </div>
+          {/* pluie de gouttes qui splashent sur la ville */}
+          <Splash land={8} x={250} y={760} />
+          <Splash land={16} x={690} y={640} />
+          <Splash land={24} x={500} y={900} />
+          <Splash land={32} x={840} y={820} />
+          <Splash land={40} x={360} y={1000} />
+          <Splash land={48} x={760} y={1080} />
+          {/* le plus proche */}
+          <NearPin at={56} />
         </AbsoluteFill>
       </Sequence>
 
-      {/* ── Scène B : la carte ── */}
-      <Sequence from={104} durationInFrames={98}>
-        <AbsoluteFill style={{ background: `radial-gradient(120% 80% at 50% 30%, ${COLORS.cream} 0%, #DCEFFF 100%)` }}>
-          {/* fausses rues */}
-          {[300, 760, 1180, 1560].map((yy) => (
-            <div key={`h${yy}`} style={{ position: 'absolute', left: 0, top: yy, width: '100%', height: 14, background: 'rgba(31,58,95,0.06)' }} />
-          ))}
-          {[170, 540, 900].map((xx) => (
-            <div key={`v${xx}`} style={{ position: 'absolute', top: 0, left: xx, height: '100%', width: 14, background: 'rgba(31,58,95,0.06)' }} />
-          ))}
-          <DropPin delay={4} x={120} y={420} s={0.9} />
-          <DropPin delay={12} x={620} y={300} s={1.25} />
-          <DropPin delay={20} x={820} y={620} s={0.95} />
-          <DropPin delay={28} x={300} y={760} s={1.05} />
-          <Reveal delay={40} style={{ position: 'absolute', bottom: 120, left: 0, width: '100%', textAlign: 'center' }}>
-            <div style={{ display: 'inline-block', padding: '28px 46px', borderRadius: 32, background: COLORS.navy }}>
-              <span style={{ fontFamily: BRICOLAGE, fontWeight: 800, fontSize: 70, color: COLORS.white }}>
-                La plus proche, en 1 tap.
-              </span>
-            </div>
-          </Reveal>
-        </AbsoluteFill>
-      </Sequence>
+      <LightSweep from={146} dur={22} />
 
-      {/* ── Scène C : CTA ── */}
-      <Sequence from={202} durationInFrames={98}>
-        <Cta tagline="Une fontaine gratuite, tout près" />
+      {/* ─── CTA ─── */}
+      <Sequence from={220} durationInFrames={80}>
+        <Cta tagline="La map des fontaines, en 1 tap" />
       </Sequence>
     </AbsoluteFill>
   )
