@@ -2,7 +2,7 @@
 
 ## Projet
 Web app Next.js qui montre les terrasses ensoleillées à Paris en temps réel.
-- Domaine test : hopleon.fr — Domaine prod : cielbleu.fr
+- Domaine PROD : **hopsoleil.fr** (= marque HopSoleil ; sert de base à TOUT le SEO : canonical, OG, sitemap, robots, JSON-LD). Domaine test : hopleon.fr.
 - Supabase project : `cielbleu` (région eu-west-3)
 - Hébergement : Vercel
 - MVP cible : fin avril 2026
