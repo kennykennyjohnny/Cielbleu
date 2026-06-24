@@ -795,27 +795,33 @@ export default function HomePage() {
           aussi visualiser la fenêtre d’ensoleillement de chaque terrasse
           heure par heure.
         </p>
-        <h2>Catégories couvertes</h2>
-        <ul>
-          <li>Bars avec terrasse au soleil à Paris</li>
-          <li>Cafés avec terrasse ensoleillée à Paris</li>
-          <li>Restaurants avec terrasse au soleil à Paris</li>
-          <li>Rooftops et bars en hauteur à Paris</li>
-          <li>Parcs et jardins ensoleillés à Paris</li>
-        </ul>
-        <h2>Arrondissements</h2>
+        <h2>Où trouver une terrasse au soleil à Paris</h2>
         <p>
-          Couverture des 20 arrondissements de Paris : 1er (Châtelet, Louvre),
-          2e (Sentier), 3e (Haut Marais, Temple), 4e (Marais, Saint-Paul,
-          Île Saint-Louis), 5e (Quartier latin), 6e (Saint-Germain,
-          Luxembourg), 7e (Invalides, Tour Eiffel), 8e (Champs-Élysées,
-          Madeleine), 9e (Opéra, Pigalle), 10e (Canal Saint-Martin,
-          République), 11e (Bastille, Oberkampf, Charonne), 12e (Bercy,
-          Nation), 13e (Gobelins, Butte-aux-Cailles), 14e (Denfert,
-          Montparnasse), 15e (Grenelle), 16e (Trocadéro, Passy, Auteuil),
-          17e (Batignolles), 18e (Montmartre, Pigalle, Sacré-Cœur), 19e
-          (Buttes-Chaumont, Belleville), 20e (Ménilmontant, Père-Lachaise).
+          Vous cherchez une terrasse au soleil à Paris&nbsp;? HopSoleil vous
+          montre, en direct, quelles terrasses sont actuellement ensoleillées et
+          jusqu’à quelle heure le soleil reste. Idéal pour un apéro au soleil, un
+          brunch en terrasse ou un déjeuner ensoleillé sans tourner en rond.
         </p>
+        {/* Maillage interne crawlable : la home (page la plus forte) transmet de
+            l'autorité aux landings ciblées. Liens réels suivis par Google. */}
+        <h2>Catégories de terrasses ensoleillées</h2>
+        <ul>
+          <li><a href="/terrasses-ensoleillees-paris">Toutes les terrasses ensoleillées à Paris</a></li>
+          <li><a href="/bar-terrasse-paris">Bars avec terrasse au soleil à Paris</a></li>
+          <li><a href="/cafe-terrasse-paris">Cafés avec terrasse ensoleillée à Paris</a></li>
+          <li><a href="/restaurant-terrasse-paris">Restaurants avec terrasse au soleil à Paris</a></li>
+          <li><a href="/rooftop-paris">Rooftops et bars en hauteur à Paris</a></li>
+        </ul>
+        <h2>Terrasses au soleil par arrondissement</h2>
+        <ul>
+          {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+            <li key={n}>
+              <a href={`/terrasses-ensoleillees-paris/${n}${n === 1 ? 'er' : 'e'}-arrondissement`}>
+                Terrasses ensoleillées Paris {n}{n === 1 ? 'er' : 'e'}
+              </a>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Carte plein écran */}

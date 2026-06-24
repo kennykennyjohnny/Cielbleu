@@ -34,6 +34,8 @@ export interface SeoLandingProps {
   relatedLinks?: { href: string; label: string }[]
   /** Bloc FAQ propre à cette page (en plus de la FAQ globale du layout) */
   faq?: { question: string; answer: string }[]
+  /** Sections de contenu rédactionnel (titre + texte) — profondeur SEO. */
+  sections?: { heading: string; text: string }[]
 }
 
 interface LiteRow {
@@ -345,6 +347,27 @@ export default async function SeoLanding(props: SeoLandingProps) {
             </ol>
           </section>
         )}
+
+        {/* Sections rédactionnelles — contenu unique et utile (signal qualité) */}
+        {props.sections?.length ? (
+          <section style={{ marginTop: 44 }}>
+            {props.sections.map((s, i) => (
+              <div key={i} style={{ marginTop: i === 0 ? 0 : 26 }}>
+                <h2
+                  style={{
+                    fontFamily: 'var(--font-bricolage), sans-serif',
+                    fontWeight: 900, fontSize: 22, margin: '0 0 10px', color: '#0b1f3a',
+                  }}
+                >
+                  {s.heading}
+                </h2>
+                <p style={{ fontSize: 15.5, lineHeight: 1.6, color: 'rgba(31,58,95,0.8)', margin: 0 }}>
+                  {s.text}
+                </p>
+              </div>
+            ))}
+          </section>
+        ) : null}
 
         {/* FAQ */}
         {props.faq?.length ? (
