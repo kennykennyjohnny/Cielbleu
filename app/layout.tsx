@@ -98,7 +98,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  // Pas de blocage du zoom : laisser l'utilisateur zoomer est un critère
+  // d'accessibilité ET de « mobile-friendly » pris en compte par Google.
   themeColor: '#1F3A5F',
 }
 

@@ -26,7 +26,7 @@ export const COLORS = {
 
 // Marque.
 export const BRAND = 'HopSoleil'
-export const URL = 'cielbleu.fr'
+export const URL = 'hopsoleil.fr'
 
 // Format Instagram (Reels / Stories) — 9:16.
 export const VIDEO = { width: 1080, height: 1920, fps: 30, durationInFrames: 300 }
