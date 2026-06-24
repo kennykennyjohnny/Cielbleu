@@ -9,14 +9,19 @@ const PATH = '/terrasses-ensoleillees-paris'
 const CANONICAL = `https://hopsoleil.fr${PATH}`
 
 export const metadata: Metadata = {
-  title: 'Terrasses ensoleillées à Paris — Carte en temps réel ☀️',
+  title: 'Terrasse au soleil à Paris — la carte en temps réel ☀️',
   description:
-    'Toutes les terrasses au soleil à Paris en temps réel : bars, cafés, restaurants, parcs. Score soleil heure par heure, météo live, plus de 19 000 lieux référencés.',
+    'Trouvez une terrasse au soleil à Paris maintenant : bars, cafés, restaurants et parcs ensoleillés, score soleil heure par heure et météo en direct. Plus de 19 000 terrasses parisiennes classées par ensoleillement.',
+  keywords: [
+    'terrasse soleil paris', 'terrasse au soleil paris', 'terrasses ensoleillées paris',
+    'terrasse ensoleillée paris', 'où boire au soleil paris', 'terrasse paris soleil',
+    'apéro soleil paris', 'brunch terrasse paris',
+  ],
   alternates: { canonical: CANONICAL },
   openGraph: {
-    title: 'Terrasses ensoleillées à Paris — HopSoleil',
+    title: 'Terrasse au soleil à Paris — carte en temps réel | HopSoleil',
     description:
-      'Trouve la meilleure terrasse au soleil à Paris en temps réel. Score d’ensoleillement par heure, météo live.',
+      'Trouve la meilleure terrasse au soleil à Paris en temps réel. Score d’ensoleillement par heure, météo live, 19 000+ adresses.',
     url: CANONICAL,
     siteName: 'HopSoleil',
     locale: 'fr_FR',
@@ -24,8 +29,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Terrasses ensoleillées à Paris ☀️',
-    description: 'Le radar des terrasses au soleil à Paris.',
+    title: 'Terrasse au soleil à Paris ☀️',
+    description: 'Le radar des terrasses au soleil à Paris, en temps réel.',
   },
 }
 
@@ -36,10 +41,24 @@ export default function Page() {
   return (
     <SeoLanding
       canonicalPath={PATH}
-      h1="Terrasses ensoleillées à Paris en temps réel"
-      intro="HopSoleil détecte en direct toutes les terrasses au soleil à Paris : bars, cafés, restaurants, parcs. Pour chaque lieu, un score soleil de 1 à 5 calculé à partir de la position du soleil, des ombres des bâtiments OpenStreetMap et de la météo Paris en temps réel. Plus de 19 000 adresses dans les 20 arrondissements."
+      h1="Terrasse au soleil à Paris, en temps réel"
+      intro="Trouvez une terrasse au soleil à Paris maintenant. HopSoleil détecte en direct toutes les terrasses ensoleillées de la capitale — bars, cafés, restaurants, parcs — avec, pour chaque lieu, un score soleil de 1 à 5 calculé à partir de la position du soleil, des ombres des bâtiments (OpenStreetMap) et de la météo Paris en temps réel. Plus de 19 000 adresses dans les 20 arrondissements."
       placeType={null}
       arrondissement={null}
+      sections={[
+        {
+          heading: 'Comment trouver une terrasse au soleil à Paris maintenant',
+          text: "Ouvrez la carte HopSoleil : les terrasses actuellement au soleil ressortent en jaune, celles à l'ombre en gris. Le curseur d'heure permet d'anticiper — vous voyez où il fera soleil dans une heure, à l'apéro ou en fin d'après-midi. Plus besoin de tourner dans le quartier : vous repérez en quelques secondes la terrasse au soleil la plus proche, et jusqu'à quelle heure elle reste ensoleillée.",
+        },
+        {
+          heading: 'Soleil, ombre et météo : un score qui colle à la réalité',
+          text: "Une terrasse plein sud peut être à l'ombre à cause de l'immeuble d'en face. HopSoleil tient compte des hauteurs réelles des bâtiments parisiens pour calculer l'ombre projetée heure par heure, puis pondère par la couverture nuageuse en direct. Le résultat : un score d'ensoleillement fiable, réactualisé toutes les 30 minutes, qui distingue le vrai plein soleil de la fausse promesse.",
+        },
+        {
+          heading: 'Les meilleurs quartiers pour une terrasse ensoleillée',
+          text: "Le Marais, Bastille, le canal Saint-Martin, Oberkampf, Montmartre, Pigalle, Belleville, Saint-Germain-des-Prés, les Batignolles ou les quais de Seine regorgent de terrasses au soleil. HopSoleil couvre les 20 arrondissements : choisissez votre quartier ci-dessus pour la liste des terrasses ensoleillées à proximité, ou ouvrez la carte pour explorer en temps réel.",
+        },
+      ]}
       relatedLinks={[
         { href: '/bar-terrasse-paris', label: '🍻 Bars terrasse soleil' },
         { href: '/cafe-terrasse-paris', label: '☕ Cafés terrasse soleil' },
